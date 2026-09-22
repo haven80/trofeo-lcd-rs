@@ -1,6 +1,6 @@
 [package]
 name = "trofeo_lcd"
-version = "1.0.21"
+version = "1.0.22"
 edition = "2021"
 description = "A lightweight open-source driver/monitor for the Thermalright Trofeo Vision 9.16 LCD (LY protocol, USB 0416:5408), based on reverse-engineering from thermalright-trcc-linux"
 license = "GPL-3.0-or-later"
