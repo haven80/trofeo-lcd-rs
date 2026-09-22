@@ -1,0 +1,23 @@
+[Unit]
+Description=Trofeo Vision LCD (bar EQ + info sistem)
+# Tunggu sesi grafis (X11/Wayland) siap dulu — audio (PulseAudio/PipeWire)
+# dan mode game (X11) butuh sesi ini sudah jalan.
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+# GANTI path ini ke lokasi binary hasil `cargo build --release` kamu.
+# Contoh kalau proyek ada di ~/trofeo-lcd/trofeo-lcd:
+ExecStart=%h/trofeo-lcd/trofeo-lcd/target/release/trofeo_lcd
+Restart=on-failure
+RestartSec=3
+
+# Kalau service gagal connect X11 ("mode game" tidak kedeteksi) padahal
+# kamu jalan di X11/XWayland, biasanya DISPLAY/XAUTHORITY belum ke-import ke
+# environment systemd --user. Uncomment 2 baris ini (isi sesuai `echo $DISPLAY`
+# kamu, biasanya ":0"):
+# Environment=DISPLAY=:0
+# Environment=XAUTHORITY=%h/.Xauthority
+
+[Install]
+WantedBy=graphical-session.target

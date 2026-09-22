@@ -1,0 +1,98 @@
+[package]
+name = "trofeo_lcd"
+version = "1.0.21"
+edition = "2021"
+description = "A lightweight open-source driver/monitor for the Thermalright Trofeo Vision 9.16 LCD (LY protocol, USB 0416:5408), based on reverse-engineering from thermalright-trcc-linux"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+anyhow = "1.0"
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
+# Pure-Rust deflate/zlib compression (miniz_oxide backend — no C toolchain
+# needed) for the PNG screenshot files in src/png_save.rs.
+flate2 = "1"
+jpeg-encoder = "0.5"
+# Background decoding (JPEG/PNG/BMP/GIF) for the `background` option; videos
+# go through external ffmpeg instead (see src/background.rs).
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "bmp"] }
+# Used ONLY to run the minimal async runtime needed for the OpenRGB client
+# (openrgb2), not for the program as a whole (the main loop stays sync).
+# "rt", "net", "time" are enough — no need for "full".
+openrgb2 = "0.3"
+# Used for the DeepCool Digital integration: sends CPU temp/usage/power data
+# to a DeepCool display device (AIO/air cooler/case) over HID — runs on a
+# separate background thread (see src/deepcool/). The device driver is ported
+# from the deepcool-digital-linux (Nortank12) / deepcool-digital-windows
+# projects.
+hidapi = "2"
+rusb = { version = "0.9", features = ["vendored"] }
+rustfft = "6.4.1"
+sysinfo = { version = "0.30", default-features = false }
+thiserror = "1.0"
+tokio = { version = "1", features = ["rt", "net", "time"] }
+ureq = { version = "2", default-features = false, features = ["tls"] }
+
+[target."cfg(windows)".dependencies]
+wasapi = "0.24.0"
+# Used for GPU usage (PDH), network & disk IO (IP Helper / DeviceIoControl),
+# master volume (IAudioEndpointVolume/COM), the currently-playing media title
+# (System Media Transport Controls, WinRT), and foreground .exe process
+# detection (used for game mode, see src/foreground.rs). If this version is
+# not found on crates.io at build time, run `cargo add windows` to fetch the
+# latest available version — the module/function names below have been
+# stable across the 0.5x/0.6x series.
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_System_Performance",
+    "Win32_System_Diagnostics_Etw",
+    "Win32_System_Time",
+    "Win32_System_Registry",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
+    "Win32_Media_Audio",
+    "Win32_Media_Audio_Endpoints",
+    "Win32_Security",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_NetworkManagement_Ndis",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_Ioctl",
+    "Win32_System_Console",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Gdi",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Media_Control",
+    "Foundation",
+] }
+
+[[bin]]
+name = "trofeo_lcd"
+path = "src/main.rs"
+
+[[bin]]
+name = "trofeo_screen"
+path = "src/bin/screen.rs"
+
+[target."cfg(target_os = \"linux\")".dependencies]
+# Loopback audio (EQ bars) via PulseAudio OR PipeWire+pipewire-pulse — see
+# src/audio.rs (device "@DEFAULT_MONITOR@"). Both bindings are pure-Rust APIs
+# on top of libpulse-sys (FFI to libpulse.so, a C library that's already
+# present on almost every Linux desktop — part of the pulseaudio-libs/
+# libpulse0 package).
+libpulse-binding = "2.28"
+libpulse-simple-binding = "2.28"
+# Active window detection (X11 EWMH: _NET_ACTIVE_WINDOW + _NET_WM_PID) for
+# game mode — see src/foreground.rs. Pure-Rust X11 protocol implementation
+# (no C libX11 library needed at all), but still needs a running X11 SERVER
+# (native X11, or XWayland for non-native-Wayland apps). In a pure Wayland
+# session, foreground_exe_name() will always return None (see the note in
+# that file).
+x11rb = "0.13"

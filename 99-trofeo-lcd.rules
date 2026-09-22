@@ -1,0 +1,17 @@
+# Udev rule supaya Thermalright Trofeo Vision LCD (VID:PID 0416:5408 / 0416:5409)
+# bisa diakses lewat rusb/libusb TANPA perlu jalankan trofeo_lcd sebagai root.
+#
+# Cara pasang:
+#   sudo cp 99-trofeo-lcd.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules
+#   sudo udevadm trigger
+# (cabut-pasang ulang kabel USB device kalau masih belum kebaca setelah itu)
+#
+# Grup "plugdev" dipakai karena biasanya sudah otomatis ada di distro besar
+# (Debian/Ubuntu/Fedora/Arch) dan user login desktop biasanya sudah jadi
+# anggotanya secara default. Kalau ternyata belum:
+#   sudo usermod -aG plugdev $USER
+# (lalu logout/login ulang supaya keanggotaan grup baru kepakai)
+
+SUBSYSTEM=="usb", ATTR{idVendor}=="0416", ATTR{idProduct}=="5408", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="0416", ATTR{idProduct}=="5409", MODE="0660", GROUP="plugdev", TAG+="uaccess"

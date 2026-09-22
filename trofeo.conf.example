@@ -1,0 +1,178 @@
+# Copy this file as "trofeo.conf" next to the executable
+# (or in the folder you launch it from), or use --config <file>.
+# Priority: defaults < this file < command-line arguments.
+# Full reference (every option, with examples): see OPTIONS_GUIDE.md
+
+# --- Orientation ------------------------------------------------------------
+# landscape = horizontal display (1920x462, default)
+# portrait  = display mounted vertically (462x1920 canvas, rotated for the panel)
+orientation = landscape
+
+# true = an extra 180° rotation (if the image comes out upside down)
+flip = false
+
+# --- Margins (pixels) --------------------------------------------------------
+# Pulls the interface away from the screen edges. "margin" applies to all sides,
+# then you can override a single side. To "lower" the image: margin_top.
+# margin = 0
+margin_top = 30
+# margin_bottom = 0
+# margin_left = 0
+# margin_right = 0
+
+# --- Language -----------------------------------------------------------------
+# en | it
+language = en
+
+# --- Background ----------------------------------------------------------------
+# Image (jpg, png, bmp), animated GIF, or video (mp4, mkv, webm, avi, mov...).
+# Videos require ffmpeg: ffmpeg.exe next to the program, on the PATH, or its
+# path given with "ffmpeg = ...".
+# background = C:\Pictures\background.jpg
+# background_dim = 40     # 0-100: darkens the background for better text readability
+# ffmpeg = C:\ffmpeg\bin\ffmpeg.exe
+
+# --- Background: fit and position -------------------------------------------
+# background_fit: cover    = fills everything keeping the aspect ratio (default, crops)
+#                 stretch  = fills everything, distorting the image
+#                 contain  = whole image visible, with dark bars
+#                 original = original size, no scaling
+# background_fit = cover
+# background_position = center      # see the position list below
+# background_offset_x = 0           # shifts the image: + right, - left
+# background_offset_y = 0           # + down, - up
+
+# --- What to show -------------------------------------------------------------
+# Items: cpu, gpu, uptime, time, date, mem, net, disk, volume, nowplaying, weather,
+#        spectrum (audio spectrum), clock (big clock),
+#        clock_date (date under the big clock), dashboard (FPS/GPU/CPU/RAM while gaming)
+# "show" = show ONLY these. "hide" = hide these (everything else stays).
+# hide = clock_date, disk
+# show = cpu, gpu, mem, nowplaying, clock, spectrum
+#
+# Hiding the audio spectrum: with hide = spectrum, the big clock stays visible
+# during playback (if you don't hide it too) and the fps stays low.
+# hide = spectrum
+
+# --- Colors (#RRGGBB, R,G,B, or a name: red, green, blue, yellow, white...)
+# color = green              # spectrum bars (default: green->red gradient)
+# text_color = #FFFFFF       # info block and dashboard text
+# clock_color = #00C8FF      # big clock
+
+# --- Positions -----------------------------------------------------------------
+# top-left  top  top-right | center-left  center  center-right | bottom-left  bottom  bottom-right
+# status_position = top-left     # info block (CPU, RAM, track...)
+# clock_position = center        # big clock
+# spectrum_position = center     # spectrum
+# spectrum_width = 100           # % of the available area
+# spectrum_height = 100
+# status_style = auto            # auto | lines (3 long lines) | list (vertical list)
+
+# --- Brightness ------------------------------------------------------------
+# 0-100 (100 = unchanged). The panel has no known brightness command:
+# the image is darkened in software before being sent.
+# brightness = 100
+
+# --- DeepCool ----------------------------------------------------------------
+# false = the program does NOT touch the case's DeepCool display (stays off).
+# deepcool = false
+
+# --- In-game FPS -------------------------------------------------------------
+# Measures the FPS of any DirectX 9-12 game (NVIDIA/AMD/Intel) via ETW.
+# Requires starting the program AS ADMINISTRATOR.
+# fps_monitor = true
+
+# --- Preset layouts ----------------------------------------------------------
+# Big panels instead of the clock. List: trofeo_lcd.exe --layout list
+#   cpu-gpu       CPU and GPU side by side (big usage, temperature and watts below)
+#   temps         CPU and GPU temperatures in big, with a bar
+#   overview      CPU, GPU, RAM and clock
+#   grid6         3x2 grid: CPU/GPU usage and temperature, RAM, clock
+#   clock-center  clock in the center, CPU on the left and GPU on the right
+#   io            network, disk and RAM
+#   music         current track in big + clock
+#   gaming        FPS, GPU, GPU and CPU temperature
+#   cpu           CPU only, big
+#   gpu           GPU only, big
+#   weather       Current weather, big: temperature, condition icon and city
+# With a layout, the top info block and the spectrum are off (the panels already
+# show the data); "show = nowplaying, time" adds info lines, "hide" removes them.
+# The automatic dashboard while gaming stays on (hide = dashboard to disable it).
+# layout = cpu-gpu
+# Rotation: several layouts separated by commas, changing every layout_interval seconds.
+# layout = cpu-gpu, temps, music
+# Each entry can set its OWN duration with "name:seconds", instead of sharing
+# layout_interval equally: the standard screen stays up for 30s, then weather
+# shows for just 5s, then it goes back to 30s of the standard screen, and so on
+# (not alternating every 5s — each entry gets its own full duration in turn):
+# layout = default:30, weather:5
+# An entry with no ":seconds" falls back to layout_interval.
+# "default" = the standard screen (status at the top, spectrum, big clock):
+# layout = default, cpu-gpu, temps     # also rotates with the standard screen
+# "default2" = same as default but with per-item styling (<item>_size/_position/_color,
+# see below). Per-item options only apply to default2; default stays classic.
+# layout = default, default2            # alternate between the classic and custom screen
+# If you set per-item options without writing "layout", default2 is used.
+# layout_interval = 15       # default seconds per layout when an entry has no ":seconds" (2-3600)
+# layout_spectrum = false    # true = show the spectrum while music is playing
+
+# --- Panel transparency -------------------------------------------------------
+# Background opacity of the panels (layouts and the in-game dashboard): 100 = solid,
+# 0 = transparent (only the border remains), so more of the background shows through.
+# panel_opacity = 60
+# A panel behind the status lines and the big clock (default screen), to make them
+# easier to read over a background. Uses the same opacity as panel_opacity.
+# text_backdrop = true
+
+# --- Weather --------------------------------------------------------------------
+# Current temperature + condition icon (Open-Meteo, no API key needed). By default
+# the location is auto-detected from the machine's public IP address; set a city
+# name to override it (requires a restart, like deepcool/fps_monitor/screenshot_key):
+# weather_city = Milano
+# weather_unit = c        # c (default) or f
+# Show it as a per-item line (see below, item name "weather") in default2, and/or
+# as its own big panel:
+# layout = weather              # weather panel alone
+# layout = default, weather     # rotates with the standard screen
+
+# --- Per-item control: size, position, color ----------------------------------
+# Items: cpu, gpu, uptime, time, date, mem (or ram), net, disk, volume, nowplaying,
+#        weather
+# Just set ONE of these options and the items become independent (each on its
+# own line, with its own size; items sharing the same position stack up).
+#   <item>_size      = 1..30   (default 3; 1 = tiny, 6 = big)
+#   <item>_position  = top-left, top, top-right, center-left, center, center-right,
+#                      bottom-left, bottom, bottom-right  (default: status_position)
+#   <item>_color     = the item's color (name or #RRGGBB)
+#   <item>_backdrop  = true/false  a panel behind that item (default: text_backdrop)
+# cpu_size = 5
+# cpu_color = #FFC800
+# cpu_position = top-left
+# ram_size = 2
+# ram_position = bottom-left
+# gpu_size = 4
+# gpu_position = top-right
+# nowplaying_size = 3
+# nowplaying_position = bottom
+# The track scrolls without overlapping nearby items on the same row; you can
+# also limit its width:
+# nowplaying_label = false   # removes the "NOW PLAYING:" label and leaves just the title
+# nowplaying_width = 40      # % of the screen taken up by the track (avoids covering other items)
+# Turning individual items on/off: show = ... / hide = ... (see above). You can
+# also hide the details inside the CPU and GPU lines:
+#   hide = cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_power, gpu_fan, gpu_clock, gpu_fps
+# Units: network in KB/S (default), MB/S, or auto (KB below 1 MB/S, then MB); RAM in MB or GB
+# net_unit = mb
+# mem_unit = gb
+# Big clock (default screen): size of the time and date
+# clock_backdrop = true         # a panel behind the big clock
+# clock_time_size = 20        # 1..60
+# clock_date_size = 6
+
+# The file is re-read every second: saved changes apply immediately, without
+# restarting (orientation, margins, background, language, colors, layouts, brightness, etc.).
+# If the file has an error, the previous configuration stays valid and the reason is
+# written to trofeo-errors.txt (next to trofeo_lcd.exe).
+# Only deepcool, fps_monitor, openrgb, hide_console, screenshot_key and weather_city
+# require a restart. weather_unit and the "weather" show/hide/size/position/color/
+# backdrop options apply live, like everything else.

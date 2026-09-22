@@ -1,0 +1,88 @@
+//! Display driver for AK500 / AK620 DIGITAL PRO.
+
+use super::{DeepCpu, Mode};
+use hidapi::HidApi;
+use std::{thread::sleep, time::Duration};
+
+pub const DEFAULT_MODE: Mode = Mode::Auto;
+
+pub struct Display {
+    cpu: DeepCpu,
+    update: Duration,
+    fahrenheit: bool,
+}
+
+impl Display {
+    pub fn new(cpu: DeepCpu, update: Duration, fahrenheit: bool) -> Self {
+        Display {
+            cpu,
+            update,
+            fahrenheit,
+        }
+    }
+
+    pub fn run(&self, api: &HidApi, vid: u16, pid: u16) {
+        // Connect to device
+        let device = match api.open(vid, pid) {
+            Ok(d) => d,
+            Err(_) => return,
+        };
+
+        // Display warning if a required module is missing
+        self.cpu.warn_temp();
+        self.cpu.warn_rapl();
+
+        // Data packet
+        let mut data: [u8; 64] = [0; 64];
+        data[0] = 16;
+        data[1] = 104;
+        data[2] = 1;
+        data[3] = 4;
+        data[4] = 13;
+        data[5] = 1;
+        data[6] = 2;
+        data[7] = 8;
+
+        // Display loop
+        loop {
+            // Initialize the packet
+            let mut status_data = data.clone();
+
+            // Read CPU utilization & energy consumption
+            let cpu_instant = self.cpu.read_instant();
+            let cpu_energy = self.cpu.read_energy();
+
+            // Wait
+            sleep(self.update);
+
+            // ----- Write data to the package -----
+            // Power consumption
+            let power = (self.cpu.get_power(cpu_energy, self.update.as_millis() as u64)).to_be_bytes();
+            status_data[8] = power[0];
+            status_data[9] = power[1];
+
+            // Temperature
+            let temp = (self.cpu.get_temp(self.fahrenheit) as f32).to_be_bytes();
+            status_data[10] = if self.fahrenheit { 1 } else { 0 };
+            status_data[11] = temp[0];
+            status_data[12] = temp[1];
+            status_data[13] = temp[2];
+            status_data[14] = temp[3];
+
+            // Utilization
+            status_data[15] = self.cpu.get_usage(&cpu_instant);
+
+            // Frequency
+            let frequency = (self.cpu.get_frequency()).to_be_bytes();
+            status_data[16] = frequency[0];
+            status_data[17] = frequency[1];
+
+            // Checksum & termination byte
+            let checksum: u16 = status_data[1..=17].iter().map(|&x| x as u16).sum();
+            status_data[18] = (checksum % 256) as u8;
+            status_data[19] = 22;
+
+            device.write(&status_data).unwrap();
+        }
+    }
+}
