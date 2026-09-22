@@ -29,6 +29,7 @@ pub struct ConfigFile {
 }
 
 impl ConfigFile {
+    
     pub fn parse(text: &str) -> Result<Self, String> {
         let mut values = HashMap::new();
         // Windows Notepad can save with a UTF-8 BOM at the start.
@@ -167,6 +168,15 @@ impl Margins {
 }
 
 impl ConfigFile {
+    pub fn get_f32(&self, key: &str) -> Result<Option<f32>, String> {
+        match self.get(key) {
+            None => Ok(None),
+            Some(v) => v
+                .parse::<f32>()
+                .map(Some)
+                .map_err(|_| format!("{key}: '{v}' is not a number")),
+        }
+    }    
     pub fn get_u32(&self, key: &str) -> Result<Option<u32>, String> {
         match self.get(key) {
             None => Ok(None),
