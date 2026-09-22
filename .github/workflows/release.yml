@@ -1,0 +1,64 @@
+name: Release
+
+# Builds trofeo_lcd.exe and trofeo_screen.exe natively on Windows and
+# publishes them as downloadable assets on the GitHub Release for the tag
+# that triggered the run.
+#
+# Trigger: push a tag like "v1.0.22" (matches Cargo.toml's `version`).
+#   git tag v1.0.22
+#   git push origin v1.0.22
+#
+# Building here (instead of shipping a locally-built exe) means anyone can
+# see, in the run's log, that the published binary was compiled straight
+# from this exact commit's source — no hidden build step. It also makes the
+# Windows Defender / SmartScreen false-positive situation a bit easier to
+# reason about: a binary anyone can reproduce from public source and a
+# public build log is easier to trust than one built on a random machine
+# (see the note in README.md).
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust (stable, MSVC)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache cargo registry & build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binaries
+        run: cargo build --release --bins
+
+      - name: Assemble release package
+        shell: bash
+        run: |
+          set -eu
+          ver="${GITHUB_REF_NAME#v}"
+          out="trofeo-lcd-${ver}-windows"
+          mkdir -p "$out"
+          cp target/release/trofeo_lcd.exe "$out/"
+          cp target/release/trofeo_screen.exe "$out/"
+          cp README.md NOTICE.md LICENSE OPTIONS_GUIDE.md trofeo.conf.example "$out/"
+          [ -f GUIDE_SECOND_MONITOR.md ] && cp GUIDE_SECOND_MONITOR.md "$out/"
+          7z a "${out}.zip" "./${out}/*"
+          echo "ASSET_PATH=${out}.zip" >> "$GITHUB_ENV"
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ASSET_PATH }}
+          generate_release_notes: true
