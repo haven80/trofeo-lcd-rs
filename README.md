@@ -35,6 +35,23 @@ system status (CPU/GPU/RAM/temp) stays readable while playing.
   PulseAudio/PipeWire on Linux), colored green→yellow→red.
 - System info: CPU %, real-time CPU frequency, RAM, uptime, clock & date.
 - Can also drive a **DeepCool** display (sends CPU data over HID).
+### Autostart on Windows
+
+`scripts/install-autostart.ps1` (included in the Windows release zip) adds
+`trofeo_lcd.exe` to Windows startup. By default it registers a **Scheduled
+Task** that runs at logon with elevated ("Run as administrator")
+privileges and no UAC prompt on every login — needed if you use
+`fps_monitor` or PawnIO (AMD sensors). Run it from the folder with the exe:
+
+​```powershell
+.\scripts\install-autostart.ps1                              # elevated task, --hide-console
+.\scripts\install-autostart.ps1 -Arguments ""                # elevated task, console visible
+.\scripts\install-autostart.ps1 -Method Shortcut              # simple Startup-folder shortcut, no admin needed, not elevated
+​```
+
+Remove it with `.\scripts\uninstall-autostart.ps1` (removes whichever
+method was used). See the comments at the top of each script (or
+`Get-Help .\scripts\install-autostart.ps1 -Full`) for every option.
 - **Second monitor mode** (`trofeo_screen`): the LCD becomes a real second
   monitor.
 - Current **weather** (temperature + a stylized condition icon), auto-detected
