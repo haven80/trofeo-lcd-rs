@@ -68,6 +68,15 @@ language = en
 # spectrum_height = 100
 # status_style = auto            # auto | lines (3 long lines) | list (vertical list)
 
+# --- Audio detection (EQ bars) ----------------------------------------------
+# "Silence" is decided by comparing the loudest sample in each window against
+# silence_threshold: below it, no music is considered to be playing (EQ bars
+# stay down, FPS drops to idle). This reflects the actual system/app volume
+# (loopback capture), so quiet listening levels can fall under the default
+# and look like silence — lower it if the bars don't react at low volume.
+# silence_threshold = 0.005     # 0.0-1.0 peak amplitude (lower = more sensitive)
+# silence_timeout_ms = 800      # how long it must stay quiet before dropping to idle-fps
+
 # --- Brightness ------------------------------------------------------------
 # 0-100 (100 = unchanged). The panel has no known brightness command:
 # the image is darkened in software before being sent.
