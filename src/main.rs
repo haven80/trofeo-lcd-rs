@@ -390,10 +390,10 @@ fn parse_args() -> anyhow::Result<Config> {
             "--idle-fps" => idle_fps = next_f32(&mut args, "--idle-fps")?,
             "--active-fps" => active_fps = next_f32(&mut args, "--active-fps")?,
             "--silence-threshold" => {
-                silence_threshold = next_f32(&mut args, "--silence-threshold")?
+                silence_threshold_cli = Some(next_f32(&mut args, "--silence-threshold")?)
             }
             "--silence-timeout-ms" => {
-                silence_timeout_ms = next_u64(&mut args, "--silence-timeout-ms")?
+                silence_timeout_ms_cli = Some(next_u64(&mut args, "--silence-timeout-ms")?)
             }
             "--color" => {
                 let raw = args
@@ -526,6 +526,22 @@ fn parse_args() -> anyhow::Result<Config> {
     if brightness > 100 {
         anyhow::bail!("brightness must be between 0 and 100");
     }
+    // Peak amplitude (0.0-1.0) below which audio is considered "silent" (EQ
+    // bars stay down, FPS drops to idle). Loopback capture reflects the
+    // system/app volume, so a quiet listening level can dip under the
+    // default threshold and look like silence — lower this if the EQ bars
+    // don't react at low volume.
+    let silence_threshold = match silence_threshold_cli {
+        Some(v) => v,
+        None => file.get_f32("silence_threshold").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(DEFAULT_SILENCE_THRESHOLD),
+    };
+    if !(0.0..=1.0).contains(&silence_threshold) {
+        anyhow::bail!("silence_threshold: must be between 0.0 and 1.0");
+    }
+    let silence_timeout_ms = match silence_timeout_ms_cli {
+        Some(v) => v,
+        None => file.get_u32("silence_timeout_ms").map_err(|e| anyhow::anyhow!(e))?.map(u64::from).unwrap_or(DEFAULT_SILENCE_TIMEOUT_MS),
+    };
     if let Some(v) = file.get_bool("deepcool").map_err(|e| anyhow::anyhow!(e))? {
         // `--no-deepcool` on the command line always wins.
         deepcool_enabled = deepcool_enabled && v;
