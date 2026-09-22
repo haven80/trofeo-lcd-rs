@@ -107,12 +107,31 @@ pub fn spawn_capture() -> anyhow::Result<SharedRing> {
 #[cfg(windows)]
 mod windows_loopback {
     use super::{push_mono_samples, SharedRing, SAMPLE_RATE};
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
     use wasapi::*;
 
+    /// Outer reconnect loop: WASAPI ties a client to a specific device at
+    /// `initialize_client` time. If the *default* render device changes
+    /// afterwards (headphones plugged in/out, a Bluetooth device connecting,
+    /// Windows restarting the audio service, exclusive-mode contention,
+    /// etc.), that client is permanently invalidated — every further read
+    /// fails forever, even though nothing is wrong with the machine. Without
+    /// this outer loop, that meant the EQ bars went silent until the whole
+    /// program was restarted. `run_once` gives up (returns `Err`) once reads
+    /// have been failing continuously for a few seconds, and this loop just
+    /// re-enumerates the (possibly new) default device and starts over —
+    /// the same recovery a manual restart gave, but automatic.
     pub fn run(ring: SharedRing) -> anyhow::Result<()> {
         initialize_mta().ok()?;
+        loop {
+            if let Err(e) = run_once(&ring) {
+                eprintln!("WASAPI loopback capture lost ({e:#}); reconnecting to the current default audio device...");
+            }
+            std::thread::sleep(Duration::from_secs(2));
+        }
+    }
 
+    fn run_once(ring: &SharedRing) -> anyhow::Result<()> {
         let enumerator = DeviceEnumerator::new()?;
         // IMPORTANT: grab the Render (output/speaker) device here, NOT Capture —
         // this is what makes WASAPI treat it as a loopback request.
@@ -162,15 +181,32 @@ mod windows_loopback {
         // mutex lock/unlock isn't free even when uncontended).
         let mut mono_batch: Vec<f32> = Vec::with_capacity(256);
 
+        // How long reads have been failing *continuously*. A brief hiccup
+        // (a frame or two) is normal and stays silent about it; but once the
+        // client has been erroring for a few seconds straight, it's not
+        // coming back on its own (typically `AUDCLNT_E_DEVICE_INVALIDATED`
+        // after a default-device change) — bail out so the outer loop in
+        // `run` re-enumerates the device and reconnects from scratch.
+        const GIVE_UP_AFTER: Duration = Duration::from_secs(5);
+        let mut failing_since: Option<Instant> = None;
+
         loop {
             // Transient errors (e.g. device briefly changing) don't
             // immediately kill the capture thread — they're logged and
-            // retried.
+            // retried, but only for a bounded amount of time (see
+            // `GIVE_UP_AFTER` above): a permanently invalidated client would
+            // otherwise retry forever and the EQ bars would stay silent
+            // until the whole program was restarted.
             if let Err(e) = capture_client.read_from_device_to_deque(&mut byte_queue) {
+                let since = *failing_since.get_or_insert_with(Instant::now);
+                if since.elapsed() >= GIVE_UP_AFTER {
+                    anyhow::bail!("no successful read in over {GIVE_UP_AFTER:?} (last error: {e})");
+                }
                 eprintln!("WASAPI audio read temporarily failed: {e}");
                 std::thread::sleep(poll_interval);
                 continue;
             }
+            failing_since = None;
 
             // Convert interleaved stereo float32 bytes -> mono f32 samples,
             // collecting them first into a local buffer (without locking the
@@ -201,7 +237,7 @@ mod windows_loopback {
 
             // Lock the mutex ONCE for this whole batch from this poll.
             if !mono_batch.is_empty() {
-                push_mono_samples(&ring, mono_batch.iter().copied());
+                push_mono_samples(ring, mono_batch.iter().copied());
             }
 
             std::thread::sleep(poll_interval);
