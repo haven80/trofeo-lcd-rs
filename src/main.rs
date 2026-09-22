@@ -360,8 +360,10 @@ fn parse_color(raw: &str) -> anyhow::Result<ColorMode> {
 fn parse_args() -> anyhow::Result<Config> {
     let mut idle_fps = DEFAULT_IDLE_FPS;
     let mut active_fps = DEFAULT_ACTIVE_FPS;
-    let mut silence_threshold = DEFAULT_SILENCE_THRESHOLD;
-    let mut silence_timeout_ms = DEFAULT_SILENCE_TIMEOUT_MS;
+    // Also settable from the config file (see below, near `file.get_f32`) —
+    // the CLI flags stay as the highest-priority override.
+    let mut silence_threshold_cli: Option<f32> = None;
+    let mut silence_timeout_ms_cli: Option<u64> = None;
     let mut color_mode = ColorMode::Default;
     let mut openrgb_device: Option<String> = None;
     let mut openrgb_poll_ms = DEFAULT_OPENRGB_POLL_MS;
