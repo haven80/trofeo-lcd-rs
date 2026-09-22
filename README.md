@@ -35,23 +35,6 @@ system status (CPU/GPU/RAM/temp) stays readable while playing.
   PulseAudio/PipeWire on Linux), colored green→yellow→red.
 - System info: CPU %, real-time CPU frequency, RAM, uptime, clock & date.
 - Can also drive a **DeepCool** display (sends CPU data over HID).
-### Autostart on Windows
-
-`scripts/install-autostart.ps1` (included in the Windows release zip) adds
-`trofeo_lcd.exe` to Windows startup. By default it registers a **Scheduled
-Task** that runs at logon with elevated ("Run as administrator")
-privileges and no UAC prompt on every login — needed if you use
-`fps_monitor` or PawnIO (AMD sensors). Run it from the folder with the exe:
-
-​```powershell
-.\scripts\install-autostart.ps1                              # elevated task, --hide-console
-.\scripts\install-autostart.ps1 -Arguments ""                # elevated task, console visible
-.\scripts\install-autostart.ps1 -Method Shortcut              # simple Startup-folder shortcut, no admin needed, not elevated
-​```
-
-Remove it with `.\scripts\uninstall-autostart.ps1` (removes whichever
-method was used). See the comments at the top of each script (or
-`Get-Help .\scripts\install-autostart.ps1 -Full`) for every option.
 - **Second monitor mode** (`trofeo_screen`): the LCD becomes a real second
   monitor.
 - Current **weather** (temperature + a stylized condition icon), auto-detected
@@ -142,6 +125,9 @@ Also settable in `trofeo.conf` (see `trofeo.conf.example`) or via CLI:
   needs **ffmpeg** (`ffmpeg.exe` next to the program, in `PATH`, or `--ffmpeg <PATH>`).
   `--background-dim <0-100>` darkens it (default 40). With an animated
   background the idle FPS is raised to the active FPS so it stays smooth.
+  A sample background (`img/sample_background.jpg`) is included in this repo
+  if you just want to try it: `background = img/sample_background.jpg` — it's
+  also what the [preset layout screenshots](#preset-layouts) below are shown over.
 
 ### What to show, where, and colors
 
@@ -187,7 +173,17 @@ resolved location and a sample reading.
 ### Preset layouts
 
 `layout = default | cpu-gpu | temps | overview | grid6 | clock-center | io | music | gaming | cpu | gpu | weather`
-(`--layout list` prints them). Several layouts separated by commas rotate every
+(`--layout list` prints them). All of them, shown here over a sample background
+(`background = img/sample_background.jpg`, `panel_opacity = 60`):
+
+| | | |
+|---|---|---|
+| ![cpu-gpu](img/layout-cpu-gpu.png)<br>`cpu-gpu` | ![temps](img/layout-temps.png)<br>`temps` | ![overview](img/layout-overview.png)<br>`overview` |
+| ![grid6](img/layout-grid6.png)<br>`grid6` | ![clock-center](img/layout-clock-center.png)<br>`clock-center` | ![io](img/layout-io.png)<br>`io` |
+| ![music](img/layout-music.png)<br>`music` | ![gaming](img/layout-gaming.png)<br>`gaming` | ![cpu](img/layout-cpu.png)<br>`cpu` |
+| ![gpu](img/layout-gpu.png)<br>`gpu` | ![weather](img/layout-weather.png)<br>`weather` | |
+
+Several layouts separated by commas rotate every
 `layout_interval` seconds (`layout = cpu-gpu, temps, music`). Each entry can also carry its own
 duration with `name:seconds`, instead of splitting the time equally — `layout = default:30, weather:5`
 keeps the standard screen up for 30s straight, then the weather panel for 5s, then back to 30s of
@@ -214,6 +210,24 @@ neighbors). Details inside the CPU/GPU lines can be hidden with
 `hide = cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_power, gpu_fan, gpu_clock, gpu_fps`.
 `clock_time_size` / `clock_date_size` set the big clock's sizes, and `net_unit` (`kb|mb|auto`) /
 `mem_unit` (`mb|gb`) set the network and RAM units.
+
+### Autostart on Windows
+
+`scripts/install-autostart.ps1` (included in the Windows release zip) adds
+`trofeo_lcd.exe` to Windows startup. By default it registers a **Scheduled
+Task** that runs at logon with elevated ("Run as administrator")
+privileges and no UAC prompt on every login — needed if you use
+`fps_monitor` or PawnIO (AMD sensors). Run it from the folder with the exe:
+
+```powershell
+.\scripts\install-autostart.ps1                              # elevated task, --hide-console
+.\scripts\install-autostart.ps1 -Arguments ""                # elevated task, console visible
+.\scripts\install-autostart.ps1 -Method Shortcut              # simple Startup-folder shortcut, no admin needed, not elevated
+```
+
+Remove it with `.\scripts\uninstall-autostart.ps1` (removes whichever
+method was used). See the comments at the top of each script (or
+`Get-Help .\scripts\install-autostart.ps1 -Full`) for every option.
 
 ## Second monitor mode
 
