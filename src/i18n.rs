@@ -46,6 +46,7 @@ pub struct Strings {
     pub now_playing: &'static str,
     pub need_admin: &'static str,
     pub weather: &'static str,
+    pub news: &'static str,
     /// Condition names, in the same order as `weather_icon::WeatherIcon`:
     /// Clear, PartlyCloudy, Cloudy, Fog, Drizzle, Rain, Snow, Thunder.
     pub weather_conditions: [&'static str; 8],
@@ -64,6 +65,7 @@ const EN: Strings = Strings {
     now_playing: "NOW PLAYING",
     need_admin: "RUN AS ADMIN",
     weather: "WEATHER",
+    news: "NEWS",
     weather_conditions: [
         "CLEAR", "PARTLY CLOUDY", "CLOUDY", "FOG", "DRIZZLE", "RAIN", "SNOW", "THUNDERSTORM",
     ],
@@ -82,6 +84,7 @@ const IT: Strings = Strings {
     now_playing: "IN RIPRODUZIONE",
     need_admin: "AVVIA COME ADMIN",
     weather: "METEO",
+    news: "NOTIZIE",
     weather_conditions: [
         "SERENO", "POCO NUVOLOSO", "NUVOLOSO", "NEBBIA", "PIOVIGGINE", "PIOGGIA", "NEVE", "TEMPORALE",
     ],

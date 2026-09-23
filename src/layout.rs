@@ -76,6 +76,8 @@ pub struct Show {
     pub weather: bool,
     /// Audio spectrum (EQ bars).
     pub spectrum: bool,
+    /// Scrolling ticker line (news headlines or any custom feed, see `ticker.rs`).
+    pub ticker: bool,
     /// Large clock in the foreground.
     pub clock: bool,
     /// Date under the large clock.
@@ -103,14 +105,14 @@ impl Show {
     pub fn all(v: bool) -> Self {
         Show {
             cpu: v, gpu: v, uptime: v, time: v, date: v, mem: v, net: v, disk: v,
-            volume: v, nowplaying: v, weather: v, spectrum: v, clock: v, clock_date: v, dashboard: v,
+            volume: v, nowplaying: v, weather: v, spectrum: v, ticker: v, clock: v, clock_date: v, dashboard: v,
             cpu_freq: true, cpu_temp: true, cpu_power: true,
             gpu_temp: true, gpu_power: true, gpu_fan: true, gpu_clock: true, gpu_fps: true,
         }
     }
 
     pub const NAMES: &'static str =
-        "cpu, gpu, uptime, time, date, mem, net, disk, volume, nowplaying, weather, spectrum, clock, clock_date, dashboard, cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_power, gpu_fan, gpu_clock, gpu_fps";
+        "cpu, gpu, uptime, time, date, mem, net, disk, volume, nowplaying, weather, spectrum, ticker, clock, clock_date, dashboard, cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_power, gpu_fan, gpu_clock, gpu_fps";
 
     fn slot(&mut self, name: &str) -> Option<&mut bool> {
         Some(match name {
@@ -126,6 +128,7 @@ impl Show {
             "nowplaying" | "now_playing" | "brano" | "musica" | "media" => &mut self.nowplaying,
             "weather" | "meteo" => &mut self.weather,
             "spectrum" | "spettro" | "eq" => &mut self.spectrum,
+            "ticker" | "news" | "notizie" => &mut self.ticker,
             "clock" | "orologio" => &mut self.clock,
             "clock_date" | "clockdate" | "data_orologio" => &mut self.clock_date,
             "dashboard" | "game" | "gioco" => &mut self.dashboard,

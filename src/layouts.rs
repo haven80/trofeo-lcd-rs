@@ -21,6 +21,7 @@ pub enum Widget {
     Clock,
     Music,
     Weather,
+    News,
 }
 
 use Widget::*;
@@ -128,6 +129,13 @@ pub const LAYOUTS: &[LayoutDef] = &[
         cols: 1,
         rows: &[&[(Weather, 1)]],
     },
+    LayoutDef {
+        name: "news",
+        description: "Latest headlines from ticker_source, scrolling",
+        standard: false,
+        cols: 1,
+        rows: &[&[(News, 1)]],
+    },
 ];
 
 pub fn find(name: &str) -> Option<&'static LayoutDef> {
@@ -156,6 +164,9 @@ pub struct WidgetData {
     pub disk_mb: (f64, f64),
     pub now_playing: Option<String>,
     pub weather: Option<crate::weather::WeatherSnapshot>,
+    /// Latest headlines/items from `ticker_source` (see `ticker.rs`), in the
+    /// order they were fetched.
+    pub ticker: Vec<String>,
 }
 
 struct View {
@@ -298,6 +309,15 @@ fn build_view(w: Widget, d: &WidgetData, color_mode: ColorMode) -> View {
         Music => View {
             label: tr.now_playing.to_string(),
             value: d.now_playing.clone().unwrap_or_else(|| "-".into()),
+            detail: String::new(),
+            gauge: None,
+            value_color: None,
+            scroll: true,
+            icon: None,
+        },
+        News => View {
+            label: tr.news.to_string(),
+            value: if d.ticker.is_empty() { "-".into() } else { d.ticker.join("     \u{2022}     ") },
             detail: String::new(),
             gauge: None,
             value_color: None,

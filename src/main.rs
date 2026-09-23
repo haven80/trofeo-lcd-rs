@@ -29,6 +29,7 @@ mod media;
 mod netdisk;
 mod openrgb_sync;
 mod pawnio;
+mod ticker;
 mod weather;
 mod weather_icon;
 
@@ -206,6 +207,13 @@ struct Config {
     /// `None` = auto-detect the location from the machine's public IP address.
     /// Changing it requires a restart (it re-spawns the background fetch thread).
     weather_city: Option<String>,
+    /// Ticker source(s) (`ticker_source = ...` in trofeo.conf, comma-separated:
+    /// RSS/Atom feed URLs, plain-text URLs, or local file paths — see
+    /// `ticker.rs`). `None` = ticker disabled. Changing it requires a restart
+    /// (it re-spawns the background fetch thread), like `weather_city`.
+    ticker_source: Option<String>,
+    /// How often to re-fetch the ticker sources, in minutes. Restart-required.
+    ticker_refresh_min: u32,
     /// Background position/fit.
     bg_layout: BgLayout,
     ui: UiOptions,
@@ -222,9 +230,14 @@ fn print_help() {
          \x20\x20--idle-fps <N>            FPS while idle (default: {DEFAULT_IDLE_FPS})\n\
          \x20\x20--active-fps <N>          FPS while there's sound (default: {DEFAULT_ACTIVE_FPS})\n\
          \x20\x20--silence-threshold <N>   Peak amplitude threshold (0.0-1.0) to be\n\
-         \x20\x20                          considered silent (default: {DEFAULT_SILENCE_THRESHOLD})\n\
+         \x20\x20                          considered silent (default: {DEFAULT_SILENCE_THRESHOLD}).\n\
+         \x20\x20                          Also settable as silence_threshold in trofeo.conf\n\
+         \x20\x20                          (applies live, no restart) — lower it if the EQ bars\n\
+         \x20\x20                          don't react at low volume (loopback capture reflects\n\
+         \x20\x20                          the system/app volume level).\n\
          \x20\x20--silence-timeout-ms <N>  How long it must stay silent before dropping to\n\
-         \x20\x20                          idle-fps, in milliseconds (default: {DEFAULT_SILENCE_TIMEOUT_MS})\n\
+         \x20\x20                          idle-fps, in milliseconds (default: {DEFAULT_SILENCE_TIMEOUT_MS}).\n\
+         \x20\x20                          Also settable as silence_timeout_ms in trofeo.conf.\n\
          \x20\x20--color <MODE>            EQ bar color: 'default' (green->\n\
          \x20\x20                          yellow->red gradient, this is the default value), or a\n\
          \x20\x20                          fixed custom single color in the format\n\
@@ -259,9 +272,19 @@ fn print_help() {
          \x20\x20--ffmpeg <PATH>      Path to ffmpeg (default: next to the exe/PATH)\n\
          \x20\x20--weather-city <NAME>    City for the weather module (default: auto-detect\n\
          \x20\x20                          from the machine's public IP address)\n\
+         \x20\x20ticker_source <URL/FILE> (config-file only) News ticker source(s), comma-\n\
+         \x20\x20                          separated: RSS/Atom feed URL, plain-text URL, or a\n\
+         \x20\x20                          local file (one item per line). Shown as a scrolling\n\
+         \x20\x20                          line (show/hide = ticker) and/or --layout news.\n\
+         \x20\x20                          Requires a restart, like --weather-city.\n\
+         \x20\x20ticker_refresh_min <N>   (config-file only) How often to re-fetch, in minutes\n\
+         \x20\x20                          (default: 10). Requires a restart.\n\
+         \x20\x20--ticker-position <P>    Ticker line position (default: bottom)\n\
+         \x20\x20--ticker-size <1-30>     Ticker line text size (default: 3)\n\
+         \x20\x20--ticker-color <COLOR>   Ticker line color\n\
          \x20\x20--show <LIST>           Show ONLY these elements (comma-separated):\n\
          \x20\x20                          cpu, gpu, uptime, time, date, mem, net, disk, volume,\n\
-         \x20\x20                          nowplaying, weather, spectrum, clock, clock_date, dashboard\n\
+         \x20\x20                          nowplaying, weather, ticker, spectrum, clock, clock_date, dashboard\n\
          \x20\x20--hide <LIST>           Hides these elements (same names)\n\
          \x20\x20--text-color <COLOR>    Text color ('#RRGGBB', 'R,G,B' or a name)\n\
          \x20\x20--clock-color <COLOR>   Large clock color\n\
@@ -586,10 +609,17 @@ fn parse_args() -> anyhow::Result<Config> {
     }
     let ffmpeg = ffmpeg_cli.or_else(|| file.get("ffmpeg").map(str::to_string));
     let weather_city = weather_city_cli.or_else(|| file.get("weather_city").map(str::to_string));
+    let ticker_source = file.get("ticker_source").map(str::to_string);
+    let ticker_refresh_min = file.get_u32("ticker_refresh_min").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(10);
+    if !(1..=1440).contains(&ticker_refresh_min) {
+        anyhow::bail!("ticker_refresh_min: must be between 1 and 1440 (minutes)");
+    }
 
     Ok(Config {
         config_explicit: config_path.clone(),
         weather_city,
+        ticker_source,
+        ticker_refresh_min,
         idle_fps,
         active_fps,
         silence_threshold,
@@ -674,7 +704,7 @@ fn item_key(key: &str) -> Option<(usize, &str)> {
 }
 
 fn is_override_key(key: &str) -> bool {
-    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "clock_backdrop" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit"
+    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "clock_backdrop" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width"
 }
 
 /// Style for a single item of the info block.
@@ -859,6 +889,11 @@ fn parse_ui_options(file: &ConfigFile) -> anyhow::Result<UiOptions> {
         layouts: layouts_sel,
         panel_opacity: panel_opacity as u8,
         text_backdrop: file.get_bool("text_backdrop").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(false),
+        ticker_pos: parse_anchor_opt(file, "ticker_position", Anchor { ax: 1, ay: 2 })?,
+        ticker_size: parse_size_opt(file, "ticker_size", 3)?,
+        ticker_color: parse_color_opt(file, "ticker_color")?,
+        ticker_backdrop: file.get_bool("ticker_backdrop").map_err(|e| anyhow::anyhow!(e))?,
+        ticker_width: parse_percent(file, "ticker_width")?,
     })
 }
 
@@ -1131,6 +1166,18 @@ fn main() -> anyhow::Result<()> {
     let weather_monitor = weather::WeatherMonitor::spawn(config.weather_city.clone());
     let mut latest_weather: Option<weather::WeatherSnapshot> = None;
 
+    // Ticker (news headlines or any custom feed, see ticker.rs): same
+    // background-thread pattern as weather, refreshed every `ticker_refresh_min`.
+    let ticker_sources: Vec<String> = config
+        .ticker_source
+        .as_deref()
+        .map(|s| s.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect())
+        .unwrap_or_default();
+    let ticker_monitor =
+        ticker::TickerMonitor::spawn(ticker_sources, Duration::from_secs(config.ticker_refresh_min as u64 * 60));
+    let mut latest_ticker: Vec<String> = Vec::new();
+    let mut ticker_marquee = Marquee::new();
+
     let audio_ring = audio::spawn_capture()?;
     #[cfg(not(any(windows, target_os = "linux")))]
     println!(
@@ -1217,7 +1264,9 @@ fn main() -> anyhow::Result<()> {
                             || new_cfg.openrgb_device != config.openrgb_device
                             || new_cfg.hide_console != config.hide_console
                             || new_cfg.screenshot_key != config.screenshot_key
-                            || new_cfg.weather_city != config.weather_city;
+                            || new_cfg.weather_city != config.weather_city
+                            || new_cfg.ticker_source != config.ticker_source
+                            || new_cfg.ticker_refresh_min != config.ticker_refresh_min;
                         match build_display(&new_cfg) {
                             Ok(d) => {
                                 resolution = d.resolution;
@@ -1237,7 +1286,7 @@ fn main() -> anyhow::Result<()> {
                                 println!("Configuration reloaded.");
                                 report_config_error("");
                                 if restart_needed {
-                                    println!("(deepcool, fps_monitor, openrgb, hide_console, screenshot_key and weather_city require a restart)");
+                                    println!("(deepcool, fps_monitor, openrgb, hide_console, screenshot_key, weather_city, ticker_source and ticker_refresh_min require a restart)");
                                 }
                                 config = new_cfg;
                             }
@@ -1352,6 +1401,7 @@ fn main() -> anyhow::Result<()> {
             // Weather: just reads whatever the background thread last fetched
             // (non-blocking); stays `None` until the first fetch succeeds.
             latest_weather = weather_monitor.sample();
+            latest_ticker = ticker_monitor.sample();
 
             // AMD GPU sensor: Edge temperature, ASIC power, fan RPM via ADL PMLog.
             latest_gpu_data = gpu_amd.sample();
@@ -1445,6 +1495,7 @@ fn main() -> anyhow::Result<()> {
                     disk_mb: latest_disk_mb,
                     now_playing: now_playing_title.clone(),
                     weather: latest_weather.clone(),
+                    ticker: latest_ticker.clone(),
                 };
                 layouts::draw_layout(target, def, &wd, color_mode, &mut layout_marquee);
             } else if ui_show.clock {
@@ -1468,6 +1519,9 @@ fn main() -> anyhow::Result<()> {
             latest_weather.as_ref(),
             &mut now_playing_marquee,
         );
+        if ui_show.ticker {
+            draw_ticker_bar(target, &latest_ticker, &mut ticker_marquee);
+        }
         if composite {
             let panel = (config.ui.panel_opacity < 100)
                 .then_some((PANEL_KEY, PANEL_COLOR, config.ui.panel_opacity));
@@ -1621,6 +1675,14 @@ struct UiOptions {
     nowplaying_label: bool,
     /// Weather temperature unit: `true` = Fahrenheit, `false` = Celsius (default).
     weather_fahrenheit: bool,
+    /// Scrolling ticker line position/size/color/panel (independent from the
+    /// dedicated "news" panel, which uses the normal layout system).
+    ticker_pos: Anchor,
+    ticker_size: u32,
+    ticker_color: Option<(u8, u8, u8)>,
+    ticker_backdrop: Option<bool>,
+    /// Maximum width (% of the canvas) of the ticker line.
+    ticker_width: u32,
 }
 
 impl Default for UiOptions {
@@ -1648,6 +1710,11 @@ impl Default for UiOptions {
             clock_time_size: 20,
             clock_date_size: 6,
             weather_fahrenheit: false,
+            ticker_pos: Anchor { ax: 1, ay: 2 },
+            ticker_size: 3,
+            ticker_color: None,
+            ticker_backdrop: None,
+            ticker_width: 100,
         }
     }
 }
@@ -2090,6 +2157,41 @@ fn draw_idle_clock(fb: &mut Framebuffer, color_mode: ColorMode) {
         fb.draw_text(x, y, text, r, g, b, *sc);
         y += Framebuffer::text_height(*sc) + gap;
     }
+}
+
+/// Always-on-top scrolling "news ticker" line (a chyron, like a TV news
+/// channel): drawn AFTER everything else, on top of the clock/bars/panel
+/// currently on screen, whenever `ticker`/`ticker_source` items are
+/// available and `show.ticker` (or `layout_show.ticker` while a panel is
+/// active — see `opts()`) is on. Independent from the dedicated "news"
+/// preset layout, which instead takes over the whole content area.
+fn draw_ticker_bar(fb: &mut Framebuffer, items: &[String], marquee: &mut Marquee) {
+    if items.is_empty() {
+        return;
+    }
+    let o = opts();
+    let text = items.join("     \u{2022}     ");
+    let scale = o.ticker_size;
+    let color = o.ticker_color.unwrap_or(o.text_color.unwrap_or((0xE0, 0xE0, 0xE0)));
+    let canvas_w = fb.width();
+    let max_w = canvas_w.saturating_sub(40).min(canvas_w * o.ticker_width / 100).max(1);
+    let line_h = Framebuffer::text_height(scale);
+    marquee.scale = scale;
+    let (x0, y) = o.ticker_pos.place((0, 0, canvas_w, fb.height()), (max_w, line_h), (20, 8));
+    draw_backdrop_if(fb, o.ticker_backdrop.unwrap_or(o.text_backdrop), 10, x0, y, max_w, line_h);
+    let full_w = Framebuffer::text_width(&text, scale);
+    if full_w <= max_w || !marquee.tick(&text, max_w) {
+        fb.draw_text(x0, y, &text, color.0, color.1, color.2, scale);
+        return;
+    }
+    // Two copies side by side: when the first one exits, the second picks up
+    // right after (same technique as the scrolling "now playing" title).
+    let loop_text = format!("{text}{MARQUEE_GAP}");
+    let loop_width = Framebuffer::text_width(&loop_text, scale) as i64;
+    let x1 = x0 + max_w;
+    let base_x = x0 as i64 - marquee.offset_px as i64;
+    fb.draw_text_clipped(base_x, y, &loop_text, color.0, color.1, color.2, scale, x0, x1);
+    fb.draw_text_clipped(base_x + loop_width, y, &loop_text, color.0, color.1, color.2, scale, x0, x1);
 }
 
 /// Info block (CPU/GPU/RAM/network/disk/volume/track/time): elements are
@@ -2541,6 +2643,7 @@ mod layout_tests {
                 icon: weather_icon::WeatherIcon::Rain,
                 city: Some("Milano".into()),
             }),
+            ticker: vec!["First headline".into(), "Second headline, a bit longer".into()],
         };
         for def in layouts::LAYOUTS {
             for (tag, o) in [("l", Orientation::Landscape), ("p", Orientation::Portrait)] {
@@ -2558,6 +2661,56 @@ mod layout_tests {
         }
     }
 
+    /// Same preset layouts, but composited over a real background image
+    /// (`img/sample_background.jpg`) with `panel_opacity = 60`, the way a
+    /// user sees them with `background = ...` set: no panics; with
+    /// TROFEO_DUMP_DIR, saves PNGs. Skipped if the sample image isn't
+    /// present in this checkout (e.g. a source archive without `img/`).
+    #[test]
+    fn preset_layouts_over_background_render() {
+        let path = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/img/sample_background.jpg"));
+        if !path.exists() {
+            return;
+        }
+        let data = layouts::WidgetData {
+            cpu_pct: 42.0, cpu_temp: Some(61.0), cpu_power: Some(82.0), cpu_mhz: Some(4700),
+            gpu_pct: Some(76.0), gpu_temp: Some(68), gpu_power: Some(210), fps: Some(120),
+            used_mb: 16500, total_mb: 32768, net_kb: (1800.0, 95.0), disk_mb: (22.4, 3.1),
+            now_playing: Some("Daft Punk - Harder, Better, Faster, Stronger".into()),
+            weather: Some(weather::WeatherSnapshot {
+                temp_c: 19.0,
+                humidity: Some(58),
+                code: 2,
+                icon: weather_icon::WeatherIcon::PartlyCloudy,
+                city: Some("Milano".into()),
+            }),
+            ticker: vec!["Breaking: it builds".into()],
+        };
+        TEST_OPTS.with(|t| *t.borrow_mut() = Some(UiOptions { panel_opacity: 60, show: Show::all(false), ..UiOptions::default() }));
+        let canvas = Orientation::Landscape.canvas();
+        for def in layouts::LAYOUTS {
+            let bg = Background::load(path, canvas, 40, 30.0, None, &BgLayout::default()).unwrap();
+            let mut bg_fb = match &bg {
+                trofeo_lcd::background::Background::Static(f) => {
+                    Framebuffer::from_rgb(f.width(), f.height(), f.as_bytes().to_vec()).unwrap()
+                }
+                _ => unreachable!("a static image always loads as Background::Static"),
+            };
+            let mut ui = Framebuffer::new(canvas);
+            ui.clear(UI_KEY.0, UI_KEY.1, UI_KEY.2);
+            let mut m = Marquee::new();
+            layouts::draw_layout(&mut ui, def, &data, ColorMode::Default, &mut m);
+            bg_fb.blit_ui(&ui, 0, 0, UI_KEY, Some((PANEL_KEY, PANEL_COLOR, 60)));
+            if let Ok(dir) = std::env::var("TROFEO_DUMP_DIR") {
+                std::fs::write(
+                    format!("{dir}/bg_layout_{}.ppm", def.name),
+                    [format!("P6\n{} {}\n255\n", bg_fb.width(), bg_fb.height()).into_bytes(), bg_fb.as_bytes().to_vec()].concat(),
+                ).unwrap();
+            }
+        }
+        TEST_OPTS.with(|t| *t.borrow_mut() = None);
+    }
+
     /// Semi-transparent panels over a background: compositing with panel_opacity.
     #[test]
     fn panel_opacity_shows_background() {
@@ -2567,6 +2720,7 @@ mod layout_tests {
             used_mb: 18200, total_mb: 32768, net_kb: (2300.0, 120.0), disk_mb: (35.2, 1.4),
             now_playing: None,
             weather: None,
+            ticker: Vec::new(),
         };
         let canvas = Orientation::Landscape.canvas();
         let mut out = Vec::new();
