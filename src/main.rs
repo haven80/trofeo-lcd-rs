@@ -2586,6 +2586,35 @@ fn format_uptime(total_secs: u64) -> String {
 mod layout_tests {
     use super::*;
 
+    /// Regression test for the "news panel doesn't scroll" bug: `draw_layout`
+    /// must pass the marquee to ANY widget with `scroll: true`, not just
+    /// `Music` by name (that hardcoded check silently left `News` static).
+    #[test]
+    fn news_panel_scrolls() {
+        let data = layouts::WidgetData {
+            ticker: vec![
+                "This is a deliberately long headline meant to be much wider than the panel so it must scroll".to_string(),
+            ],
+            ..layouts::WidgetData::default()
+        };
+        let canvas = Orientation::Landscape.canvas();
+        let mut fb = Framebuffer::new(canvas);
+        let mut m = Marquee::new();
+        // First frame: primes the marquee with the text.
+        layouts::draw_layout(&mut fb, layouts::find("news").unwrap(), &data, ColorMode::Default, &mut m);
+        let offset_after_first = m.offset_px;
+        // Let real wall-clock time pass, then draw again: the offset must
+        // advance well beyond first-call jitter (at MARQUEE_SPEED_PX_S=45px/s,
+        // 150ms is ~6.75px — assert a lenient but unambiguous threshold).
+        std::thread::sleep(Duration::from_millis(150));
+        layouts::draw_layout(&mut fb, layouts::find("news").unwrap(), &data, ColorMode::Default, &mut m);
+        assert!(
+            m.offset_px - offset_after_first > 1.0,
+            "news panel's marquee did not advance — it would appear static (before: {offset_after_first}, after: {})",
+            m.offset_px
+        );
+    }
+
     fn sample(fb: &mut Framebuffer) {
         let sys = System::new_all();
         let gpu = gpu_amd::GpuAmdData::default();
@@ -2684,7 +2713,10 @@ mod layout_tests {
                 icon: weather_icon::WeatherIcon::PartlyCloudy,
                 city: Some("Milano".into()),
             }),
-            ticker: vec!["Breaking: it builds".into()],
+            ticker: vec![
+                "Local team wins championship after dramatic overtime finish".into(),
+                "New park opens downtown with bike paths and a dog area".into(),
+            ],
         };
         TEST_OPTS.with(|t| *t.borrow_mut() = Some(UiOptions { panel_opacity: 60, show: Show::all(false), ..UiOptions::default() }));
         let canvas = Orientation::Landscape.canvas();

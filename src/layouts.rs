@@ -500,7 +500,11 @@ pub fn draw_layout(
 
     for (w, rect) in cells {
         let view = build_view(w, data, color_mode);
-        let m = if w == Music { Some(&mut *marquee) } else { None };
+        // Any widget whose View asks to scroll (currently Music, News) shares
+        // the one marquee passed into `draw_layout` — keyed off `view.scroll`
+        // rather than the widget name, so a future scrolling widget doesn't
+        // silently render static text like News initially did.
+        let m = if view.scroll { Some(&mut *marquee) } else { None };
         draw_panel(fb, rect, &view, color_mode, m);
     }
 }
