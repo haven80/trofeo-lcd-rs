@@ -39,6 +39,8 @@ system status (CPU/GPU/RAM/temp) stays readable while playing.
   monitor.
 - Current **weather** (temperature + a stylized condition icon), auto-detected
   from your IP or a city you set.
+- **News ticker**: RSS/Atom feeds, any plain-text URL, or a local file — as a
+  scrolling line on top of any screen, and/or its own full panel.
 - Sync EQ bar color with an **OpenRGB** device.
 - Adaptive FPS: drops to idle when silent → saves CPU.
 
@@ -132,12 +134,13 @@ Also settable in `trofeo.conf` (see `trofeo.conf.example`) or via CLI:
 ### What to show, where, and colors
 
 - `show = cpu, gpu, …` / `hide = spectrum, clock_date, …` choose what is drawn
-  (`cpu gpu uptime time date mem net disk volume nowplaying spectrum clock
-  clock_date dashboard`). Hiding `spectrum` keeps the big clock on screen
-  during playback.
-- `status_position`, `clock_position`, `spectrum_position` (+ `spectrum_width/height`)
-  take one of 9 anchors: `top-left`, `top`, `top-right`, `center-left`,
-  `center`, `center-right`, `bottom-left`, `bottom`, `bottom-right`.
+  (`cpu gpu uptime time date mem net disk volume nowplaying weather ticker
+  spectrum clock clock_date dashboard`). Hiding `spectrum` keeps the big clock
+  on screen during playback.
+- `status_position`, `clock_position`, `spectrum_position` (+ `spectrum_width/height`),
+  `ticker_position` (+ `ticker_width`) take one of 9 anchors: `top-left`, `top`,
+  `top-right`, `center-left`, `center`, `center-right`, `bottom-left`, `bottom`,
+  `bottom-right`.
 - `text_color`, `clock_color`, `color` (bars): `#RRGGBB`, `R,G,B` or a name.
 - `background_fit` (`cover|stretch|contain|original`), `background_position`,
   `background_offset_x/y`.
@@ -170,9 +173,36 @@ can't be resolved yet, the item just shows "N/A" until the first fetch
 succeeds; nothing else in the program is affected. `--diag` also prints the
 resolved location and a sample reading.
 
+### Ticker (news headlines, or any custom feed)
+
+![Ticker — chyron over the classic screen](img/ticker.png)
+
+Scrolling headlines from one or more sources, refreshed on a background
+thread (same idea as the weather module). Set one or more comma-separated
+`ticker_source` entries — each can be an **RSS/Atom feed URL** (headlines
+come from each item's title), **any other URL** (not a feed, so each
+non-empty line of the response becomes one item — point it at your own
+script or webhook), or a **local file path** (one item per non-empty line,
+re-read on every refresh). Two independent ways to show it, usable together:
+a scrolling line drawn on top of whatever else is on screen (`show`/`hide =
+ticker`, styled with `ticker_position`/`ticker_size`/`ticker_color`/
+`ticker_backdrop`/`ticker_width`), and/or its own full panel (`layout =
+news`). `ticker_source`/`ticker_refresh_min` (default 10 minutes) need a
+restart, like `weather_city`; everything else applies live.
+
+```ini
+ticker_source = https://www.ansa.it/sito/ansait_rss.xml
+ticker_refresh_min = 10
+show = ticker
+layout = default, news:20
+```
+
+See the **[Options guide](./OPTIONS_GUIDE.md#ticker)** for the full reference
+and more examples (combining feeds and files, styling the chyron, etc.).
+
 ### Preset layouts
 
-`layout = default | cpu-gpu | temps | overview | grid6 | clock-center | io | music | gaming | cpu | gpu | weather`
+`layout = default | cpu-gpu | temps | overview | grid6 | clock-center | io | music | gaming | cpu | gpu | weather | news`
 (`--layout list` prints them). All of them, shown here over a sample background
 (`background = img/sample_background.jpg`, `panel_opacity = 60`):
 
@@ -181,7 +211,7 @@ resolved location and a sample reading.
 | ![cpu-gpu](img/layout-cpu-gpu.png)<br>`cpu-gpu` | ![temps](img/layout-temps.png)<br>`temps` | ![overview](img/layout-overview.png)<br>`overview` |
 | ![grid6](img/layout-grid6.png)<br>`grid6` | ![clock-center](img/layout-clock-center.png)<br>`clock-center` | ![io](img/layout-io.png)<br>`io` |
 | ![music](img/layout-music.png)<br>`music` | ![gaming](img/layout-gaming.png)<br>`gaming` | ![cpu](img/layout-cpu.png)<br>`cpu` |
-| ![gpu](img/layout-gpu.png)<br>`gpu` | ![weather](img/layout-weather.png)<br>`weather` | |
+| ![gpu](img/layout-gpu.png)<br>`gpu` | ![weather](img/layout-weather.png)<br>`weather` | ![news](img/layout-news.png)<br>`news` |
 
 Several layouts separated by commas rotate every
 `layout_interval` seconds (`layout = cpu-gpu, temps, music`). Each entry can also carry its own
@@ -198,7 +228,7 @@ them vertically. See `trofeo.conf.example`.
 
 ### Live reload
 
-`trofeo.conf` is re-read every second; saved changes apply without restarting (a broken file is ignored and the previous settings stay). Only `deepcool`, `fps_monitor`, OpenRGB, `hide_console`, `screenshot_key` and `weather_city` need a restart. If a saved file is invalid, the previous settings stay active and the reason is written to `trofeo-errors.txt` next to the executable.
+`trofeo.conf` is re-read every second; saved changes apply without restarting (a broken file is ignored and the previous settings stay). Only `deepcool`, `fps_monitor`, OpenRGB, `hide_console`, `screenshot_key`, `weather_city`, `ticker_source` and `ticker_refresh_min` need a restart. If a saved file is invalid, the previous settings stay active and the reason is written to `trofeo-errors.txt` next to the executable.
 
 ### Per-item control
 
@@ -250,6 +280,7 @@ Requires a *Virtual Display Driver* (VDD) at 1920×462 — see
 - `src/deepcool/` — DeepCool display drivers (HID).
 - `src/dxgi_capture.rs` + `src/bin/screen.rs` — second monitor mode.
 - `src/weather.rs` + `src/weather_icon.rs` — weather (Open-Meteo) and its condition icons.
+- `src/ticker.rs` — news ticker: RSS/Atom feeds, plain-text URLs, or a local file.
 - `src/main.rs` — main loop: audio → FFT → EQ bars → send to screen.
 
 ## Performance

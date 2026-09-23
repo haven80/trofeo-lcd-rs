@@ -34,6 +34,9 @@ Starting from the `sukualam/trofeo-lcd` codebase, this fork has:
   (`layout = default:30, weather:5`) instead of splitting the time equally.
 - Added new preset panel layouts, panel transparency (`panel_opacity`) and
   text backdrops (`text_backdrop`) for readability over a background image.
+- Added a **news ticker**: RSS/Atom feeds, any plain-text URL, or a local
+  file, shown as a scrolling chyron on top of any screen and/or its own full
+  panel (`layout = news`).
 - Added an **OpenRGB** sync option, a global **screenshot hotkey**
   (lossless PNG), a **console-hide** option, and an adaptive idle/active FPS
   system.

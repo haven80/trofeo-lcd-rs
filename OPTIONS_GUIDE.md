@@ -46,16 +46,20 @@ default.
 ## Requires a restart
 
 Of the options that actually live in `trofeo.conf`, everything reloads live
-*except* `deepcool`, `fps_monitor`, and `weather_city` — change one of these
-in the file and the program tells you on the next reload that a restart is
-needed, while the rest of the file still applies live.
+*except* `deepcool`, `fps_monitor`, `weather_city`, `ticker_source` and
+`ticker_refresh_min` — change one of these in the file and the program tells
+you on the next reload that a restart is needed, while the rest of the file
+still applies live.
 
 Separately, a handful of options only exist as command-line flags at all
 (`--openrgb-device`, `--openrgb-poll-ms`, `--hide-console`, `-k`/
-`--screenshot-key`, `--idle-fps`, `--active-fps`, `--silence-threshold`,
-`--silence-timeout-ms`, `--deepcool-update-ms`) — since they're never read
-from `trofeo.conf`, the only way to change them is to relaunch the program
-with different arguments. Each is marked "command-line only" below.
+`--screenshot-key`, `--idle-fps`, `--active-fps`, `--deepcool-update-ms`) —
+since they're never read from `trofeo.conf`, the only way to change them is
+to relaunch the program with different arguments. Each is marked
+"command-line only" below. `--silence-threshold`/`--silence-timeout-ms` used
+to be command-line only too, but are now also `trofeo.conf` keys
+(`silence_threshold`, `silence_timeout_ms`) that apply live, like everything
+else in the file — the CLI flags still work and take priority if both are set.
 
 ## Orientation, flip, margins
 
@@ -120,7 +124,7 @@ ffmpeg = C:\ffmpeg\bin\ffmpeg.exe
 | `hide` | `--hide <LIST>` | comma-separated element names — turn these **off** | nothing hidden |
 
 Element names: `cpu, gpu, uptime, time, date, mem` (or `ram`)`, net, disk,
-volume, nowplaying, weather, spectrum, clock, clock_date, dashboard`.
+volume, nowplaying, weather, spectrum, ticker, clock, clock_date, dashboard`.
 
 Detail fields inside the CPU/GPU lines can also be individually hidden:
 `cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_power, gpu_fan, gpu_clock, gpu_fps`.
@@ -285,6 +289,61 @@ weather_unit = f
 layout = default, weather:5
 ```
 
+## Ticker
+
+| Key | CLI | Values | Default | Restart? |
+|---|---|---|---|---|
+| `ticker_source` | — (config-file only) | one or more sources, comma-separated | none (ticker disabled) | **yes** |
+| `ticker_refresh_min` | — (config-file only) | `1`-`1440` (minutes) | `10` | **yes** |
+| `ticker_position` | `--ticker-position` | a [position](#positions) | `bottom` |  no |
+| `ticker_size` | `--ticker-size` | `1`-`30` | `3` | no |
+| `ticker_color` | `--ticker-color` | a [color](#colors) | follows `text_color` | no |
+| `ticker_backdrop` | `--ticker-backdrop` | `true`/`false` | follows `text_backdrop` | no |
+| `ticker_width` | `--ticker-width` | `1`-`100` (% of the screen) | `100` | no |
+
+Scrolling headlines (news, or literally anything else) from one or more
+sources, refreshed on a background thread — same idea as the weather module,
+but you control what feeds it. Each entry in `ticker_source` can be:
+
+- an **RSS/Atom feed URL** (`http://`/`https://`): headlines are taken from
+  each item's `<title>`;
+- **any other URL**: not a feed, so each non-empty line of the response
+  becomes one ticker item — a simple way to point it at your own script,
+  webhook, or plain-text endpoint without a dedicated integration;
+- a **local file path**: each non-empty line (not starting with `#`) is one
+  item, re-read on every refresh — handy if a script of yours writes its own
+  text file.
+
+Multiple sources are combined into one pool (up to 30 items; very long items
+are truncated). There are two independent ways to display it, and you can use
+either or both together:
+
+- a scrolling line (a "chyron", like a news channel) drawn on top of
+  whatever else is on screen — turned on/off with `show`/`hide = ticker`,
+  positioned and styled with the `ticker_*` keys above;
+- a dedicated full panel (`layout = news`), like any other [preset
+  layout](#preset-layouts).
+
+If no fetch has succeeded yet (first startup, or the sources are
+unreachable), the ticker line/panel simply shows nothing — nothing else in
+the program is affected. `ticker_source` and `ticker_refresh_min` need a
+restart because they re-spawn the background fetch thread, same as
+`weather_city`; everything else in this section applies live.
+
+```ini
+ticker_source = https://www.ansa.it/sito/ansait_rss.xml
+ticker_refresh_min = 10
+show = ticker
+ticker_position = bottom
+ticker_color = #FFC800
+
+# Combine an RSS feed with your own text file:
+ticker_source = https://example.com/feed.xml, C:\ticker\notes.txt
+
+# Dedicated full-screen panel, rotating with the standard screen:
+layout = default, news:20
+```
+
 ## Per-item control
 
 Every info item can be turned on/off individually with `show`/`hide`
@@ -394,10 +453,11 @@ background = C:\Pictures\bg.jpg
 
 Names (`trofeo_lcd.exe --layout list` prints these with descriptions):
 `default, default2, cpu-gpu, temps, overview, grid6, clock-center, io, music,
-gaming, cpu, gpu, weather`.
+gaming, cpu, gpu, weather, news`.
 
 - `default` = the standard screen (status lines, spectrum, big clock).
 - `default2` = the standard screen with [per-item](#per-item-control) styling.
+- `news` = the [ticker](#ticker)'s headlines, big and scrolling, full screen.
 - Everything else replaces the clock with big panel(s); the top status block
   and spectrum turn off (use `show = nowplaying, time` etc. to add lines back
   on top of a panel layout; the game dashboard stays on regardless — turn it
@@ -472,23 +532,35 @@ trofeo_lcd.exe --hide-console
 Without `--config`, the program looks for `trofeo.conf` (then `trofeo.config`)
 next to the executable, then in the current working folder.
 
-## Audio / adaptive FPS — command-line only
+## Audio / adaptive FPS
 
-These rarely need changing, and — like the DeepCool interval, OpenRGB and
-screenshot-hotkey options above — only exist as command-line flags, not as
-`trofeo.conf` keys:
+`--idle-fps`/`--active-fps` rarely need changing, and — like the DeepCool
+interval, OpenRGB and screenshot-hotkey options above — only exist as
+command-line flags, not as `trofeo.conf` keys. `silence_threshold` and
+`silence_timeout_ms`, on the other hand, **are** `trofeo.conf` keys (they
+also still work as CLI flags, which take priority if both are set) and
+apply live, no restart needed:
 
-| CLI | Values | Default |
-|---|---|---|
-| `--idle-fps <N>` | frames/sec | `2` |
-| `--active-fps <N>` | frames/sec | `15` |
-| `--silence-threshold <N>` | `0.0`-`1.0` peak amplitude | `0.005` |
-| `--silence-timeout-ms <N>` | milliseconds | `800` |
+| Key | CLI | Values | Default |
+|---|---|---|---|
+| — | `--idle-fps <N>` | frames/sec | `2` |
+| — | `--active-fps <N>` | frames/sec | `15` |
+| `silence_threshold` | `--silence-threshold <N>` | `0.0`-`1.0` peak amplitude | `0.005` |
+| `silence_timeout_ms` | `--silence-timeout-ms <N>` | milliseconds | `800` |
 
 The panel sends frames at `idle_fps` while there's no sound (to save CPU —
 JPEG encoding + USB transfer are the main cost) and jumps to `active_fps` as
 soon as sound is detected again; `silence_threshold`/`silence_timeout_ms`
-tune how "silence" is detected.
+tune how "silence" is detected: the loudest sample in each window is
+compared against `silence_threshold`, and anything below it counts as
+silence. Loopback capture reflects the actual system/app volume, so a quiet
+listening level can end up under the default threshold and look like
+silence — the EQ bars staying down even though something is playing is the
+usual symptom. Lower the value (e.g. `0.001`) if that happens:
+
+```ini
+silence_threshold = 0.001
+```
 
 ```
 trofeo_lcd.exe --idle-fps 1 --active-fps 20
@@ -507,7 +579,7 @@ background = C:\Pictures\bg.jpg
 background_dim = 45
 
 # --- What to show ---
-show = cpu, gpu, mem, nowplaying, clock, spectrum, weather
+show = cpu, gpu, mem, nowplaying, clock, spectrum, weather, ticker
 hide = disk, gpu_fan
 
 # --- Per-item styling (applies to default2, below) ---
@@ -524,6 +596,12 @@ nowplaying_width = 45
 # --- Weather ---
 weather_city = Milano
 weather_unit = c
+
+# --- Ticker (restart to apply ticker_source/ticker_refresh_min) ---
+ticker_source = https://www.ansa.it/sito/ansait_rss.xml
+ticker_refresh_min = 10
+ticker_position = bottom
+ticker_color = #FFC800
 
 # --- Rotation: the per-item screen for 30s, then the weather panel for 5s ---
 # (must say "default2" explicitly here for the per-item styling above to
@@ -542,6 +620,7 @@ mem_unit = gb
 # --- Integrations (restart to apply) ---
 deepcool = true
 fps_monitor = true
+# ticker_source/ticker_refresh_min above also require a restart.
 # screenshot hotkey, OpenRGB sync, idle/active FPS, hide_console: command-line
 # only, not trofeo.conf keys — see the sections above.
 ```
