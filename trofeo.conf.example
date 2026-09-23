@@ -77,6 +77,28 @@ language = en
 # silence_threshold = 0.005     # 0.0-1.0 peak amplitude (lower = more sensitive)
 # silence_timeout_ms = 800      # how long it must stay quiet before dropping to idle-fps
 
+# --- Ticker (news headlines, or any custom feed) -----------------------------
+# One or more sources, comma-separated. Each source can be:
+#  - an RSS/Atom feed URL: headlines are taken from each item's title
+#  - any other http(s):// URL: each non-empty line of the response is used
+#    as one item (plug in a script/webhook/plain-text endpoint)
+#  - a local file path: each non-empty line (not starting with '#') is one
+#    item, re-read on every refresh
+# ticker_source = https://www.ansa.it/sito/ansait_rss.xml
+# ticker_source = https://example.com/feed.xml, C:\ticker\my_notes.txt
+# ticker_refresh_min = 10      # how often to re-fetch, in minutes (1-1440)
+#
+# Two independent ways to show it:
+#  - a scrolling line (a "chyron") drawn on top of whatever else is on
+#    screen: show/hide = ticker (like any other item), position/style below
+#  - a dedicated full panel: layout = news  (or layout = default, news)
+# ticker_position = bottom      # top-left, top, top-right, center-left, center,
+#                                # center-right, bottom-left, bottom, bottom-right
+# ticker_size = 3                # 1-30
+# ticker_color = #FFC800
+# ticker_backdrop = true         # a panel behind the ticker line (default: text_backdrop)
+# ticker_width = 100             # % of the canvas the ticker line can use
+
 # --- Brightness ------------------------------------------------------------
 # 0-100 (100 = unchanged). The panel has no known brightness command:
 # the image is darkened in software before being sent.
@@ -104,6 +126,7 @@ language = en
 #   cpu           CPU only, big
 #   gpu           GPU only, big
 #   weather       Current weather, big: temperature, condition icon and city
+#   news          Latest headlines from ticker_source, scrolling
 # With a layout, the top info block and the spectrum are off (the panels already
 # show the data); "show = nowplaying, time" adds info lines, "hide" removes them.
 # The automatic dashboard while gaming stays on (hide = dashboard to disable it).
@@ -182,6 +205,7 @@ language = en
 # restarting (orientation, margins, background, language, colors, layouts, brightness, etc.).
 # If the file has an error, the previous configuration stays valid and the reason is
 # written to trofeo-errors.txt (next to trofeo_lcd.exe).
-# Only deepcool, fps_monitor, openrgb, hide_console, screenshot_key and weather_city
-# require a restart. weather_unit and the "weather" show/hide/size/position/color/
-# backdrop options apply live, like everything else.
+# Only deepcool, fps_monitor, openrgb, hide_console, screenshot_key, weather_city,
+# ticker_source and ticker_refresh_min require a restart. weather_unit, the "weather"
+# show/hide/size/position/color/backdrop options, and ticker_position/ticker_size/
+# ticker_color/ticker_backdrop/ticker_width all apply live, like everything else.
