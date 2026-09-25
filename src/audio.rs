@@ -115,12 +115,16 @@ mod windows_loopback {
     /// afterwards (headphones plugged in/out, a Bluetooth device connecting,
     /// Windows restarting the audio service, exclusive-mode contention,
     /// etc.), that client is permanently invalidated — every further read
-    /// fails forever, even though nothing is wrong with the machine. Without
-    /// this outer loop, that meant the EQ bars went silent until the whole
-    /// program was restarted. `run_once` gives up (returns `Err`) once reads
-    /// have been failing continuously for a few seconds, and this loop just
-    /// re-enumerates the (possibly new) default device and starts over —
-    /// the same recovery a manual restart gave, but automatic.
+    /// fails forever, even though nothing is wrong with the machine.
+    /// Separately, the user can also just pick a *different* default output
+    /// device (Sound Settings, a hardware switch, ...) while the old one
+    /// stays perfectly valid — that never produces a read error at all, it
+    /// just goes silent forever. `run_once` gives up (returns `Err`) in
+    /// either case: after a few seconds of continuous read errors, or as
+    /// soon as it notices (checked once a second) that the system's default
+    /// device no longer matches the one it opened. Either way, this loop
+    /// just re-enumerates the (possibly new) default device and starts over
+    /// — the same recovery a manual restart gave, but automatic.
     pub fn run(ring: SharedRing) -> anyhow::Result<()> {
         initialize_mta().ok()?;
         loop {
@@ -136,6 +140,11 @@ mod windows_loopback {
         // IMPORTANT: grab the Render (output/speaker) device here, NOT Capture —
         // this is what makes WASAPI treat it as a loopback request.
         let device = enumerator.get_default_device(&Direction::Render)?;
+        // Remember *which* device we actually opened, so the loop below can
+        // notice if the user picks a different default output device later
+        // (see the `DEVICE_CHECK_INTERVAL` comment further down for why this
+        // is needed on top of the read-error watchdog).
+        let opened_device_id = device.get_id().unwrap_or_default();
         let mut audio_client = device.get_iaudioclient()?;
 
         let desired_format = WaveFormat::new(32, 32, &SampleType::Float, SAMPLE_RATE as usize, 2, None);
@@ -190,6 +199,25 @@ mod windows_loopback {
         const GIVE_UP_AFTER: Duration = Duration::from_secs(5);
         let mut failing_since: Option<Instant> = None;
 
+        // The read-error watchdog above only catches a device becoming
+        // *invalid* (unplugged, disabled, the audio service restarting,
+        // waking from sleep, ...) — those make every further read fail, so
+        // `GIVE_UP_AFTER` eventually trips and the outer loop reconnects.
+        // But simply changing the default PLAYBACK device in Windows Sound
+        // Settings (or via a hardware button, a Bluetooth device taking
+        // over, etc.) does NOT invalidate the device we already opened: the
+        // old device is still perfectly valid, it's just not the default
+        // one anymore, so it keeps handing back silent reads forever
+        // without ever erroring. Left alone, that means the EQ bar just
+        // goes (and stays) flat until the whole program is restarted —
+        // exactly what was reported. So, independently of read errors, poll
+        // "what is the default device right now?" every second and compare
+        // its id to the one we actually opened; a mismatch means the user
+        // switched outputs, and we bail out here so the outer `run` loop
+        // re-enumerates and reconnects to the new default.
+        const DEVICE_CHECK_INTERVAL: Duration = Duration::from_secs(1);
+        let mut last_device_check = Instant::now();
+
         loop {
             // Transient errors (e.g. device briefly changing) don't
             // immediately kill the capture thread — they're logged and
@@ -207,6 +235,19 @@ mod windows_loopback {
                 continue;
             }
             failing_since = None;
+
+            if last_device_check.elapsed() >= DEVICE_CHECK_INTERVAL {
+                last_device_check = Instant::now();
+                if let Ok(current_default) = enumerator.get_default_device(&Direction::Render) {
+                    if let Ok(current_id) = current_default.get_id() {
+                        if !current_id.is_empty() && current_id != opened_device_id {
+                            anyhow::bail!(
+                                "default playback device changed (was {opened_device_id:?}, now {current_id:?})"
+                            );
+                        }
+                    }
+                }
+            }
 
             // Convert interleaved stereo float32 bytes -> mono f32 samples,
             // collecting them first into a local buffer (without locking the
