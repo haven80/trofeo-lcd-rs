@@ -13,6 +13,7 @@
 //! a full JSON stack.
 
 use crate::weather_icon::{icon_for_code, WeatherIcon};
+use chrono::{Datelike, NaiveDate, Weekday};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -25,16 +26,47 @@ pub struct WeatherSnapshot {
     pub icon: WeatherIcon,
     /// City/place name, when known (geocoded name, or the IP-guessed city).
     pub city: Option<String>,
+    /// Up to 7 upcoming days (today first), for the "weather" panel's
+    /// forecast strip. Empty if the daily fields couldn't be parsed — the
+    /// panel just shows the current conditions alone in that case, same as
+    /// before this field existed.
+    pub forecast: Vec<DailyForecast>,
 }
 
 impl WeatherSnapshot {
     /// Temperature converted to the requested unit ('C' or 'F').
     pub fn temp_in(&self, fahrenheit: bool) -> f32 {
-        if fahrenheit {
-            self.temp_c * 9.0 / 5.0 + 32.0
-        } else {
-            self.temp_c
-        }
+        c_to_unit(self.temp_c, fahrenheit)
+    }
+}
+
+/// One day of the 7-day forecast.
+#[derive(Clone, Debug)]
+pub struct DailyForecast {
+    pub weekday: Weekday,
+    pub icon: WeatherIcon,
+    pub temp_max_c: f32,
+    pub temp_min_c: f32,
+    /// Max precipitation probability for the day (0-100), when the model
+    /// provides it.
+    pub precip_prob: Option<u8>,
+}
+
+impl DailyForecast {
+    pub fn temp_max_in(&self, fahrenheit: bool) -> f32 {
+        c_to_unit(self.temp_max_c, fahrenheit)
+    }
+
+    pub fn temp_min_in(&self, fahrenheit: bool) -> f32 {
+        c_to_unit(self.temp_min_c, fahrenheit)
+    }
+}
+
+fn c_to_unit(temp_c: f32, fahrenheit: bool) -> f32 {
+    if fahrenheit {
+        temp_c * 9.0 / 5.0 + 32.0
+    } else {
+        temp_c
     }
 }
 
@@ -266,10 +298,10 @@ fn locate_via_ipapi() -> Result<Location, String> {
     Ok(Location { lat, lon, city })
 }
 
-/// Open-Meteo current-conditions forecast for a resolved location.
+/// Open-Meteo current-conditions + 7-day forecast for a resolved location.
 fn fetch_current(loc: &Location) -> Result<WeatherSnapshot, String> {
     let url = format!(
-        "https://api.open-meteo.com/v1/forecast?latitude={:.4}&longitude={:.4}&current=temperature_2m,relative_humidity_2m,weather_code&timezone=auto",
+        "https://api.open-meteo.com/v1/forecast?latitude={:.4}&longitude={:.4}&current=temperature_2m,relative_humidity_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=7",
         loc.lat, loc.lon
     );
     let body = http_get(&url)?;
@@ -278,13 +310,102 @@ fn fetch_current(loc: &Location) -> Result<WeatherSnapshot, String> {
     let temp_c = json_number(obj, "\"temperature_2m\"").ok_or("forecast: missing temperature_2m")? as f32;
     let humidity = json_number(obj, "\"relative_humidity_2m\"").map(|v| v.clamp(0.0, 100.0) as u8);
     let code = json_number(obj, "\"weather_code\"").unwrap_or(0.0) as u16;
+
+    // Best-effort: the daily block is a nice-to-have on top of the current
+    // conditions above, so any parsing hiccup here (missing field, a model
+    // that doesn't provide one of them, ...) just means an empty/shorter
+    // forecast list, never a failed weather fetch overall.
+    let forecast = body.find("\"daily\"").map(|start| parse_daily_forecast(&body[start..])).unwrap_or_default();
+
     Ok(WeatherSnapshot {
         temp_c,
         humidity,
         code,
         icon: icon_for_code(code),
         city: loc.city.clone(),
+        forecast,
     })
+}
+
+/// Parses the `"daily":{"time":[...],"weather_code":[...],...}` block into
+/// up to 7 `DailyForecast` entries (today first). A day is skipped rather
+/// than defaulted if its date, high or low temperature is missing/null —
+/// showing one fewer day is much better than showing a wrong one.
+fn parse_daily_forecast(daily_obj: &str) -> Vec<DailyForecast> {
+    let dates = extract_array(daily_obj, "\"time\"").map(json_string_array).unwrap_or_default();
+    let codes = extract_array(daily_obj, "\"weather_code\"").map(json_number_array).unwrap_or_default();
+    let highs = extract_array(daily_obj, "\"temperature_2m_max\"").map(json_number_array).unwrap_or_default();
+    let lows = extract_array(daily_obj, "\"temperature_2m_min\"").map(json_number_array).unwrap_or_default();
+    let pops = extract_array(daily_obj, "\"precipitation_probability_max\"").map(json_number_array).unwrap_or_default();
+
+    let n = dates.len().min(highs.len()).min(lows.len()).min(7);
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        let Some(weekday) = NaiveDate::parse_from_str(&dates[i], "%Y-%m-%d").ok().map(|d| d.weekday()) else { continue };
+        let Some(temp_max_c) = highs.get(i).copied().flatten() else { continue };
+        let Some(temp_min_c) = lows.get(i).copied().flatten() else { continue };
+        let code = codes.get(i).copied().flatten().unwrap_or(0.0) as u16;
+        out.push(DailyForecast {
+            weekday,
+            icon: icon_for_code(code),
+            temp_max_c: temp_max_c as f32,
+            temp_min_c: temp_min_c as f32,
+            precip_prob: pops.get(i).copied().flatten().map(|v| v.clamp(0.0, 100.0) as u8),
+        });
+    }
+    out
+}
+
+/// Splits a bracketed JSON array (`"[1,2,null,4]"` or `"[\"a\",\"b\"]"`) into
+/// its top-level element substrings, honoring quotes/nesting so a comma
+/// inside a string or a nested array/object can't split it early.
+fn split_array_items(bracketed: &str) -> Vec<&str> {
+    let inner = bracketed.strip_prefix('[').and_then(|s| s.strip_suffix(']')).unwrap_or(bracketed);
+    let bytes = inner.as_bytes();
+    let mut out = Vec::new();
+    let mut depth = 0i32;
+    let mut in_string = false;
+    let mut escaped = false;
+    let mut start = 0usize;
+    for (i, &b) in bytes.iter().enumerate() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if b == b'\\' {
+                escaped = true;
+            } else if b == b'"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match b {
+            b'"' => in_string = true,
+            b'[' | b'{' => depth += 1,
+            b']' | b'}' => depth -= 1,
+            b',' if depth == 0 => {
+                out.push(inner[start..i].trim());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    let last = inner[start..].trim();
+    if !last.is_empty() {
+        out.push(last);
+    }
+    out
+}
+
+/// Parses each element of a bracketed numeric array; `null`/unparseable
+/// entries become `None` (position-preserving, unlike filtering them out,
+/// which would misalign every day after a single missing value).
+fn json_number_array(bracketed: &str) -> Vec<Option<f64>> {
+    split_array_items(bracketed).into_iter().map(|item| item.parse::<f64>().ok()).collect()
+}
+
+/// Parses each element of a bracketed string array (quotes stripped).
+fn json_string_array(bracketed: &str) -> Vec<String> {
+    split_array_items(bracketed).into_iter().map(|item| item.trim_matches('"').to_string()).collect()
 }
 
 /// Prints diagnostics for `--diag`: resolved location + a fetched sample.
@@ -299,13 +420,30 @@ pub fn diag(city_override: Option<&str>) {
                 loc.lon
             );
             match fetch_current(&loc) {
-                Ok(snap) => println!(
-                    "  Current: {:.1}C, humidity {}, code {} ({:?})",
-                    snap.temp_c,
-                    snap.humidity.map(|h| h.to_string()).unwrap_or_else(|| "?".to_string()),
-                    snap.code,
-                    snap.icon
-                ),
+                Ok(snap) => {
+                    println!(
+                        "  Current: {:.1}C, humidity {}, code {} ({:?})",
+                        snap.temp_c,
+                        snap.humidity.map(|h| h.to_string()).unwrap_or_else(|| "?".to_string()),
+                        snap.code,
+                        snap.icon
+                    );
+                    if snap.forecast.is_empty() {
+                        println!("  7-day forecast: none parsed");
+                    } else {
+                        println!("  7-day forecast:");
+                        for d in &snap.forecast {
+                            println!(
+                                "    {:?}: {:.0}C / {:.0}C, {:?}, rain {}",
+                                d.weekday,
+                                d.temp_max_c,
+                                d.temp_min_c,
+                                d.icon,
+                                d.precip_prob.map(|p| format!("{p}%")).unwrap_or_else(|| "?".to_string())
+                            );
+                        }
+                    }
+                }
                 Err(e) => println!("  Forecast fetch failed: {e}"),
             }
         }
@@ -433,9 +571,60 @@ mod tests {
             code: 0,
             icon: WeatherIcon::Clear,
             city: None,
+            forecast: Vec::new(),
         };
         assert_eq!(snap.temp_in(false), 0.0);
         assert_eq!(snap.temp_in(true), 32.0);
+    }
+
+    #[test]
+    fn daily_forecast_temp_conversion() {
+        let day = DailyForecast {
+            weekday: Weekday::Mon,
+            icon: WeatherIcon::Clear,
+            temp_max_c: 20.0,
+            temp_min_c: 10.0,
+            precip_prob: Some(15),
+        };
+        assert_eq!(day.temp_max_in(false), 20.0);
+        assert_eq!(day.temp_min_in(false), 10.0);
+        assert_eq!(day.temp_max_in(true), 68.0);
+        assert_eq!(day.temp_min_in(true), 50.0);
+    }
+
+    #[test]
+    fn split_array_items_handles_nulls_and_strings() {
+        assert_eq!(split_array_items("[1,2,null,4]"), vec!["1", "2", "null", "4"]);
+        assert_eq!(split_array_items(r#"["2026-09-26","2026-09-27"]"#), vec![r#""2026-09-26""#, r#""2026-09-27""#]);
+    }
+
+    #[test]
+    fn json_number_array_preserves_null_positions() {
+        assert_eq!(json_number_array("[1.5,null,3.0]"), vec![Some(1.5), None, Some(3.0)]);
+    }
+
+    #[test]
+    fn json_string_array_strips_quotes() {
+        assert_eq!(
+            json_string_array(r#"["2026-09-26","2026-09-27"]"#),
+            vec!["2026-09-26".to_string(), "2026-09-27".to_string()]
+        );
+    }
+
+    #[test]
+    fn parse_daily_forecast_skips_null_days_without_misaligning() {
+        // Day index 1 has a null high temp -> must be skipped entirely, but
+        // day index 2's values must NOT shift into its place.
+        let daily = r#""daily":{"time":["2026-09-26","2026-09-27","2026-09-28"],
+            "weather_code":[0,3,61],
+            "temperature_2m_max":[25.0,null,18.0],
+            "temperature_2m_min":[14.0,12.0,11.0],
+            "precipitation_probability_max":[0,50,90]}"#;
+        let days = parse_daily_forecast(daily);
+        assert_eq!(days.len(), 2);
+        assert_eq!(days[0].temp_max_c, 25.0);
+        assert_eq!(days[1].temp_max_c, 18.0);
+        assert_eq!(days[1].precip_prob, Some(90));
     }
 
     #[test]

@@ -181,6 +181,24 @@ struct View {
     scroll: bool,
     /// A small condition icon drawn above the value (weather panels).
     icon: Option<(WeatherIcon, (u8, u8, u8))>,
+    /// Up to 7 days, precomputed for display (weather panel only; empty for
+    /// every other widget).
+    forecast: Vec<ForecastDayView>,
+}
+
+/// One precomputed forecast-strip column (weather panel only). Formatting
+/// (unit conversion, localized day abbreviation) happens once here in
+/// `build_view`, so `draw_panel` just draws strings/an icon — same split as
+/// the rest of `View`.
+struct ForecastDayView {
+    day_label: &'static str,
+    icon: WeatherIcon,
+    icon_color: (u8, u8, u8),
+    /// "24/15" (already unit-converted, no degree symbol — kept compact so
+    /// it fits a narrow column at small scale).
+    temps: String,
+    /// "70%", or empty when the model didn't provide a probability for that day.
+    pop: String,
 }
 
 fn fmt_rate(kb: f64) -> String {
@@ -205,8 +223,9 @@ fn temp_view(label: &str, t: Option<f32>, detail: String, color_mode: ColorMode)
             value_color: Some(level_color((t / 100.0).clamp(0.0, 1.0).max(0.2), color_mode)),
             scroll: false,
             icon: None,
+            forecast: Vec::new(),
         },
-        None => View { label: label.into(), value: "--".into(), detail: na(), gauge: None, value_color: None, scroll: false, icon: None },
+        None => View { label: label.into(), value: "--".into(), detail: na(), gauge: None, value_color: None, scroll: false, icon: None, forecast: Vec::new() },
     }
 }
 
@@ -227,6 +246,7 @@ fn build_view(w: Widget, d: &WidgetData, color_mode: ColorMode) -> View {
                 value_color: None,
                 scroll: false,
                 icon: None,
+                forecast: Vec::new(),
             }
         }
         CpuTemp => {
@@ -247,6 +267,7 @@ fn build_view(w: Widget, d: &WidgetData, color_mode: ColorMode) -> View {
                 value_color: None,
                 scroll: false,
                 icon: None,
+                forecast: Vec::new(),
             }
         }
         GpuTemp => {
@@ -265,6 +286,7 @@ fn build_view(w: Widget, d: &WidgetData, color_mode: ColorMode) -> View {
                 value_color: None,
                 scroll: false,
                 icon: None,
+                forecast: Vec::new(),
             }
         }
         Net => View {
@@ -275,6 +297,7 @@ fn build_view(w: Widget, d: &WidgetData, color_mode: ColorMode) -> View {
             value_color: None,
             scroll: false,
             icon: None,
+            forecast: Vec::new(),
         },
         Disk => View {
             label: format!("{} {}", tr.disk, tr.disk_read),
@@ -284,6 +307,7 @@ fn build_view(w: Widget, d: &WidgetData, color_mode: ColorMode) -> View {
             value_color: None,
             scroll: false,
             icon: None,
+            forecast: Vec::new(),
         },
         Fps => View {
             label: "FPS".into(),
@@ -296,6 +320,7 @@ fn build_view(w: Widget, d: &WidgetData, color_mode: ColorMode) -> View {
             value_color: None,
             scroll: false,
             icon: None,
+            forecast: Vec::new(),
         },
         Clock => View {
             label: i18n::weekday(&now),
@@ -305,6 +330,7 @@ fn build_view(w: Widget, d: &WidgetData, color_mode: ColorMode) -> View {
             value_color: opts().clock_color.or_else(|| Some(accent_color(color_mode))),
             scroll: false,
             icon: None,
+            forecast: Vec::new(),
         },
         Music => View {
             label: tr.now_playing.to_string(),
@@ -314,6 +340,7 @@ fn build_view(w: Widget, d: &WidgetData, color_mode: ColorMode) -> View {
             value_color: None,
             scroll: true,
             icon: None,
+            forecast: Vec::new(),
         },
         News => View {
             label: tr.news.to_string(),
@@ -323,12 +350,27 @@ fn build_view(w: Widget, d: &WidgetData, color_mode: ColorMode) -> View {
             value_color: None,
             scroll: true,
             icon: None,
+            forecast: Vec::new(),
         },
         Weather => match &d.weather {
             Some(w) => {
                 let fahrenheit = opts().weather_fahrenheit;
                 let unit = if fahrenheit { "F" } else { "C" };
                 let color = weather_icon::default_color(w.icon);
+                let forecast = w
+                    .forecast
+                    .iter()
+                    .map(|day| {
+                        let day_color = weather_icon::default_color(day.icon);
+                        ForecastDayView {
+                            day_label: i18n::weekday_short(day.weekday),
+                            icon: day.icon,
+                            icon_color: day_color,
+                            temps: format!("{:.0}/{:.0}", day.temp_max_in(fahrenheit), day.temp_min_in(fahrenheit)),
+                            pop: day.precip_prob.map(|p| format!("{p}%")).unwrap_or_default(),
+                        }
+                    })
+                    .collect();
                 View {
                     label: w.city.clone().unwrap_or_else(|| tr.weather.to_string()),
                     value: format!("{:.0}{unit}", w.temp_in(fahrenheit)),
@@ -341,6 +383,7 @@ fn build_view(w: Widget, d: &WidgetData, color_mode: ColorMode) -> View {
                     value_color: Some(color),
                     scroll: false,
                     icon: Some((w.icon, color)),
+                    forecast,
                 }
             }
             None => View {
@@ -351,6 +394,7 @@ fn build_view(w: Widget, d: &WidgetData, color_mode: ColorMode) -> View {
                 value_color: None,
                 scroll: false,
                 icon: None,
+                forecast: Vec::new(),
             },
         },
     }
@@ -411,7 +455,25 @@ fn draw_panel(
 
     // Value centered in the remaining space.
     let top_limit = label_y + label_h + 6;
-    let mid_h = bottom_limit.saturating_sub(top_limit);
+    let mut mid_h = bottom_limit.saturating_sub(top_limit);
+
+    // 7-day forecast strip (weather panel only): reserve a band at the
+    // bottom of the middle area for it, shrinking what's left above for the
+    // current conditions (icon + big temperature). `v.forecast` is always
+    // empty for every other widget, so this never affects them.
+    let forecast_rect = if v.forecast.is_empty() {
+        None
+    } else {
+        let forecast_h = ((mid_h as f32 * 0.4) as u32).clamp(70, 170);
+        if forecast_h + 60 <= mid_h {
+            let fy = bottom_limit.saturating_sub(forecast_h);
+            mid_h = mid_h.saturating_sub(forecast_h + 10);
+            Some((x + bt + pad, fy, inner_w, forecast_h))
+        } else {
+            None
+        }
+    };
+
     if v.scroll {
         let scale = fit_scale("W", (mid_h / 7).clamp(1, 8), inner_w).max(2);
         let vh = Framebuffer::text_height(scale);
@@ -453,6 +515,94 @@ fn draw_panel(
         let vw = Framebuffer::text_width(&v.value, scale);
         let vy = value_top + value_h_avail.saturating_sub(vh) / 2;
         fb.draw_text(x + w.saturating_sub(vw) / 2, vy, &v.value, value_color.0, value_color.1, value_color.2, scale);
+    }
+
+    if let Some(rect) = forecast_rect {
+        draw_forecast_strip(fb, rect, &v.forecast);
+    }
+}
+
+/// Picks one (day_scale, temps_scale, pop_scale) triple shared by every
+/// column of the forecast strip, each the largest that still fits
+/// `col_inner` for the LONGEST string in that role across all 7 days (e.g. a
+/// "-15/-22" temps string is longer than "24/15" and must not be allowed to
+/// overlap into the next column) — a single narrow column (typical in
+/// portrait mode, where the panel is only ~400px wide for 7 columns instead
+/// of ~1850px in landscape) shrinks the text for every day, rather than only
+/// the one day whose text happens to be long.
+fn forecast_column_text_scales(days: &[ForecastDayView], col_inner: u32) -> (u32, u32, u32) {
+    let day_scale = days.iter().map(|d| fit_scale(d.day_label, 2, col_inner)).min().unwrap_or(1);
+    let temps_scale = days.iter().map(|d| fit_scale(&d.temps, 2, col_inner)).min().unwrap_or(1);
+    let pop_scale = days
+        .iter()
+        .filter(|d| !d.pop.is_empty())
+        .map(|d| fit_scale(&d.pop, 1, col_inner))
+        .min()
+        .unwrap_or(1);
+    (day_scale, temps_scale, pop_scale)
+}
+
+/// Draws the 7-day forecast strip inside `rect`: one evenly-spaced column
+/// per day, each with its day abbreviation, a small condition icon, the
+/// high/low temperature, and (when known) the rain probability.
+fn draw_forecast_strip(fb: &mut Framebuffer, rect: (u32, u32, u32, u32), days: &[ForecastDayView]) {
+    let (x, y, w, h) = rect;
+    if days.is_empty() || w < 40 || h < 40 {
+        return;
+    }
+    let n = days.len() as u32;
+    let col_w = w / n;
+    let col_pad = 3u32;
+    // Everything below is sized to fit inside ONE column, not just the
+    // strip's height: in portrait mode the panel is much narrower (7 columns
+    // in ~400px, not ~1850px), so without this a fixed scale would overlap
+    // text from one day into the next. `fit_scale` picks the largest scale
+    // that still fits `col_inner`, same technique used everywhere else text
+    // has to fit a box; the smallest result across all 7 days is used for
+    // all of them, so the row stays visually aligned instead of each column
+    // being sized independently.
+    let col_inner = col_w.saturating_sub(col_pad * 2).max(1);
+
+    // A thin separator line marks this off as a distinct block from the
+    // current-conditions area above it.
+    fb.fill_rect(x, y, w, 1, 0x30, 0x30, 0x3C);
+
+    let text = opts().text_color;
+    let label_color = text.map_or((0xA0, 0xA0, 0xA8), |c| dim_color(c, 70));
+
+    let (day_scale, temps_scale, pop_scale) = forecast_column_text_scales(days, col_inner);
+    let day_h = Framebuffer::text_height(day_scale);
+    let temps_h = Framebuffer::text_height(temps_scale);
+    let pop_h = Framebuffer::text_height(pop_scale);
+    let gap = 4u32;
+
+    let icon_budget_h = h.saturating_sub(day_h + temps_h + pop_h + gap * 4 + 6);
+    let icon_scale = (icon_budget_h / weather_icon::ICON_SIZE).clamp(1, 6).min((col_inner / weather_icon::ICON_SIZE).max(1));
+    let icon_px = weather_icon::size(icon_scale);
+
+    let content_h = day_h + gap + icon_px + gap + temps_h + gap + pop_h;
+    let top = y + 6 + h.saturating_sub(6).saturating_sub(content_h) / 2;
+
+    for (i, day) in days.iter().enumerate() {
+        let cx = x + i as u32 * col_w;
+        let mut cy = top;
+
+        let dw = Framebuffer::text_width(day.day_label, day_scale);
+        fb.draw_text(cx + col_w.saturating_sub(dw) / 2, cy, day.day_label, label_color.0, label_color.1, label_color.2, day_scale);
+        cy += day_h + gap;
+
+        let icon_x = cx + col_w.saturating_sub(icon_px) / 2;
+        weather_icon::draw(fb, icon_x, cy, icon_scale, day.icon, day.icon_color.0, day.icon_color.1, day.icon_color.2);
+        cy += icon_px + gap;
+
+        let tw = Framebuffer::text_width(&day.temps, temps_scale);
+        fb.draw_text(cx + col_w.saturating_sub(tw) / 2, cy, &day.temps, day.icon_color.0, day.icon_color.1, day.icon_color.2, temps_scale);
+        cy += temps_h + gap;
+
+        if !day.pop.is_empty() {
+            let pw = Framebuffer::text_width(&day.pop, pop_scale);
+            fb.draw_text(cx + col_w.saturating_sub(pw) / 2, cy, &day.pop, label_color.0, label_color.1, label_color.2, pop_scale);
+        }
     }
 }
 
@@ -506,5 +656,70 @@ pub fn draw_layout(
         // silently render static text like News initially did.
         let m = if view.scroll { Some(&mut *marquee) } else { None };
         draw_panel(fb, rect, &view, color_mode, m);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn day(label: &'static str, temps: &str, pop: &str) -> ForecastDayView {
+        ForecastDayView {
+            day_label: label,
+            icon: WeatherIcon::Clear,
+            icon_color: (0xFF, 0xC8, 0x00),
+            temps: temps.to_string(),
+            pop: pop.to_string(),
+        }
+    }
+
+    /// Regression test for a real bug: the forecast strip originally used a
+    /// fixed text scale (2) regardless of how narrow each of the 7 columns
+    /// was, so in portrait mode (~400px total / 7 columns =~ 56px each) the
+    /// day name and hi/lo temperatures overlapped into the neighboring
+    /// column instead of shrinking to fit. `forecast_column_text_scales`
+    /// must pick a scale small enough that every day's text — including the
+    /// LONGEST one, e.g. a two-digit-negative "-15/-22" — fits inside a
+    /// single column, for any column width down to a narrow portrait one.
+    #[test]
+    fn forecast_text_scales_never_overlap_a_narrow_column() {
+        let days = vec![
+            day("FRI", "19/12", "70%"),
+            day("SAT", "-15/-22", "20%"), // longest string in the group
+            day("SUN", "25/15", ""),
+        ];
+        // 50px is roughly the real-world floor (a portrait-mode column is
+        // ~57px before padding, ~51px inner — see `draw_forecast_strip`);
+        // anything narrower can't fit a 7-character string like "-15/-22"
+        // even at the minimum scale of 1 (`fit_scale` never goes below 1),
+        // which is a hard limit of the glyph size, not a bug to test for.
+        for col_inner in [50u32, 56, 90, 260] {
+            let (day_scale, temps_scale, pop_scale) = forecast_column_text_scales(&days, col_inner);
+            for d in &days {
+                assert!(
+                    Framebuffer::text_width(d.day_label, day_scale) <= col_inner,
+                    "day label {:?} overflows a {col_inner}px column at scale {day_scale}",
+                    d.day_label
+                );
+                assert!(
+                    Framebuffer::text_width(&d.temps, temps_scale) <= col_inner,
+                    "temps {:?} overflows a {col_inner}px column at scale {temps_scale}",
+                    d.temps
+                );
+                if !d.pop.is_empty() {
+                    assert!(
+                        Framebuffer::text_width(&d.pop, pop_scale) <= col_inner,
+                        "pop {:?} overflows a {col_inner}px column at scale {pop_scale}",
+                        d.pop
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn forecast_text_scales_default_to_one_with_no_days() {
+        let (day_scale, temps_scale, pop_scale) = forecast_column_text_scales(&[], 200);
+        assert_eq!((day_scale, temps_scale, pop_scale), (1, 1, 1));
     }
 }

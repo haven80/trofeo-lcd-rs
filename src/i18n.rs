@@ -100,6 +100,8 @@ pub fn t() -> &'static Strings {
 const IT_WEEKDAYS: [&str; 7] = [
     "Lunedi'", "Martedi'", "Mercoledi'", "Giovedi'", "Venerdi'", "Sabato", "Domenica",
 ];
+const EN_WEEKDAYS_SHORT: [&str; 7] = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+const IT_WEEKDAYS_SHORT: [&str; 7] = ["LUN", "MAR", "MER", "GIO", "VEN", "SAB", "DOM"];
 const IT_MONTHS: [&str; 12] = [
     "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto",
     "Settembre", "Ottobre", "Novembre", "Dicembre",
@@ -114,6 +116,16 @@ pub fn weekday(now: &DateTime<Local>) -> String {
     match language() {
         Lang::En => now.format("%A").to_string(),
         Lang::It => IT_WEEKDAYS[wd_index(now.weekday())].to_string(),
+    }
+}
+
+/// Abbreviated, uppercase weekday name ("MON" / "LUN") — used in the weather
+/// panel's 7-day forecast strip, where a full name wouldn't fit per column.
+pub fn weekday_short(w: Weekday) -> &'static str {
+    let idx = wd_index(w);
+    match language() {
+        Lang::En => EN_WEEKDAYS_SHORT[idx],
+        Lang::It => IT_WEEKDAYS_SHORT[idx],
     }
 }
 

@@ -2586,6 +2586,32 @@ fn format_uptime(total_secs: u64) -> String {
 mod layout_tests {
     use super::*;
 
+    /// A representative 7-day forecast, varied enough (different weekdays,
+    /// icons, temperature spreads, and one day with no rain-probability data)
+    /// to exercise the "weather" panel's forecast strip in tests/screenshots.
+    fn sample_forecast() -> Vec<weather::DailyForecast> {
+        use chrono::Weekday::*;
+        use weather_icon::WeatherIcon::*;
+        [
+            (Fri, Rain, 19.0, 12.0, Some(70)),
+            (Sat, PartlyCloudy, 22.0, 13.0, Some(20)),
+            (Sun, Clear, 25.0, 15.0, Some(0)),
+            (Mon, Clear, 26.0, 16.0, None),
+            (Tue, Cloudy, 21.0, 14.0, Some(30)),
+            (Wed, Thunder, 18.0, 11.0, Some(80)),
+            (Thu, PartlyCloudy, 20.0, 12.0, Some(10)),
+        ]
+        .into_iter()
+        .map(|(weekday, icon, hi, lo, pop)| weather::DailyForecast {
+            weekday,
+            icon,
+            temp_max_c: hi,
+            temp_min_c: lo,
+            precip_prob: pop,
+        })
+        .collect()
+    }
+
     /// Regression test for the "news panel doesn't scroll" bug: `draw_layout`
     /// must pass the marquee to ANY widget with `scroll: true`, not just
     /// `Music` by name (that hardcoded check silently left `News` static).
@@ -2671,6 +2697,7 @@ mod layout_tests {
                 code: 61,
                 icon: weather_icon::WeatherIcon::Rain,
                 city: Some("Milano".into()),
+                forecast: sample_forecast(),
             }),
             ticker: vec!["First headline".into(), "Second headline, a bit longer".into()],
         };
@@ -2712,6 +2739,7 @@ mod layout_tests {
                 code: 2,
                 icon: weather_icon::WeatherIcon::PartlyCloudy,
                 city: Some("Milano".into()),
+                forecast: sample_forecast(),
             }),
             ticker: vec![
                 "Local team wins championship after dramatic overtime finish".into(),
@@ -2967,6 +2995,7 @@ mod layout_tests {
             code: 2,
             icon: weather_icon::WeatherIcon::PartlyCloudy,
             city: Some("Milano".into()),
+            forecast: sample_forecast(),
         };
         let sys = System::new_all();
         let gpu = gpu_amd::GpuAmdData::default();
