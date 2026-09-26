@@ -410,12 +410,17 @@ The track always scrolls without overlapping items that share its row —
 |---|---|---|---|
 | `net_unit` | `--net-unit` | `kb`, `mb`, `auto` | `kb` |
 | `mem_unit` (or `ram_unit`) | `--mem-unit` | `mb`, `gb` | `mb` |
+| `percent_decimals` | `--percent-decimals` | `0`, `1` | `0` |
 
 `auto` for network shows KB/s below 1 MB/s, then switches to MB/s.
+`percent_decimals` adds one decimal place to every CPU/GPU/RAM usage
+percentage shown anywhere in the program (`37%` → `37.4%`) — capped at 1,
+since a second decimal (`37.42%`) is just noise at this panel's size.
 
 ```ini
 net_unit = auto
 mem_unit = gb
+percent_decimals = 1
 ```
 
 ## Big clock

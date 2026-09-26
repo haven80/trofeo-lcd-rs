@@ -247,7 +247,9 @@ per-item mode (items on the same position stack, and the track scrolls without o
 neighbors). Details inside the CPU/GPU lines can be hidden with
 `hide = cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_power, gpu_fan, gpu_clock, gpu_fps`.
 `clock_time_size` / `clock_date_size` set the big clock's sizes, and `net_unit` (`kb|mb|auto`) /
-`mem_unit` (`mb|gb`) set the network and RAM units.
+`mem_unit` (`mb|gb`) set the network and RAM units. `percent_decimals = 1` adds a decimal place to
+every CPU/GPU/RAM usage percentage shown anywhere (`37%` → `37.4%`); default `0` keeps the original
+whole-number look.
 
 ### Autostart on Windows
 
