@@ -240,7 +240,7 @@ fn build_view(w: Widget, d: &WidgetData, color_mode: ColorMode) -> View {
             if let Some(p) = d.cpu_power { parts.push(format!("{p:.0}W")); }
             View {
                 label: "CPU".into(),
-                value: format!("{:.0}%", d.cpu_pct),
+                value: fmt_pct(d.cpu_pct),
                 detail: if parts.is_empty() { na() } else { parts.join(" ") },
                 gauge: Some((d.cpu_pct / 100.0).clamp(0.0, 1.0)),
                 value_color: None,
@@ -250,7 +250,7 @@ fn build_view(w: Widget, d: &WidgetData, color_mode: ColorMode) -> View {
             }
         }
         CpuTemp => {
-            let mut detail = format!("{:.0}%", d.cpu_pct);
+            let mut detail = fmt_pct(d.cpu_pct);
             if let Some(m) = d.cpu_mhz { detail = format!("{detail} {}", format_freq_mhz(m)); }
             if let Some(p) = d.cpu_power { detail = format!("{detail} {p:.0}W"); }
             temp_view("CPU TEMP", d.cpu_temp, detail, color_mode)
@@ -261,7 +261,7 @@ fn build_view(w: Widget, d: &WidgetData, color_mode: ColorMode) -> View {
             if let Some(p) = d.gpu_power { parts.push(format!("{p}W")); }
             View {
                 label: "GPU".into(),
-                value: d.gpu_pct.map_or_else(|| "--".into(), |p| format!("{p:.0}%")),
+                value: d.gpu_pct.map_or_else(|| "--".into(), fmt_pct),
                 detail: if parts.is_empty() { na() } else { parts.join(" ") },
                 gauge: d.gpu_pct.map(|p| (p / 100.0).clamp(0.0, 1.0)),
                 value_color: None,
@@ -271,7 +271,7 @@ fn build_view(w: Widget, d: &WidgetData, color_mode: ColorMode) -> View {
             }
         }
         GpuTemp => {
-            let mut detail = d.gpu_pct.map_or_else(String::new, |p| format!("{p:.0}%"));
+            let mut detail = d.gpu_pct.map_or_else(String::new, fmt_pct);
             if let Some(p) = d.gpu_power { detail = format!("{detail} {p}W").trim().to_string(); }
             if detail.is_empty() { detail = na(); }
             temp_view("GPU TEMP", d.gpu_temp.map(|t| t as f32), detail, color_mode)
@@ -280,7 +280,7 @@ fn build_view(w: Widget, d: &WidgetData, color_mode: ColorMode) -> View {
             let pct = if d.total_mb > 0 { d.used_mb as f32 * 100.0 / d.total_mb as f32 } else { 0.0 };
             View {
                 label: tr.mem.to_string(),
-                value: format!("{pct:.0}%"),
+                value: fmt_pct(pct),
                 detail: format!("{}/{}MB", d.used_mb, d.total_mb),
                 gauge: Some((pct / 100.0).clamp(0.0, 1.0)),
                 value_color: None,

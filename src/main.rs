@@ -687,6 +687,14 @@ fn fmt_mem(used_mb: u64, total_mb: u64, gb: bool) -> String {
     }
 }
 
+/// Formats a CPU/GPU/RAM usage percentage with the configured number of
+/// decimal places (`percent_decimals`, 0 by default — same "37%" as before
+/// this option existed; 1 gives "37.4%"). Used everywhere a usage
+/// percentage is shown, so all three stay consistent with each other.
+fn fmt_pct(v: f32) -> String {
+    format!("{:.*}%", opts().percent_decimals as usize, v)
+}
+
 const ITEM_NAMES: [&str; 11] =
     ["cpu", "gpu", "uptime", "time", "date", "mem", "net", "disk", "volume", "nowplaying", "weather"];
 
@@ -704,7 +712,7 @@ fn item_key(key: &str) -> Option<(usize, &str)> {
 }
 
 fn is_override_key(key: &str) -> bool {
-    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "clock_backdrop" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width"
+    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "clock_backdrop" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals"
 }
 
 /// Style for a single item of the info block.
@@ -872,6 +880,12 @@ fn parse_ui_options(file: &ConfigFile) -> anyhow::Result<UiOptions> {
             None | Some("c") | Some("celsius") => false,
             Some("f") | Some("fahrenheit") => true,
             Some(v) => anyhow::bail!("weather_unit: '{v}' not valid (c | f)"),
+        },
+        percent_decimals: match file.get_u32("percent_decimals").map_err(|e| anyhow::anyhow!(e))? {
+            None => 0,
+            Some(0) => 0,
+            Some(1) => 1,
+            Some(v) => anyhow::bail!("percent_decimals: must be 0 or 1 (got {v})"),
         },
         clock_backdrop: file.get_bool("clock_backdrop").map_err(|e| anyhow::anyhow!(e))?,
         clock_time_size: parse_size_opt(file, "clock_time_size", 20)?,
@@ -1683,6 +1697,12 @@ struct UiOptions {
     ticker_backdrop: Option<bool>,
     /// Maximum width (% of the canvas) of the ticker line.
     ticker_width: u32,
+    /// Decimal places shown on CPU/GPU/RAM usage percentages (`37%` vs
+    /// `37.4%`). 0 (default) keeps the original whole-number look; 1 adds
+    /// one decimal. Deliberately capped at 1 — the LCD panel is small, and
+    /// a second decimal digit (`37.42%`) reads as noise rather than useful
+    /// precision at this size.
+    percent_decimals: u8,
 }
 
 impl Default for UiOptions {
@@ -1715,6 +1735,7 @@ impl Default for UiOptions {
             ticker_color: None,
             ticker_backdrop: None,
             ticker_width: 100,
+            percent_decimals: 0,
         }
     }
 }
@@ -2013,7 +2034,7 @@ fn draw_game_dashboard(
         },
     };
 
-    let gpu_value = gpu_percent.map_or_else(|| "N/A".to_string(), |p| format!("{p:.0}%"));
+    let gpu_value = gpu_percent.map_or_else(|| "N/A".to_string(), fmt_pct);
     let gpu_detail = {
         let mut parts: Vec<String> = Vec::new();
         if let Some(t) = gpu_data.temp_edge_c { parts.push(format!("{t}C")); }
@@ -2023,7 +2044,7 @@ fn draw_game_dashboard(
     };
 
     let cpu_pct = sys.global_cpu_info().cpu_usage();
-    let cpu_value = format!("{cpu_pct:.0}%");
+    let cpu_value = fmt_pct(cpu_pct);
     // CPU detail: real-time frequency (GHz/MHz) + temperature + power — only
     // show the fields that are available (e.g. if the temperature driver isn't
     // present, just frequency + watts).
@@ -2040,7 +2061,7 @@ fn draw_game_dashboard(
     let used_mb = sys.used_memory() / 1024 / 1024;
     let total_mb = sys.total_memory() / 1024 / 1024;
     let ram_pct = if total_mb > 0 { (used_mb as f32 / total_mb as f32) * 100.0 } else { 0.0 };
-    let ram_value = format!("{ram_pct:.0}%");
+    let ram_value = fmt_pct(ram_pct);
     let ram_detail = format!("{used_mb}/{total_mb}MB");
 
     let panels = [
@@ -2236,7 +2257,8 @@ fn draw_status_lines(
     let time_str = now.format("%H:%M:%S").to_string();
     let date_str = now.format("%Y-%m-%d").to_string();
 
-    let gpu_str = gpu_percent.map_or_else(|| "N/A".to_string(), |p| format!("{p:.0}%"));
+    let gpu_str = gpu_percent.map_or_else(|| "N/A".to_string(), fmt_pct);
+    let cpu_str = fmt_pct(cpu);
     // GPU sensors (ADL PMLog): only the supported fields. "C" and not "°C": ASCII font.
     let gpu_hw = {
         let mut parts: Vec<String> = Vec::new();
@@ -2291,7 +2313,7 @@ fn draw_status_lines(
     if style == StatusStyle::Items {
         draw_status_items(
             fb, &o, &[
-                format!("CPU {cpu:.0}%{}{}{}", if cpu_freq.is_empty() { "" } else { " " }, cpu_freq,
+                format!("CPU {cpu_str}{}{}{}", if cpu_freq.is_empty() { "" } else { " " }, cpu_freq,
                     if cpu_hw.is_empty() { String::new() } else { format!(" {cpu_hw}") }),
                 format!("GPU {gpu_str}{}", if gpu_hw.is_empty() { String::new() } else { format!(" {gpu_hw}") }),
                 format!("{} {uptime_str}", tr.uptime),
@@ -2319,7 +2341,7 @@ fn draw_status_lines(
         StatusStyle::Lines | StatusStyle::Auto => {
             let gpu_full = if gpu_hw.is_empty() { gpu_str.clone() } else { format!("{gpu_str} {gpu_hw}") };
             let l1: Vec<String> = [
-                (sh.cpu, format!("CPU {cpu:.0}% {cpu_freq} {cpu_hw}")),
+                (sh.cpu, format!("CPU {cpu_str} {cpu_freq} {cpu_hw}")),
                 (sh.gpu, format!("GPU {gpu_full}")),
                 (sh.uptime, format!("{} {uptime_str}", tr.uptime)),
                 (sh.time, time_str.clone()),
@@ -2369,7 +2391,7 @@ fn draw_status_lines(
                 rows.push(format!("{} {uptime_str}", tr.uptime));
             }
             if sh.cpu {
-                rows.push(format!("CPU {cpu:.0}% {cpu_freq}"));
+                rows.push(format!("CPU {cpu_str} {cpu_freq}"));
                 rows.push(format!("    {cpu_hw}"));
             }
             if sh.gpu {
@@ -2833,6 +2855,36 @@ mod layout_tests {
         assert!(o.layouts.is_empty());
         let o = parse_ui_options(&ConfigFile::parse(&format!("{txt}layout = default, default2\n")).unwrap()).unwrap();
         assert_eq!(o.layouts.len(), 2);
+    }
+
+    /// `percent_decimals` (CPU/GPU/RAM usage percentages): 0 is the default
+    /// (unchanged "37%" look), 1 adds a decimal ("37.4%"), anything else is
+    /// rejected rather than silently clamped.
+    #[test]
+    fn percent_decimals_parses_and_validates() {
+        let o = parse_ui_options(&ConfigFile::parse("").unwrap()).unwrap();
+        assert_eq!(o.percent_decimals, 0);
+        let o = parse_ui_options(&ConfigFile::parse("percent_decimals = 0\n").unwrap()).unwrap();
+        assert_eq!(o.percent_decimals, 0);
+        let o = parse_ui_options(&ConfigFile::parse("percent_decimals = 1\n").unwrap()).unwrap();
+        assert_eq!(o.percent_decimals, 1);
+        assert!(parse_ui_options(&ConfigFile::parse("percent_decimals = 2\n").unwrap()).is_err());
+        assert!(parse_ui_options(&ConfigFile::parse("percent_decimals = -1\n").unwrap()).is_err());
+    }
+
+    /// `fmt_pct` is what every CPU/GPU/RAM usage display goes through: it must
+    /// round (not truncate) and respect `percent_decimals` from `opts()`.
+    #[test]
+    fn fmt_pct_respects_percent_decimals() {
+        TEST_OPTS.with(|t| *t.borrow_mut() = Some(UiOptions { percent_decimals: 0, ..UiOptions::default() }));
+        assert_eq!(fmt_pct(37.4), "37%");
+        assert_eq!(fmt_pct(37.6), "38%");
+
+        TEST_OPTS.with(|t| *t.borrow_mut() = Some(UiOptions { percent_decimals: 1, ..UiOptions::default() }));
+        assert_eq!(fmt_pct(37.44), "37.4%");
+        assert_eq!(fmt_pct(37.46), "37.5%");
+
+        TEST_OPTS.with(|t| *t.borrow_mut() = None);
     }
 
     /// Per-layout rotation duration (`layout = a:30, b:5`): each entry can carry
