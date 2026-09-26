@@ -37,8 +37,8 @@ system status (CPU/GPU/RAM/temp) stays readable while playing.
 - Can also drive a **DeepCool** display (sends CPU data over HID).
 - **Second monitor mode** (`trofeo_screen`): the LCD becomes a real second
   monitor.
-- Current **weather** (temperature + a stylized condition icon), auto-detected
-  from your IP or a city you set.
+- Current **weather** (temperature + a stylized condition icon) and a
+  **7-day forecast strip**, auto-detected from your IP or a city you set.
 - **News ticker**: RSS/Atom feeds, any plain-text URL, or a local file — as a
   scrolling line on top of any screen, and/or its own full panel.
 - Sync EQ bar color with an **OpenRGB** device.
@@ -172,6 +172,14 @@ the standard screen). If the network is unreachable or the location
 can't be resolved yet, the item just shows "N/A" until the first fetch
 succeeds; nothing else in the program is affected. `--diag` also prints the
 resolved location and a sample reading.
+
+The `weather` panel also shows a **7-day forecast strip** below the current
+conditions: one column per day, with the abbreviated day name, a small
+condition icon, the high/low temperature and (when the model provides it) the
+rain probability. It's automatic — no extra config — and comes from the same
+Open-Meteo request as the current conditions. In portrait mode the columns
+shrink to fit the narrower panel, same idea as everything else that adapts to
+orientation.
 
 ### Ticker (news headlines, or any custom feed)
 

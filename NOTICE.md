@@ -21,7 +21,8 @@ Starting from the `sukualam/trofeo-lcd` codebase, this fork has:
 - Added a **weather module**: current temperature + a stylized pixel-art
   condition icon, via Open-Meteo, with automatic IP-based geolocation and an
   optional fixed-city override (`weather_city`), shown as a per-item line
-  and/or as its own full-panel layout (`layout = weather`).
+  and/or as its own full-panel layout (`layout = weather`) — which also
+  includes a **7-day forecast strip** (day, icon, high/low, rain probability).
 - Added **per-item styling**: every status item (CPU, GPU, RAM, clock,
   weather, ...) can be given its own size, position, color and backdrop
   independently (`<item>_size`, `<item>_position`, `<item>_color`,

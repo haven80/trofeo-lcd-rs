@@ -283,6 +283,14 @@ regardless of `show`/`hide` (same as every other panel layout). While the
 network is unreachable or before the first successful fetch, it just shows
 "N/A" instead of blocking anything else.
 
+The `weather` panel additionally shows a **7-day forecast strip** below the
+current conditions — one column per day with the abbreviated day name, a
+small condition icon, the high/low temperature (in whatever `weather_unit`
+picks) and, when the model provides it, the rain probability. It comes from
+the same request as the current conditions, so there's nothing extra to
+configure; a day is simply omitted if Open-Meteo doesn't have data for it. In
+portrait mode the columns automatically shrink to fit the narrower panel.
+
 ```ini
 weather_city = Milano
 weather_unit = f
