@@ -84,13 +84,22 @@ margin_top = 30       # push everything down 30px (e.g. to clear a bezel)
 
 | Key | CLI | Values | Default |
 |---|---|---|---|
-| `language` | `--language` | `en`, `it` | `en` |
+| `language` | `--language` | `en`, `it`, `de`, `es`, `fr`, `pt` | `en` |
 
 Only the on-screen text (weekday/month names, labels like "NOW PLAYING",
 weather conditions) follows this. Console/log output is always in English.
+The weather city-search (geocoding) also prefers place names in the chosen
+language. Since the bitmap font has no accented letters, each translation is
+written accent-free: German spells out umlauts (`AE`/`OE`/`UE`) and `ß` as
+`SS`; Italian, Spanish, French and Portuguese simply drop the accent (Italian
+keeps its existing apostrophe-for-accent day names, e.g. `Lunedi'`).
 
 ```ini
 language = it
+# language = de   # German
+# language = es   # Spanish
+# language = fr   # French
+# language = pt   # Portuguese
 ```
 
 ## Background

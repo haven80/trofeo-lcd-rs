@@ -1,5 +1,5 @@
 # trofeo_lcd
-![Overview](img/overview.png)
+
 **A lightweight, open-source alternative to the official Thermalright TRCC
 software.** Audio visualizer + system info monitor for the
 **Thermalright Trofeo Vision 9.16 LCD** (USB `0416:5408`, "LY" protocol).
@@ -122,7 +122,12 @@ Also settable in `trofeo.conf` (see `trofeo.conf.example`) or via CLI:
 
 - `--margin <PX>` (or `--margin-top/-bottom/-left/-right`): keep the UI away
   from the screen edges. Works in `trofeo_screen` too.
-- `--language it` (default `en`): Italian UI text and date names.
+- `--language <en|it|de|es|fr|pt>` (default `en`): UI text and date names in
+  English, Italian, German, Spanish, French, or Portuguese. Accented letters
+  are written in ASCII-safe form since the bitmap font has no accent glyphs
+  (e.g. German spells out umlauts as `AE`/`OE`/`UE` and `ß` as `SS`; Italian,
+  Spanish, French and Portuguese drop the accent, with Italian keeping its
+  usual apostrophe-for-accent spelling on day names like `Lunedi'`).
 - `--background <FILE>`: JPEG/PNG/BMP image, animated GIF, or video. Video
   needs **ffmpeg** (`ffmpeg.exe` next to the program, in `PATH`, or `--ffmpeg <PATH>`).
   `--background-dim <0-100>` darkens it (default 40). With an animated

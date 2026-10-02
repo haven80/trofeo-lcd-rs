@@ -16,8 +16,9 @@ restriction beyond the GPL itself.
 Starting from the `sukualam/trofeo-lcd` codebase, this fork has:
 
 - Translated the entire source tree, comments and user-facing strings from
-  Indonesian to English (the UI itself is still selectable between English
-  and Italian via `language = en | it`).
+  Indonesian to English (the UI itself is separately selectable between
+  English, Italian, German, Spanish, French and Portuguese via
+  `language = en | it | de | es | fr | pt`).
 - Added a **weather module**: current temperature + a stylized pixel-art
   condition icon, via Open-Meteo, with automatic IP-based geolocation and an
   optional fixed-city override (`weather_city`), shown as a per-item line
