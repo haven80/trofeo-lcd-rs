@@ -151,6 +151,10 @@ fn geocode_city(city: &str) -> Result<Location, String> {
     let lang = match crate::i18n::language() {
         crate::i18n::Lang::It => "it",
         crate::i18n::Lang::En => "en",
+        crate::i18n::Lang::De => "de",
+        crate::i18n::Lang::Es => "es",
+        crate::i18n::Lang::Fr => "fr",
+        crate::i18n::Lang::Pt => "pt",
     };
     let url = format!(
         "https://geocoding-api.open-meteo.com/v1/search?name={}&count=8&language={lang}&format=json",

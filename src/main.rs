@@ -265,7 +265,7 @@ fn print_help() {
          \x20\x20--flip                   Extra 180° rotation (if the display comes out upside down)\n\
          \x20\x20--margin <PX>            Keep the interface away from the edges (all sides);\n\
          \x20\x20--margin-top/-bottom/-left/-right <PX>  margin for a single side\n\
-         \x20\x20--language <en|it>       Interface language (default: en)\n\
+         \x20\x20--language <en|it|de|es|fr|pt>  Interface language (default: en)\n\
          \x20\x20--background <FILE>      Background: jpg/png/bmp, animated gif, or video\n\
          \x20\x20                          (videos require ffmpeg)\n\
          \x20\x20--background-dim <0-100> Darkens the background (default: 40)\n\
@@ -451,9 +451,9 @@ fn parse_args() -> anyhow::Result<Config> {
             "--language" => {
                 let raw = args
                     .next()
-                    .ok_or_else(|| anyhow::anyhow!("--language requires 'en' or 'it'"))?;
+                    .ok_or_else(|| anyhow::anyhow!("--language requires one of: {}", Lang::NAMES))?;
                 language_cli = Some(Lang::parse(&raw).ok_or_else(|| {
-                    anyhow::anyhow!("--language: '{raw}' not valid (en | it)")
+                    anyhow::anyhow!("--language: '{raw}' not valid ({})", Lang::NAMES)
                 })?);
             }
             "--background" => {
@@ -596,7 +596,7 @@ fn parse_args() -> anyhow::Result<Config> {
         None => match file.get("language") {
             None => Lang::default(),
             Some(v) => Lang::parse(v)
-                .ok_or_else(|| anyhow::anyhow!("language: '{v}' not valid (en | it)"))?,
+                .ok_or_else(|| anyhow::anyhow!("language: '{v}' not valid ({})", Lang::NAMES))?,
         },
     };
     let background = background_cli.or_else(|| file.get("background").map(Into::into));
