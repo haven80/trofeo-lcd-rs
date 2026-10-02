@@ -1,5 +1,5 @@
 # trofeo_lcd
-(img/overview.png)
+![Overview](img/overview.png)
 **A lightweight, open-source alternative to the official Thermalright TRCC
 software.** Audio visualizer + system info monitor for the
 **Thermalright Trofeo Vision 9.16 LCD** (USB `0416:5408`, "LY" protocol).
