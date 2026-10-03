@@ -29,6 +29,7 @@ mod media;
 mod netdisk;
 mod openrgb_sync;
 mod pawnio;
+mod spectrum;
 mod ticker;
 mod weather;
 mod weather_icon;
@@ -305,6 +306,12 @@ fn print_help() {
          \x20\x20                          Several separated by commas rotate; each can set its own\n\
          \x20\x20                          duration with 'name:seconds' (e.g. 'default:30,weather:5')\n\
          \x20\x20--layout-spectrum <true|false>  With a layout, still show the spectrum when music is playing\n\
+         \x20\x20--layout-hold-on-music <true|false>  While music plays, stay on the first layout (no rotation)\n\
+         \x20\x20--spectrum-style <S>     bars | led | peaks | area | mirror | all (several, comma-separated, rotate)\n\
+         \x20\x20--spectrum-palette <P>   default | rainbow | fire | ocean | sunset | neon | ice | matrix | purple | custom | all\n\
+         \x20\x20--spectrum-gradient <C>  Custom palette: 2+ colors, e.g. #FF0080,#00FFFF\n\
+         \x20\x20--spectrum-style-interval / --spectrum-palette-interval <SEC>  Rotation period (default 30 / 20)\n\
+         \x20\x20--spectrum-rainbow-speed <DEG/S>  Hue scroll of the rainbow palette (default 30, 0 = static)\n\
          \x20\x20--config <FILE>          Config file (default: trofeo.conf in the program's\n\
          \x20\x20                          folder or the working folder)\n\
          \x20\x20--hide-console            Hide the terminal window as soon as the program\n\
@@ -658,7 +665,9 @@ const OVERRIDE_KEYS: &[&str] = &[
     "spectrum_position", "spectrum_width", "spectrum_height", "status_style",
     "background_fit", "background_position", "background_offset_x", "background_offset_y",
     "brightness", "deepcool", "fps_monitor", "layout", "layout_spectrum",
-    "layout_interval", "panel_opacity", "text_backdrop",
+    "layout_hold_on_music", "layout_interval", "panel_opacity", "text_backdrop",
+    "spectrum_style", "spectrum_style_interval", "spectrum_palette",
+    "spectrum_palette_interval", "spectrum_gradient", "spectrum_rainbow_speed",
 ];
 
 /// Network (`net_unit`) and RAM (`mem_unit`) units.
@@ -764,6 +773,26 @@ fn parse_color_opt(file: &ConfigFile, key: &str) -> anyhow::Result<Option<(u8, u
             ColorMode::Custom(r, g, b) => Ok(Some((r, g, b))),
         },
     }
+}
+
+/// Which entry of `layout = a:30, b:5` is on screen `elapsed_secs` after the
+/// rotation started: walks the cumulative durations modulo the cycle length.
+/// With `hold_first` (music playing + `layout_hold_on_music`) it is always the
+/// first entry.
+fn rotation_index(layouts: &[(&'static layouts::LayoutDef, u32)], elapsed_secs: u64, hold_first: bool) -> usize {
+    if hold_first || layouts.is_empty() {
+        return 0;
+    }
+    let total: u64 = layouts.iter().map(|(_, secs)| *secs as u64).sum::<u64>().max(1);
+    let t = elapsed_secs % total;
+    let mut acc = 0u64;
+    for (i, (_, secs)) in layouts.iter().enumerate() {
+        acc += *secs as u64;
+        if t < acc {
+            return i;
+        }
+    }
+    layouts.len() - 1
 }
 
 fn parse_ui_options(file: &ConfigFile) -> anyhow::Result<UiOptions> {
@@ -908,7 +937,104 @@ fn parse_ui_options(file: &ConfigFile) -> anyhow::Result<UiOptions> {
         ticker_color: parse_color_opt(file, "ticker_color")?,
         ticker_backdrop: file.get_bool("ticker_backdrop").map_err(|e| anyhow::anyhow!(e))?,
         ticker_width: parse_percent(file, "ticker_width")?,
+        layout_hold_on_music: file.get_bool("layout_hold_on_music").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(false),
+        spectrum_styles: parse_spectrum_styles(file)?,
+        spectrum_style_interval: parse_interval(file, "spectrum_style_interval", 30)?,
+        spectrum_palettes: parse_spectrum_palettes(file)?,
+        spectrum_palette_interval: parse_interval(file, "spectrum_palette_interval", 20)?,
+        spectrum_rainbow_speed: match file.get_u32("spectrum_rainbow_speed").map_err(|e| anyhow::anyhow!(e))? {
+            None => 30,
+            Some(v) if v <= 360 => v,
+            Some(v) => anyhow::bail!("spectrum_rainbow_speed: must be between 0 and 360 (got {v})"),
+        },
     })
+}
+
+/// A rotation interval in seconds (2-3600), same bounds as `layout_interval`.
+fn parse_interval(file: &ConfigFile, key: &str, default: u32) -> anyhow::Result<u32> {
+    let v = file.get_u32(key).map_err(|e| anyhow::anyhow!(e))?.unwrap_or(default);
+    if !(2..=3600).contains(&v) {
+        anyhow::bail!("{key}: must be between 2 and 3600 seconds");
+    }
+    Ok(v)
+}
+
+/// `spectrum_style = led` / `led, area` / `all` (alias `rotate`): one entry is
+/// fixed, several rotate. Unset or `bars` = the classic look (empty list).
+fn parse_spectrum_styles(file: &ConfigFile) -> anyhow::Result<Vec<spectrum::Style>> {
+    let Some(list) = file.get("spectrum_style") else { return Ok(Vec::new()) };
+    let mut out = Vec::new();
+    for raw in list.split(',') {
+        let name = raw.trim();
+        if name.is_empty() {
+            continue;
+        }
+        if name.eq_ignore_ascii_case("all") || name.eq_ignore_ascii_case("rotate") {
+            out.extend(spectrum::Style::ALL);
+            continue;
+        }
+        let st = spectrum::Style::parse(name).ok_or_else(|| {
+            anyhow::anyhow!("spectrum_style: '{name}' not valid ({} | all)", spectrum::Style::NAMES)
+        })?;
+        out.push(st);
+    }
+    out.dedup();
+    if out == [spectrum::Style::Bars] {
+        out.clear();
+    }
+    Ok(out)
+}
+
+/// `spectrum_palette = fire` / `fire, ocean` / `all` (alias `rotate`), plus an
+/// optional `spectrum_gradient = #FF0080, #00FFFF` defining the `custom`
+/// palette (and selecting it on its own when `spectrum_palette` is unset).
+fn parse_spectrum_palettes(file: &ConfigFile) -> anyhow::Result<Vec<spectrum::Palette>> {
+    let custom = match file.get("spectrum_gradient") {
+        None => None,
+        Some(list) => {
+            let mut stops = Vec::new();
+            for raw in list.split(',') {
+                let raw = raw.trim();
+                if raw.is_empty() {
+                    continue;
+                }
+                match parse_color(raw).map_err(|e| anyhow::anyhow!("spectrum_gradient: {e}"))? {
+                    ColorMode::Custom(r, g, b) => stops.push((r, g, b)),
+                    ColorMode::Default => anyhow::bail!("spectrum_gradient: 'default' is not a color"),
+                }
+            }
+            if stops.len() < 2 {
+                anyhow::bail!("spectrum_gradient: needs at least 2 colors, e.g. #FF0080, #00FFFF");
+            }
+            Some(stops)
+        }
+    };
+    let Some(list) = file.get("spectrum_palette") else {
+        return Ok(custom.map(|c| vec![spectrum::Palette::Custom(c)]).unwrap_or_default());
+    };
+    let mut out = Vec::new();
+    for raw in list.split(',') {
+        let name = raw.trim();
+        if name.is_empty() {
+            continue;
+        }
+        if name.eq_ignore_ascii_case("all") || name.eq_ignore_ascii_case("rotate") {
+            out.extend(spectrum::Palette::presets());
+            continue;
+        }
+        if name.eq_ignore_ascii_case("custom") {
+            let c = custom.clone().ok_or_else(|| {
+                anyhow::anyhow!("spectrum_palette: 'custom' needs spectrum_gradient = #RRGGBB, #RRGGBB")
+            })?;
+            out.push(spectrum::Palette::Custom(c));
+            continue;
+        }
+        out.push(spectrum::Palette::parse(name).ok_or_else(|| {
+            anyhow::anyhow!("spectrum_palette: '{name}' not valid ({} | custom | all)", spectrum::Palette::NAMES)
+        })?);
+    }
+    out.dedup();
+    Ok(out)
 }
 
 fn parse_bg_layout(file: &ConfigFile) -> anyhow::Result<BgLayout> {
@@ -1247,6 +1373,8 @@ fn main() -> anyhow::Result<()> {
     let bar_bins = precompute_bar_bins(FFT_SIZE);
 
     let mut bar_heights = vec![0f32; NUM_BARS];
+    let mut peak_tracker = spectrum::PeakTracker::new(NUM_BARS);
+    let mut last_peak_update = Instant::now();
     let mut running_max: f32 = 1e-6;
 
     // The framebuffer is allocated ONCE outside the loop and then reused every
@@ -1335,20 +1463,13 @@ fn main() -> anyhow::Result<()> {
         // Active layout (rotation): computed first since it changes `show`.
         let mut active_def: Option<&'static layouts::LayoutDef> = None;
         if !ui_layouts.is_empty() {
-            // Each layout can carry its own seconds (`layout = default:30, weather:5`):
-            // walk the cumulative durations to find which entry the elapsed time
-            // (modulo the total cycle length) currently falls into.
-            let total: u64 = ui_layouts.iter().map(|(_, secs)| *secs as u64).sum::<u64>().max(1);
-            let t = layouts_started.elapsed().as_secs() % total;
-            let mut acc = 0u64;
-            let mut idx = ui_layouts.len() - 1;
-            for (i, (_, secs)) in ui_layouts.iter().enumerate() {
-                acc += *secs as u64;
-                if t < acc {
-                    idx = i;
-                    break;
-                }
+            // Optional: while music plays, stay on the first layout (and restart the
+            // rotation from it once the music stops).
+            let hold = opts().layout_hold_on_music && last_sound.elapsed() < config.silence_timeout;
+            if hold {
+                layouts_started = Instant::now();
             }
+            let idx = rotation_index(&ui_layouts, layouts_started.elapsed().as_secs(), hold);
             if idx != layout_index {
                 layout_index = idx;
                 layout_marquee = Marquee::new();
@@ -1378,6 +1499,9 @@ fn main() -> anyhow::Result<()> {
                 *h = *h * 0.75 + target * 0.25; // decay lebih pelan
             }
         }
+        let peak_now = Instant::now();
+        peak_tracker.update(&bar_heights, (peak_now - last_peak_update).as_secs_f32().min(0.25));
+        last_peak_update = peak_now;
 
         // 2) Refresh system info only as often as needed (not every frame).
         // Note: `System::uptime()` does NOT follow this rule — it's a
@@ -1516,7 +1640,7 @@ fn main() -> anyhow::Result<()> {
                 draw_idle_clock(target, color_mode);
             }
         } else {
-            draw_bars(target, &bar_heights, color_mode);
+            draw_bars(target, &bar_heights, peak_tracker.peaks(), color_mode);
         }
         draw_status_lines(
             target,
@@ -1703,6 +1827,21 @@ struct UiOptions {
     /// a second decimal digit (`37.42%`) reads as noise rather than useful
     /// precision at this size.
     percent_decimals: u8,
+    /// While music is playing, freeze the layout rotation on the FIRST layout
+    /// of the list (the one that normally carries the spectrum) instead of
+    /// letting the rotation walk through panels the spectrum would cover.
+    /// Rotation restarts from the first layout once the music stops.
+    layout_hold_on_music: bool,
+    /// Spectrum drawing styles (empty = classic filled bars). More than one
+    /// entry rotates every `spectrum_style_interval` seconds.
+    spectrum_styles: Vec<spectrum::Style>,
+    spectrum_style_interval: u32,
+    /// Spectrum color presets (empty = the legacy `color` behaviour). More
+    /// than one entry rotates (cross-faded) every `spectrum_palette_interval` s.
+    spectrum_palettes: Vec<spectrum::Palette>,
+    spectrum_palette_interval: u32,
+    /// Hue scroll speed of the `rainbow` palette, degrees per second (0 = static).
+    spectrum_rainbow_speed: u32,
 }
 
 impl Default for UiOptions {
@@ -1736,6 +1875,12 @@ impl Default for UiOptions {
             ticker_backdrop: None,
             ticker_width: 100,
             percent_decimals: 0,
+            layout_hold_on_music: false,
+            spectrum_styles: Vec::new(),
+            spectrum_style_interval: 30,
+            spectrum_palettes: Vec::new(),
+            spectrum_palette_interval: 20,
+            spectrum_rainbow_speed: 30,
         }
     }
 }
@@ -1902,27 +2047,27 @@ fn fit_scale(text: &str, max_scale: u32, max_width: u32) -> u32 {
     scale
 }
 
-fn draw_bars(fb: &mut Framebuffer, heights: &[f32], color_mode: ColorMode) {
+fn draw_bars(fb: &mut Framebuffer, heights: &[f32], peaks: &[f32], color_mode: ColorMode) {
     let o = opts();
     let rect = content_rect(fb);
     let sw = rect.2 * o.spectrum_w.clamp(1, 100) / 100;
     let sh = rect.3 * o.spectrum_h.clamp(1, 100) / 100;
     let (area_left, area_top) = o.spectrum_pos.place(rect, (sw, sh), (0, 0));
-    let area_height = sh;
+    let area = (area_left, area_top, sw, sh);
 
-    let gap = 3u32;
-    let total_gap = gap * (heights.len() as u32 + 1);
-    let bar_width = (sw.saturating_sub(total_gap)) / heights.len() as u32;
-
-    let mut x = area_left + gap;
-    for &h in heights {
-        let bar_h = (area_height as f32 * h).round() as u32;
-        let y = area_top + (area_height - bar_h);
-
-        let (r, g, b) = level_color(h, color_mode);
-        fb.fill_rect(x, y, bar_width, bar_h, r, g, b);
-
-        x += bar_width + gap;
+    let time = spectrum::now_secs();
+    let style = spectrum::pick_style(&o.spectrum_styles, o.spectrum_style_interval, time);
+    if o.spectrum_palettes.is_empty() {
+        // No palette configured: the legacy `color` behaviour (default gradient / one color).
+        spectrum::draw(fb, style, area, heights, peaks, &|level, _pos| level_color(level, color_mode));
+    } else {
+        let colors = spectrum::Colors {
+            palettes: &o.spectrum_palettes,
+            interval: o.spectrum_palette_interval as f32,
+            rainbow_speed: o.spectrum_rainbow_speed as f32,
+            time,
+        };
+        spectrum::draw(fb, style, area, heights, peaks, &|level, pos| colors.at(level, pos));
     }
 }
 
@@ -1934,19 +2079,7 @@ fn draw_bars(fb: &mut Framebuffer, heights: &[f32], color_mode: ColorMode) {
 fn level_color(level: f32, color_mode: ColorMode) -> (u8, u8, u8) {
     let level = level.clamp(0.0, 1.0);
     match color_mode {
-        ColorMode::Default => {
-            if level < 0.6 {
-                let t = level / 0.6;
-                (
-                    (0x20 as f32 + t * (0xE0 - 0x20) as f32) as u8,
-                    0xE0,
-                    0x30,
-                )
-            } else {
-                let t = (level - 0.6) / 0.4;
-                (0xE0, (0xE0 as f32 * (1.0 - t)) as u8, 0x30)
-            }
-        }
+        ColorMode::Default => spectrum::classic(level),
         ColorMode::Custom(r, g, b) => {
             const MIN_BRIGHTNESS: f32 = 0.25;
             let factor = MIN_BRIGHTNESS + (1.0 - MIN_BRIGHTNESS) * level;
@@ -2687,7 +2820,7 @@ mod layout_tests {
             let bars = vec![0.6f32; NUM_BARS];
             let mut fb2 = Framebuffer::new(o.canvas());
             fb2.clear(0x08, 0x08, 0x10);
-            draw_bars(&mut fb2, &bars, ColorMode::Default);
+            draw_bars(&mut fb2, &bars, &bars, ColorMode::Default);
             let mut fb3 = Framebuffer::new(o.canvas());
             fb3.clear(0x08, 0x08, 0x10);
             draw_idle_clock(&mut fb3, ColorMode::Default);
@@ -2917,22 +3050,11 @@ mod layout_tests {
     /// The main loop picks the active entry by walking cumulative durations,
     /// so a 30s layout stays on screen for 30s straight and a 5s one for 5s —
     /// not alternating every 5s (see the doc comment above the real loop code).
-    /// This mirrors that selection logic against `layout = default:30, weather:5`.
+    /// Checks `rotation_index` against `layout = default:30, weather:5`.
     #[test]
     fn layout_rotation_respects_per_entry_seconds() {
         let o = parse_ui_options(&ConfigFile::parse("layout = default:30, weather:5\n").unwrap()).unwrap();
-        let pick = |elapsed_secs: u64| -> &'static str {
-            let total: u64 = o.layouts.iter().map(|(_, s)| *s as u64).sum::<u64>().max(1);
-            let t = elapsed_secs % total;
-            let mut acc = 0u64;
-            for (def, secs) in &o.layouts {
-                acc += *secs as u64;
-                if t < acc {
-                    return def.name;
-                }
-            }
-            o.layouts.last().unwrap().0.name
-        };
+        let pick = |elapsed_secs: u64| -> &'static str { o.layouts[rotation_index(&o.layouts, elapsed_secs, false)].0.name };
         // First 30s: "default". Next 5s (30..35): "weather". Then the 35s cycle repeats.
         for t in [0, 1, 15, 29] {
             assert_eq!(pick(t), "default", "t={t}");
@@ -2942,6 +3064,64 @@ mod layout_tests {
         }
         assert_eq!(pick(35), "default"); // cycle wraps back
         assert_eq!(pick(35 + 30), "weather");
+    }
+
+    /// `layout_hold_on_music`: while music plays the rotation is pinned to the
+    /// first layout, whatever the elapsed time.
+    #[test]
+    fn rotation_is_pinned_to_the_first_layout_while_holding() {
+        let o = parse_ui_options(&ConfigFile::parse("layout = default:30, weather:5, cpu:5\n").unwrap()).unwrap();
+        for t in [0u64, 31, 36, 39, 40, 1000] {
+            assert_eq!(rotation_index(&o.layouts, t, true), 0, "t={t}");
+        }
+        // Not holding: the normal rotation, unchanged.
+        assert_eq!(rotation_index(&o.layouts, 31, false), 1);
+        assert_eq!(rotation_index(&o.layouts, 36, false), 2);
+        assert_eq!(rotation_index(&[], 5, false), 0);
+    }
+
+    #[test]
+    fn layout_hold_on_music_option_parses() {
+        let off = parse_ui_options(&ConfigFile::parse("layout = default, weather\n").unwrap()).unwrap();
+        assert!(!off.layout_hold_on_music);
+        let on = parse_ui_options(&ConfigFile::parse("layout = default, weather\nlayout_hold_on_music = true\n").unwrap()).unwrap();
+        assert!(on.layout_hold_on_music);
+        assert!(parse_ui_options(&ConfigFile::parse("layout_hold_on_music = maybe\n").unwrap()).is_err());
+    }
+
+    #[test]
+    fn spectrum_options_parse() {
+        let parse = |t: &str| parse_ui_options(&ConfigFile::parse(t).unwrap());
+        // Defaults: classic look, nothing configured.
+        let d = parse("").unwrap();
+        assert!(d.spectrum_styles.is_empty() && d.spectrum_palettes.is_empty());
+        assert_eq!((d.spectrum_style_interval, d.spectrum_palette_interval, d.spectrum_rainbow_speed), (30, 20, 30));
+        // Styles: single, list, all/rotate, bars alone = classic.
+        assert_eq!(parse("spectrum_style = led\n").unwrap().spectrum_styles, vec![spectrum::Style::Led]);
+        assert_eq!(parse("spectrum_style = led, area\n").unwrap().spectrum_styles, vec![spectrum::Style::Led, spectrum::Style::Area]);
+        assert_eq!(parse("spectrum_style = all\n").unwrap().spectrum_styles.len(), 5);
+        assert_eq!(parse("spectrum_style = rotate\n").unwrap().spectrum_styles.len(), 5);
+        assert!(parse("spectrum_style = bars\n").unwrap().spectrum_styles.is_empty());
+        assert!(parse("spectrum_style = disco\n").is_err());
+        // Palettes.
+        assert_eq!(parse("spectrum_palette = fire\n").unwrap().spectrum_palettes, vec![spectrum::Palette::Fire]);
+        assert_eq!(parse("spectrum_palette = fire, ocean\n").unwrap().spectrum_palettes.len(), 2);
+        assert_eq!(parse("spectrum_palette = all\n").unwrap().spectrum_palettes.len(), 8);
+        assert_eq!(parse("spectrum_palette = default\n").unwrap().spectrum_palettes, vec![spectrum::Palette::Default]);
+        assert!(parse("spectrum_palette = lava\n").is_err());
+        // Custom gradient: alone it selects itself; `custom` needs it.
+        let g = parse("spectrum_gradient = #FF0080, #00FFFF\n").unwrap();
+        assert_eq!(g.spectrum_palettes, vec![spectrum::Palette::Custom(vec![(255, 0, 128), (0, 255, 255)])]);
+        let mix = parse("spectrum_palette = fire, custom\nspectrum_gradient = red, blue\n").unwrap();
+        assert_eq!(mix.spectrum_palettes.len(), 2);
+        assert!(parse("spectrum_palette = custom\n").is_err());
+        assert!(parse("spectrum_gradient = #FF0080\n").is_err()); // needs 2+
+        assert!(parse("spectrum_gradient = #FF0080, nonsense\n").is_err());
+        // Intervals and rainbow speed are range-checked.
+        assert_eq!(parse("spectrum_style_interval = 5\nspectrum_palette_interval = 60\nspectrum_rainbow_speed = 0\n").unwrap().spectrum_style_interval, 5);
+        assert!(parse("spectrum_style_interval = 1\n").is_err());
+        assert!(parse("spectrum_palette_interval = 9999\n").is_err());
+        assert!(parse("spectrum_rainbow_speed = 361\n").is_err());
     }
 
     #[test]
@@ -3058,7 +3238,7 @@ mod layout_tests {
             if idle {
                 draw_idle_clock(&mut fb, ColorMode::Default);
             } else {
-                draw_bars(&mut fb, &vec![0.7f32; NUM_BARS], ColorMode::Default);
+                draw_bars(&mut fb, &vec![0.7f32; NUM_BARS], &vec![0.7f32; NUM_BARS], ColorMode::Default);
             }
             let mut marquee = Marquee::new();
             draw_status_lines(
@@ -3090,7 +3270,7 @@ mod layout_tests {
         let sys = System::new_all();
         let gpu = gpu_amd::GpuAmdData::default();
         let mut marquee = Marquee::new();
-        draw_bars(&mut ui, &vec![0.5f32; NUM_BARS], ColorMode::Default);
+        draw_bars(&mut ui, &vec![0.5f32; NUM_BARS], &vec![0.5f32; NUM_BARS], ColorMode::Default);
         draw_status_lines(
             &mut ui, &sys, Some(87.0), &gpu, (123.0, 45.0), (1.5, 0.2), Some((40.0, false)),
             Some(61.0), Some(88.0), Some(4900), Some("Perche' e' cosi' - Caffe"), None, &mut marquee,

@@ -28,8 +28,30 @@ pub struct ConfigFile {
     pub path: Option<PathBuf>,
 }
 
+/// Strip an end-of-line `# comment` from a value, but keep `#RRGGBB` colors:
+/// a `#` followed by a hex digit is a color when it STARTS the value or follows
+/// a comma (so lists like `spectrum_gradient = #FF0080, #00FFFF` survive);
+/// any other `#` starts a comment.
+fn strip_value_comment(v: &str) -> String {
+    let mut out = String::new();
+    let mut prev_sig: Option<char> = None; // last non-whitespace char kept so far
+    let mut chars = v.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '#' {
+            let color_ctx = prev_sig.is_none() || prev_sig == Some(',');
+            if !(color_ctx && chars.peek().is_some_and(|n| n.is_ascii_hexdigit())) {
+                break;
+            }
+        }
+        if !c.is_whitespace() {
+            prev_sig = Some(c);
+        }
+        out.push(c);
+    }
+    out.trim().to_string()
+}
+
 impl ConfigFile {
-    
     pub fn parse(text: &str) -> Result<Self, String> {
         let mut values = HashMap::new();
         // Windows Notepad can save with a UTF-8 BOM at the start.
@@ -42,14 +64,7 @@ impl ConfigFile {
             let (k, v) = line
                 .split_once('=')
                 .ok_or_else(|| format!("line {}: missing '=' ({raw:?})", n + 1))?;
-            // End-of-line comment: `#` ... ; but a value that STARTS with `#` is a color (#RRGGBB).
-            let v = v.trim();
-            let v = if let Some(rest) = v.strip_prefix('#') {
-                let tok = rest.split_whitespace().next().unwrap_or("");
-                format!("#{tok}")
-            } else {
-                v.split('#').next().unwrap_or("").trim().to_string()
-            };
+            let v = strip_value_comment(v.trim());
             let v = v.trim_matches(|c| c == '"' || c == '\'');
             values.insert(k.trim().to_ascii_lowercase(), v.to_string());
         }
@@ -210,6 +225,19 @@ mod tests {
         assert_eq!(c.get("gpu_color"), Some("#00FF00"));
         assert_eq!(c.get("x"), Some("5"));
         assert_eq!(c.get("y"), None);
+    }
+
+    #[test]
+    fn hex_color_lists_survive_and_comments_still_strip() {
+        let c = ConfigFile::parse(
+            "g = #FF0080, #00FFFF\nh = #FF0080,#00FFFF,#112233   # three colors\nn = red, #00FFFF # tail\nk = #FF0080, # not a color\nq = 5#tail\n",
+        )
+        .unwrap();
+        assert_eq!(c.get("g"), Some("#FF0080, #00FFFF"));
+        assert_eq!(c.get("h"), Some("#FF0080,#00FFFF,#112233"));
+        assert_eq!(c.get("n"), Some("red, #00FFFF"));
+        assert_eq!(c.get("k"), Some("#FF0080,"));
+        assert_eq!(c.get("q"), Some("5"));
     }
 
     #[test]
