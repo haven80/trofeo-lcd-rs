@@ -1,5 +1,7 @@
 # trofeo_lcd
 ![overview](img/overview.png)
+![overview2](img/overview2.jpeg)
+
 
 **A lightweight, open-source alternative to the official Thermalright TRCC
 software.** Audio visualizer + system info monitor for the
