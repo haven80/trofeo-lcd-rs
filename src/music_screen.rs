@@ -2,7 +2,8 @@
 //! now-playing card — album cover on the left (with a soft glow in the
 //! cover's own color), artist / title / album next to it, a progress bar with
 //! times, and the spectrum on the side, tinted with the cover's accent color.
-//! The backdrop is the cover itself, blurred and darkened.
+//! The background is configurable (`music_bg`): a gradient of the cover's
+//! dominant color (default), the blurred cover, a flat color, or nothing.
 //!
 //! Everything expensive (blurring, scaling, rounding, glow, accent color) is
 //! done ONCE when the cover changes and baked into a cached backdrop; a frame
@@ -26,6 +27,78 @@ pub const DEFAULT_ACCENT: Rgb = (0x1D, 0xB9, 0x54);
 const KEY: Rgb = (1, 0, 2);
 /// The spectrum style used here unless `spectrum_style` is configured.
 pub const DEFAULT_STYLE: spectrum::Style = spectrum::Style::Bars;
+
+// ---------------------------------------------------------------------------
+// Background options
+// ---------------------------------------------------------------------------
+
+/// What is painted behind the music screen.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BgMode {
+    /// The cover's dominant color fading to near-black (Spotify-like). Default.
+    Gradient,
+    /// The cover itself, blurred (see `Bg::blur` / `Bg::fit`).
+    Blur,
+    /// One flat color: the cover's dominant color.
+    Color,
+    /// One flat color chosen by the user (`Bg::color`).
+    Solid,
+    /// Nothing: whatever is already on the canvas (solid color / `background`).
+    None,
+}
+
+impl BgMode {
+    pub const NAMES: &'static str = "gradient | blur | color | solid | none";
+
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s.trim().to_ascii_lowercase().as_str() {
+            "gradient" | "gradiente" => BgMode::Gradient,
+            "blur" | "blurred" | "sfocato" => BgMode::Blur,
+            "color" | "colour" | "dominant" | "colore" => BgMode::Color,
+            "solid" | "fixed" | "fisso" => BgMode::Solid,
+            "none" | "off" | "no" | "false" | "nessuno" => BgMode::None,
+            _ => return None,
+        })
+    }
+}
+
+/// How the blurred cover is fitted to the panel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BgFit {
+    /// A centred slice of the cover with the panel's proportions (not distorted).
+    Center,
+    /// The whole cover squeezed to the panel's size (the look of version 1.0.31).
+    Stretch,
+}
+
+impl BgFit {
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s.trim().to_ascii_lowercase().as_str() {
+            "center" | "centre" | "centered" | "centro" => BgFit::Center,
+            "stretch" | "fill" | "adatta" => BgFit::Stretch,
+            _ => return None,
+        })
+    }
+}
+
+/// All the background settings; part of the cache key, so any change rebuilds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Bg {
+    pub mode: BgMode,
+    /// 0-100: how bright the background is (100 = the cover color at full strength).
+    pub brightness: u32,
+    /// 0-100: blur amount for `BgMode::Blur` (0 = barely blurred, 100 = a soft colour wash).
+    pub blur: u32,
+    pub fit: BgFit,
+    /// The color of `BgMode::Solid`.
+    pub color: Rgb,
+}
+
+impl Default for Bg {
+    fn default() -> Self {
+        Bg { mode: BgMode::Gradient, brightness: 40, blur: 70, fit: BgFit::Center, color: (0x12, 0x12, 0x18) }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Geometry
@@ -123,15 +196,15 @@ fn accent_stops(accent: Rgb) -> Vec<Rgb> {
 }
 
 // ---------------------------------------------------------------------------
-// Cached backdrop (cover + blurred background + glow)
+// Cached backdrop (cover + background + glow)
 // ---------------------------------------------------------------------------
 
 struct Cache {
     cover: Option<Arc<CoverArt>>,
     size: (u32, u32),
-    blur: bool,
+    bg: Bg,
     accent: Rgb,
-    /// Fully composed background (blurred cover, glow, the cover itself).
+    /// Fully composed background (gradient/blur/color, glow, the cover itself).
     backdrop: Option<Framebuffer>,
     /// The cover with transparent corners, for when there is no backdrop.
     keyed_cover: Option<Framebuffer>,
@@ -186,24 +259,101 @@ fn placeholder(size: u32, accent: Rgb) -> RgbImage {
     })
 }
 
-fn build_cache(w: u32, h: u32, cover: &Option<Arc<CoverArt>>, blur: bool) -> Cache {
+/// Side (in pixels) of the small image the blur is made from: the lower, the blurrier.
+fn blur_side(blur: u32) -> u32 {
+    let k = 1.0 - blur.min(100) as f32 / 100.0;
+    (8.0 + k * k * 248.0).round() as u32
+}
+
+/// The cover shrunk to a small image (shorter side = `side`) with the panel's
+/// proportions — a centred slice of it, or the whole cover squeezed — ready to
+/// be stretched over the panel with a smooth filter, which is the blur.
+fn blur_source(cover: &RgbImage, w: u32, h: u32, blur: u32, fit: BgFit) -> RgbImage {
+    let side = blur_side(blur);
+    let (cw, ch) = cover.dimensions();
+    let small = match fit {
+        BgFit::Stretch => imageops::resize(cover, side, side, FilterType::Triangle),
+        BgFit::Center => {
+            // Largest slice of the cover with the panel's aspect ratio, centred.
+            let (sw, sh) = if (w as u64) * (ch as u64) >= (h as u64) * (cw as u64) {
+                (cw, ((cw as u64 * h as u64) / w.max(1) as u64).max(1) as u32)
+            } else {
+                (((ch as u64 * w as u64) / h.max(1) as u64).max(1) as u32, ch)
+            };
+            let (sw, sh) = (sw.min(cw).max(1), sh.min(ch).max(1));
+            let slice = imageops::crop_imm(cover, (cw - sw) / 2, (ch - sh) / 2, sw, sh).to_image();
+            let (tw, th) = if w >= h {
+                ((side as u64 * w as u64 / h.max(1) as u64).clamp(side as u64, 1024) as u32, side)
+            } else {
+                (side, (side as u64 * h as u64 / w.max(1) as u64).clamp(side as u64, 1024) as u32)
+            };
+            imageops::resize(&slice, tw, th, FilterType::Triangle)
+        }
+    };
+    // A Gaussian pass on the small image rounds off hard edges (cheap there):
+    // the stronger the blur setting, the wider it is relative to the image.
+    let sigma = 0.8 + blur.min(100) as f32 / 100.0 * side as f32 * 0.3;
+    imageops::blur(&small, sigma)
+}
+
+/// Paint the background of the whole panel for `bg.mode` (never `None`).
+fn paint_background(bd: &mut Framebuffer, bg: &Bg, accent: Rgb, cover: Option<&RgbImage>) {
+    let (w, h) = (bd.width(), bd.height());
+    let k = bg.brightness.min(100) as f32 / 100.0;
+    let landscape = w >= h;
+    // A cover-less blur falls back to the gradient of the default accent.
+    let mode = if bg.mode == BgMode::Blur && cover.is_none() { BgMode::Gradient } else { bg.mode };
+    let blurred = match (mode, cover) {
+        (BgMode::Blur, Some(c)) => {
+            let small = blur_source(c, w, h, bg.blur, bg.fit);
+            Some(imageops::resize(&small, w.max(1), h.max(1), FilterType::CatmullRom))
+        }
+        _ => None,
+    };
+    let base = scale_rgb(accent, k);
+    let dark = (6, 6, 12);
+    for y in 0..h {
+        let ny = (y as f32 + 0.5) / h as f32;
+        for x in 0..w {
+            let nx = (x as f32 + 0.5) / w as f32;
+            let (vx, vy) = (nx * 2.0 - 1.0, ny * 2.0 - 1.0);
+            let vignette = 1.0 - 0.30 * (vx * vx + vy * vy) / 2.0;
+            let c = match mode {
+                BgMode::Solid => bg.color,
+                BgMode::Color => scale_rgb(base, vignette),
+                BgMode::Blur => {
+                    let p = blurred.as_ref().map(|b| b.get_pixel(x, y).0).unwrap_or([0, 0, 0]);
+                    scale_rgb((p[0], p[1], p[2]), k * vignette)
+                }
+                // Brightest on the cover side, fading to near-black away from it.
+                _ => {
+                    let t = if landscape { 0.75 * nx + 0.25 * ny } else { ny };
+                    let t = t * t * (3.0 - 2.0 * t); // smoothstep
+                    scale_rgb(mix(base, dark, t * 0.9), vignette)
+                }
+            };
+            put(bd, x, y, c);
+        }
+    }
+}
+
+fn build_cache(w: u32, h: u32, cover: &Option<Arc<CoverArt>>, bg: Bg) -> Cache {
     let g = geometry(w, h);
     let cs = g.cover.w.min(g.cover.h).max(1);
 
-    // Tiny version of the cover: source of the accent color and of the blur.
-    let tiny: Option<RgbImage> = cover.as_ref().and_then(|c| {
-        RgbImage::from_raw(c.width, c.height, c.rgb.clone()).map(|img| imageops::resize(&img, 24, 24, FilterType::Triangle))
-    });
+    let source: Option<RgbImage> = cover.as_ref().and_then(|c| RgbImage::from_raw(c.width, c.height, c.rgb.clone()));
+    // Tiny version of the cover: source of the accent color.
+    let tiny: Option<RgbImage> = source.as_ref().map(|img| imageops::resize(img, 24, 24, FilterType::Triangle));
     let accent = tiny.as_ref().map(|t| accent_from_rgb(t.as_raw())).unwrap_or(DEFAULT_ACCENT);
 
     // The square cover image at its final size (or the record placeholder).
-    let cover_img: RgbImage = match cover.as_ref().and_then(|c| RgbImage::from_raw(c.width, c.height, c.rgb.clone())) {
-        Some(img) => imageops::resize(&img, cs, cs, FilterType::Lanczos3),
+    let cover_img: RgbImage = match &source {
+        Some(img) => imageops::resize(img, cs, cs, FilterType::Lanczos3),
         None => placeholder(cs, accent),
     };
     let radius = cs as f32 / 16.0;
 
-    if !blur {
+    if bg.mode == BgMode::None {
         let mut k = new_fb(cs, cs);
         for y in 0..cs {
             for x in 0..cs {
@@ -212,29 +362,11 @@ fn build_cache(w: u32, h: u32, cover: &Option<Arc<CoverArt>>, blur: bool) -> Cac
                 put(&mut k, x, y, c);
             }
         }
-        return Cache { cover: cover.clone(), size: (w, h), blur, accent, backdrop: None, keyed_cover: Some(k) };
+        return Cache { cover: cover.clone(), size: (w, h), bg, accent, backdrop: None, keyed_cover: Some(k) };
     }
 
-    // Blurred, darkened background: the 24x24 tiny cover stretched over the
-    // whole panel with a smooth filter is already a convincing blur.
     let mut bd = new_fb(w, h);
-    let big = tiny.as_ref().map(|t| imageops::resize(t, w.max(1), h.max(1), FilterType::CatmullRom));
-    for y in 0..h {
-        let ny = (y as f32 + 0.5) / h as f32 * 2.0 - 1.0;
-        for x in 0..w {
-            let nx = (x as f32 + 0.5) / w as f32 * 2.0 - 1.0;
-            let vignette = 1.0 - 0.30 * (nx * nx + ny * ny) / 2.0;
-            let base = match &big {
-                Some(b) => {
-                    let p = b.get_pixel(x, y).0;
-                    scale_rgb((p[0], p[1], p[2]), 0.27)
-                }
-                // No cover: a quiet vertical wash of the default accent.
-                None => mix(scale_rgb(accent, 0.20), (6, 6, 12), y as f32 / h as f32),
-            };
-            put(&mut bd, x, y, scale_rgb(base, vignette));
-        }
-    }
+    paint_background(&mut bd, &bg, accent, source.as_ref());
 
     // Soft glow in the accent color around the cover.
     let cr = g.cover;
@@ -268,7 +400,7 @@ fn build_cache(w: u32, h: u32, cover: &Option<Arc<CoverArt>>, blur: bool) -> Cac
             put(&mut bd, px, py, c);
         }
     }
-    Cache { cover: cover.clone(), size: (w, h), blur, accent, backdrop: Some(bd), keyed_cover: None }
+    Cache { cover: cover.clone(), size: (w, h), bg, accent, backdrop: Some(bd), keyed_cover: None }
 }
 
 // ---------------------------------------------------------------------------
@@ -346,26 +478,26 @@ impl MusicScreen {
         self.cache.as_ref().map_or(DEFAULT_ACCENT, |c| c.accent)
     }
 
-    fn ensure(&mut self, w: u32, h: u32, cover: &Option<Arc<CoverArt>>, blur: bool) {
+    fn ensure(&mut self, w: u32, h: u32, cover: &Option<Arc<CoverArt>>, bg: Bg) {
         let same_cover = |a: &Option<Arc<CoverArt>>, b: &Option<Arc<CoverArt>>| match (a, b) {
             (None, None) => true,
             (Some(a), Some(b)) => Arc::ptr_eq(a, b),
             _ => false,
         };
         let fresh = match &self.cache {
-            Some(c) => c.size != (w, h) || c.blur != blur || !same_cover(&c.cover, cover),
+            Some(c) => c.size != (w, h) || c.bg != bg || !same_cover(&c.cover, cover),
             None => true,
         };
         if fresh {
-            self.cache = Some(build_cache(w, h, cover, blur));
+            self.cache = Some(build_cache(w, h, cover, bg));
         }
     }
 
     /// Draw the whole screen onto `fb` (which is fully overwritten when the
-    /// blurred backdrop is on).
+    /// background is painted).
     pub fn draw(&mut self, fb: &mut Framebuffer, track: &TrackInfo, heights: &[f32], peaks: &[f32], o: &UiOptions) {
         let (w, h) = (fb.width(), fb.height());
-        self.ensure(w, h, &track.cover, o.music_blur);
+        self.ensure(w, h, &track.cover, o.music_bg);
         let g = geometry(w, h);
         let landscape = w >= h;
         let cache = self.cache.as_ref().expect("cache was just built");
@@ -588,7 +720,7 @@ mod tests {
         assert!(c.0 > 190 && c.1 < 45 && c.2 < 45, "{c:?}");
         // The very corner of the cover rectangle is cut by the rounding: not cover colored.
         let corner = get(&fb, g.cover.x, g.cover.y);
-        assert!(corner.0 < 150, "{corner:?}");
+        assert!(corner.0 < 185, "{corner:?}");
         // The background is the darkened cover color, reddish but dark.
         let bgp = get(&fb, 1900, 5);
         assert!(bgp.0 > bgp.1 && bgp.0 < 90, "{bgp:?}");
@@ -632,7 +764,7 @@ mod tests {
         m.draw(&mut fb2, &t1, &bars(), &bars(), &opts());
         assert_eq!(m.cache.as_ref().unwrap().size, (462, 1920));
         let mut o = opts();
-        o.music_blur = false;
+        o.music_bg.mode = BgMode::None;
         m.draw(&mut fb2, &t1, &bars(), &bars(), &o);
         assert!(m.cache.as_ref().unwrap().backdrop.is_none());
     }
@@ -640,7 +772,7 @@ mod tests {
     #[test]
     fn progress_bar_reflects_the_position() {
         let mut o = opts();
-        o.music_blur = false; // plain background: easy to read pixels
+        o.music_bg.mode = BgMode::None; // plain background: easy to read pixels
         let g = geometry(1920, 462);
         let bar_y = g.text.y + g.text.h - PROGRESS_H + 4;
         let filled = |pos: u64| {
@@ -665,7 +797,7 @@ mod tests {
     #[test]
     fn without_blur_the_existing_background_is_left_alone() {
         let mut o = opts();
-        o.music_blur = false;
+        o.music_bg.mode = BgMode::None;
         let mut fb = new_fb(1920, 462);
         fb.clear(40, 50, 60);
         MusicScreen::new().draw(&mut fb, &track("Song", "Band", Some(solid_cover((200, 30, 30), 16)), None), &bars(), &bars(), &o);
@@ -679,7 +811,7 @@ mod tests {
     #[test]
     fn text_goes_in_the_text_block_and_never_over_the_cover_or_spectrum() {
         let mut o = opts();
-        o.music_blur = false;
+        o.music_bg.mode = BgMode::None;
         let mut fb = new_fb(1920, 462);
         fb.clear(0, 0, 0);
         // A silent spectrum draws (almost) nothing; a very long title must scroll, not spill.
@@ -699,9 +831,10 @@ mod tests {
         let timelines = [None, Some(timeline(0, 1)), Some(timeline(5, 10)), Some(timeline(999_999_999, 1_000))];
         let texts = [("", ""), ("Song", ""), ("Song", "Artist"), ("日本語のタイトル", "Ünïcödé Ärtist"), ("X", "Y")];
         for (w, h) in [(1920u32, 462u32), (462, 1920), (200, 100), (60, 60)] {
-            for blur in [true, false] {
+            for mode in [BgMode::Gradient, BgMode::Blur, BgMode::Color, BgMode::Solid, BgMode::None] {
+              for fit in [BgFit::Center, BgFit::Stretch] {
                 let mut o = opts();
-                o.music_blur = blur;
+                o.music_bg = Bg { mode, fit, ..Bg::default() };
                 let mut m = MusicScreen::new();
                 let mut fb = new_fb(w, h);
                 for cover in &covers {
@@ -713,6 +846,7 @@ mod tests {
                 }
                 // No bars at all, and an empty peaks slice.
                 m.draw(&mut fb, &track("S", "A", None, None), &[], &[], &o);
+              }
             }
         }
     }
@@ -720,7 +854,7 @@ mod tests {
     #[test]
     fn user_palette_and_style_override_the_cover_tint() {
         let mut o = opts();
-        o.music_blur = false;
+        o.music_bg.mode = BgMode::None;
         o.spectrum_styles = vec![spectrum::Style::Led];
         o.spectrum_palettes = vec![spectrum::Palette::Matrix];
         let mut fb = new_fb(1920, 462);
@@ -738,5 +872,149 @@ mod tests {
             }
         }
         assert!(greenish > 200 && reddish == 0, "green {greenish} red {reddish}");
+    }
+
+    fn bg_with(mode: BgMode) -> UiOptions {
+        let mut o = opts();
+        o.music_bg = Bg { mode, ..Bg::default() };
+        o
+    }
+
+    fn draw_bg(o: &UiOptions, cover: Option<Arc<CoverArt>>) -> Framebuffer {
+        let mut fb = new_fb(1920, 462);
+        MusicScreen::new().draw(&mut fb, &track("S", "A", cover, None), &vec![0.0; 48], &vec![0.0; 48], o);
+        fb
+    }
+
+    fn luma(c: Rgb) -> u32 {
+        c.0 as u32 + c.1 as u32 + c.2 as u32
+    }
+
+    #[test]
+    fn gradient_takes_the_cover_hue_and_fades_away_from_the_cover() {
+        let fb = draw_bg(&bg_with(BgMode::Gradient), Some(solid_cover((30, 60, 200), 32)));
+        let g = geometry(1920, 462);
+        let left = get(&fb, g.cover.x / 2, 20); // just left of the cover: brightest part
+        let right = get(&fb, 1910, 450); // far corner
+        assert!(left.2 > left.0 && left.2 > left.1, "bluish expected: {left:?}");
+        assert!(luma(left) > luma(right) * 2, "must fade out: {left:?} -> {right:?}");
+        assert!(right.0 < 40 && right.1 < 40 && right.2 < 60, "far side is near-black: {right:?}");
+    }
+
+    #[test]
+    fn brightness_scales_the_background() {
+        let dim = |b: u32| {
+            let mut o = bg_with(BgMode::Color);
+            o.music_bg.brightness = b;
+            luma(get(&draw_bg(&o, Some(solid_cover((200, 30, 30), 16))), 1000, 230))
+        };
+        let (a, b, c) = (dim(0), dim(40), dim(100));
+        assert_eq!(a, 0);
+        assert!(b > 60 && c > b * 2, "{a} {b} {c}");
+    }
+
+    #[test]
+    fn color_and_solid_are_flat_and_solid_ignores_the_cover() {
+        let o = bg_with(BgMode::Solid);
+        let fb = draw_bg(&o, Some(solid_cover((200, 30, 30), 16)));
+        assert_eq!(get(&fb, 1900, 5), o.music_bg.color);
+        assert_eq!(get(&fb, 1000, 230), o.music_bg.color); // no vignette either
+        let fb2 = draw_bg(&o, Some(solid_cover((30, 200, 30), 16)));
+        assert_eq!(get(&fb2, 1900, 5), o.music_bg.color);
+        let mut o = bg_with(BgMode::Color);
+        o.music_bg.brightness = 50;
+        let fb = draw_bg(&o, Some(solid_cover((30, 30, 200), 16)));
+        let p = get(&fb, 1000, 230);
+        assert!(p.2 > p.0 + 40 && p.2 > p.1 + 40, "{p:?}");
+    }
+
+    #[test]
+    fn blur_centered_keeps_proportions_and_stretch_does_not() {
+        // A cover that is dark red on the left half of its middle band and blue
+        // elsewhere: a centred slice shows mostly the band, a squeeze shows it all.
+        let n = 64u32;
+        let mut px = Vec::new();
+        for y in 0..n {
+            for _x in 0..n {
+                px.extend(if (24..40).contains(&y) { [220u8, 30, 30] } else { [30u8, 30, 220] });
+            }
+        }
+        let cover = Arc::new(CoverArt { width: n, height: n, rgb: px });
+        let mut o = bg_with(BgMode::Blur);
+        o.music_bg.blur = 0;
+        o.music_bg.brightness = 100;
+        o.music_bg.fit = BgFit::Center;
+        let c = draw_bg(&o, Some(cover.clone()));
+        o.music_bg.fit = BgFit::Stretch;
+        let s = draw_bg(&o, Some(cover));
+        // Top-right corner area (outside every block): the centred slice is all red band,
+        // the stretched whole cover still has its blue top there.
+        let (pc, ps) = (get(&c, 1800, 20), get(&s, 1800, 20));
+        assert!(pc.0 > pc.2, "centered should be the red band: {pc:?}");
+        assert!(ps.2 > ps.0, "stretched should show the blue top: {ps:?}");
+    }
+
+    #[test]
+    fn more_blur_means_less_detail() {
+        // Checkerboard cover: a sharp background keeps contrast, a blurry one is grey.
+        let n = 64u32;
+        let mut px = Vec::new();
+        for y in 0..n {
+            for x in 0..n {
+                px.extend(if (x / 4 + y / 4) % 2 == 0 { [250u8, 250, 250] } else { [5u8, 5, 5] });
+            }
+        }
+        let cover = Arc::new(CoverArt { width: n, height: n, rgb: px });
+        let spread = |blur: u32| {
+            let mut o = bg_with(BgMode::Blur);
+            o.music_bg.blur = blur;
+            o.music_bg.brightness = 100;
+            let fb = draw_bg(&o, Some(cover.clone()));
+            let vals: Vec<u32> = (0..80).map(|i| luma(get(&fb, 1500 + i * 4, 230))).collect();
+            vals.iter().max().unwrap() - vals.iter().min().unwrap()
+        };
+        assert!(spread(0) > spread(100) + 100, "{} vs {}", spread(0), spread(100));
+        assert!(blur_side(0) > blur_side(50) && blur_side(50) > blur_side(100) && blur_side(100) >= 8);
+    }
+
+    #[test]
+    fn none_leaves_the_canvas_and_every_bg_setting_rebuilds_the_cache() {
+        let fb = {
+            let mut fb = new_fb(1920, 462);
+            fb.clear(40, 50, 60);
+            MusicScreen::new().draw(&mut fb, &track("S", "A", Some(solid_cover((200, 30, 30), 16)), None), &bars(), &bars(), &bg_with(BgMode::None));
+            fb
+        };
+        assert_eq!(get(&fb, 1900, 5), (40, 50, 60));
+        let cover = Some(solid_cover((10, 200, 10), 16));
+        let t = track("A", "B", cover, None);
+        let mut m = MusicScreen::new();
+        let mut fb = new_fb(1920, 462);
+        let mut o = opts();
+        m.draw(&mut fb, &t, &bars(), &bars(), &o);
+        let first = m.cache.as_ref().unwrap().bg;
+        for tweak in [
+            |b: &mut Bg| b.mode = BgMode::Blur,
+            |b: &mut Bg| b.brightness = 90,
+            |b: &mut Bg| b.blur = 5,
+            |b: &mut Bg| b.fit = BgFit::Stretch,
+            |b: &mut Bg| b.color = (1, 2, 3),
+        ] {
+            o.music_bg = Bg::default();
+            m.draw(&mut fb, &t, &bars(), &bars(), &o);
+            tweak(&mut o.music_bg);
+            m.draw(&mut fb, &t, &bars(), &bars(), &o);
+            assert_ne!(m.cache.as_ref().unwrap().bg, Bg::default());
+            assert_eq!(m.cache.as_ref().unwrap().bg, o.music_bg);
+        }
+        assert_eq!(first, Bg::default());
+    }
+
+    #[test]
+    fn a_blurred_background_without_a_cover_falls_back_to_the_gradient() {
+        let fb = draw_bg(&bg_with(BgMode::Blur), None);
+        let g = geometry(1920, 462);
+        let p = get(&fb, g.cover.x / 2, 20);
+        assert!(p.1 > p.0 && p.1 > p.2, "default accent is green: {p:?}");
     }
 }

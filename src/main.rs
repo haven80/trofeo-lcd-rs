@@ -309,7 +309,10 @@ fn print_help() {
          \x20\x20--layout-spectrum <true|false>  With a layout, still show the spectrum when music is playing\n\
          \x20\x20--layout-hold-on-music <true|false>  While music plays, stay on the first layout (no rotation)\n\
          \x20\x20--music-screen <true|false>  While music plays, show a now-playing card (cover, title, progress, spectrum)\n\
-         \x20\x20--music-blur / --music-progress <true|false>  Music screen: blurred-cover background / progress bar (default: true)\n\
+         \x20\x20--music-progress <true|false>  Music screen: progress bar and times (default: true)\n\
+         \x20\x20--music-bg <gradient|blur|color|solid|none>  Music screen background (default: gradient)\n\
+         \x20\x20--music-bg-brightness / --music-bg-blur <0-100>  Background brightness (40) / blur amount (70)\n\
+         \x20\x20--music-bg-fit <center|stretch>, --music-bg-color <color>  Blur fit; color for 'solid'\n\
          \x20\x20--spectrum-style <S>     bars | led | peaks | area | mirror | all (several, comma-separated, rotate)\n\
          \x20\x20--spectrum-palette <P>   default | rainbow | fire | ocean | sunset | neon | ice | matrix | purple | custom | all\n\
          \x20\x20--spectrum-gradient <C>  Custom palette: 2+ colors, e.g. #FF0080,#00FFFF\n\
@@ -671,7 +674,8 @@ const OVERRIDE_KEYS: &[&str] = &[
     "layout_hold_on_music", "layout_interval", "panel_opacity", "text_backdrop",
     "spectrum_style", "spectrum_style_interval", "spectrum_palette",
     "spectrum_palette_interval", "spectrum_gradient", "spectrum_rainbow_speed",
-    "music_screen", "music_blur", "music_progress",
+    "music_screen", "music_blur", "music_progress", "music_bg", "music_bg_brightness",
+    "music_bg_blur", "music_bg_fit", "music_bg_color",
 ];
 
 /// Network (`net_unit`) and RAM (`mem_unit`) units.
@@ -952,9 +956,37 @@ fn parse_ui_options(file: &ConfigFile) -> anyhow::Result<UiOptions> {
             Some(v) => anyhow::bail!("spectrum_rainbow_speed: must be between 0 and 360 (got {v})"),
         },
         music_screen: file.get_bool("music_screen").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(false),
-        music_blur: file.get_bool("music_blur").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(true),
+        music_bg: parse_music_bg(file)?,
         music_progress: file.get_bool("music_progress").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(true),
     })
+}
+
+/// `music_bg*` keys -> the music screen background. The old `music_blur = false`
+/// (no background of its own) still works when `music_bg` is not set.
+fn parse_music_bg(file: &ConfigFile) -> anyhow::Result<music_screen::Bg> {
+    use music_screen::{Bg, BgFit, BgMode};
+    let mut bg = Bg::default();
+    if let Some(v) = file.get("music_bg") {
+        bg.mode = BgMode::parse(v).ok_or_else(|| anyhow::anyhow!("music_bg: '{v}' not valid ({})", BgMode::NAMES))?;
+    } else if file.get_bool("music_blur").map_err(|e| anyhow::anyhow!(e))? == Some(false) {
+        bg.mode = BgMode::None;
+    }
+    let pct = |key: &str, default: u32| -> anyhow::Result<u32> {
+        let v = file.get_u32(key).map_err(|e| anyhow::anyhow!(e))?.unwrap_or(default);
+        if v > 100 {
+            anyhow::bail!("{key}: must be between 0 and 100 (got {v})");
+        }
+        Ok(v)
+    };
+    bg.brightness = pct("music_bg_brightness", bg.brightness)?;
+    bg.blur = pct("music_bg_blur", bg.blur)?;
+    if let Some(v) = file.get("music_bg_fit") {
+        bg.fit = BgFit::parse(v).ok_or_else(|| anyhow::anyhow!("music_bg_fit: '{v}' not valid (center | stretch)"))?;
+    }
+    if let Some(c) = parse_color_opt(file, "music_bg_color")? {
+        bg.color = c;
+    }
+    Ok(bg)
 }
 
 /// The music screen shows while it is enabled, the player reports a track,
@@ -1874,9 +1906,9 @@ struct UiOptions {
     /// While a track plays, replace the whole screen with the now-playing card
     /// (cover, artist/title, progress, spectrum) — see `music_screen.rs`.
     music_screen: bool,
-    /// Music screen: use the blurred cover as the background (default), or
-    /// leave whatever is behind (solid color / `background` image).
-    music_blur: bool,
+    /// Music screen background: mode (gradient / blur / color / solid / none),
+    /// brightness, blur amount, fit and the solid color.
+    music_bg: music_screen::Bg,
     /// Music screen: show the progress bar and times (when the player reports them).
     music_progress: bool,
 }
@@ -1919,7 +1951,7 @@ impl Default for UiOptions {
             spectrum_palette_interval: 20,
             spectrum_rainbow_speed: 30,
             music_screen: false,
-            music_blur: true,
+            music_bg: music_screen::Bg::default(),
             music_progress: true,
         }
     }
@@ -3133,10 +3165,34 @@ mod layout_tests {
     fn music_screen_options_parse() {
         let parse = |t: &str| parse_ui_options(&ConfigFile::parse(t).unwrap());
         let d = parse("").unwrap();
-        assert!(!d.music_screen && d.music_blur && d.music_progress); // off by default; nice look by default
-        let o = parse("music_screen = true\nmusic_blur = false\nmusic_progress = no\n").unwrap();
-        assert!(o.music_screen && !o.music_blur && !o.music_progress);
+        assert!(!d.music_screen && d.music_progress); // off by default
+        assert_eq!(d.music_bg, music_screen::Bg::default()); // nice look by default
+        let o = parse("music_screen = true\nmusic_progress = no\n").unwrap();
+        assert!(o.music_screen && !o.music_progress);
         assert!(parse("music_screen = sometimes\n").is_err());
+    }
+
+    #[test]
+    fn music_background_options_parse() {
+        use music_screen::{Bg, BgFit, BgMode};
+        let parse = |t: &str| parse_ui_options(&ConfigFile::parse(t).unwrap());
+        assert_eq!(Bg::default().mode, BgMode::Gradient);
+        let o = parse("music_bg = blur\nmusic_bg_brightness = 55\nmusic_bg_blur = 20\nmusic_bg_fit = stretch\n").unwrap();
+        assert_eq!(o.music_bg, Bg { mode: BgMode::Blur, brightness: 55, blur: 20, fit: BgFit::Stretch, ..Bg::default() });
+        let o = parse("music_bg = solid\nmusic_bg_color = #102030\n").unwrap();
+        assert_eq!((o.music_bg.mode, o.music_bg.color), (BgMode::Solid, (0x10, 0x20, 0x30)));
+        assert_eq!(parse("music_bg = none\n").unwrap().music_bg.mode, BgMode::None);
+        assert_eq!(parse("music_bg = Color\n").unwrap().music_bg.mode, BgMode::Color);
+        // The old switch still works when music_bg is not set, and music_bg wins when both are.
+        assert_eq!(parse("music_blur = false\n").unwrap().music_bg.mode, BgMode::None);
+        assert_eq!(parse("music_blur = true\n").unwrap().music_bg.mode, BgMode::Gradient);
+        assert_eq!(parse("music_blur = false\nmusic_bg = blur\n").unwrap().music_bg.mode, BgMode::Blur);
+        // Mistakes are reported, not ignored.
+        assert!(parse("music_bg = rainbow\n").is_err());
+        assert!(parse("music_bg_brightness = 101\n").is_err());
+        assert!(parse("music_bg_blur = -1\n").is_err());
+        assert!(parse("music_bg_fit = zoom\n").is_err());
+        assert!(parse("music_bg_color = notacolor\n").is_err());
     }
 
     #[test]
