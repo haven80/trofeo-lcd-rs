@@ -1,4 +1,6 @@
+
 # trofeo_lcd
+![Overview](img/overview.png)
 
 **A lightweight, open-source alternative to the official Thermalright TRCC
 software.** Audio visualizer + system info monitor for the
@@ -43,7 +45,9 @@ system status (CPU/GPU/RAM/temp) stays readable while playing.
   scrolling line on top of any screen, and/or its own full panel.
 - Sync EQ bar color with an **OpenRGB** device.
 - Adaptive FPS: drops to idle when silent → saves CPU.
-
+![Overview](img/anteprima_stili_1.png)
+![Overview](img/anteprima_stili_2.png)
+![Overview](img/anteprima_stili_3.png)
 ## Usage
 
 ```bash
