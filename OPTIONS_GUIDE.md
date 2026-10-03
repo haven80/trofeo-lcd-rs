@@ -249,6 +249,7 @@ spectrum_rainbow_speed = 10
 | `music_bg_fit` | `--music-bg-fit` | `center` / `stretch` (only `blur`) | `center` |
 | `music_bg_color` | `--music-bg-color` | color (only `solid`) | `#121218` |
 | `music_progress` | `--music-progress` | `true`/`false` | `true` |
+| `music_stats` | `--music-stats` | list of `cpu`, `gpu`, `ram`, `net`, `disk`, `time`, `uptime`; or `all` / `none` | `cpu, gpu, ram` |
 
 With `music_screen = true`, while a track is playing the whole panel becomes a
 Spotify-style card: the **album cover** on the left (rounded, with a soft glow),
@@ -281,6 +282,13 @@ spectrum at the bottom. When the music stops the normal screen/layout comes back
   affect `solid`). The glow around the cover is kept in every mode except `none`.
   The old `music_blur = false` still works (it means `music_bg = none`) when
   `music_bg` is not set. Without a cover, `blur` falls back to the gradient.
+- **Footer** (`music_stats`): a small line of system info in the strip at the very
+  bottom, e.g. `CPU 23% 54C   GPU 61% 48C   MEM 12000/32000MB`. Pick what you want and
+  the order: `music_stats = cpu, gpu, ram, net`; `all` shows everything (also `disk`,
+  `time` and `uptime`); `none` turns it off. Temperatures appear when the sensors
+  provide them, units follow `net_unit` / `mem_unit`, and an item with no data
+  (e.g. no GPU reading) is skipped. If the line is too wide for the panel (portrait
+  mode, long lists) it shrinks to the small font and then drops the last items.
 - `music_progress = false` hides the bar and times. They only appear when the
   player reports the track length; some players don't.
 - If the player provides no cover, a stylised record is drawn instead.
@@ -296,6 +304,7 @@ music_screen = true
 # optional: the background and the spectrum look
 music_bg = gradient          # gradient | blur | color | solid | none
 music_bg_brightness = 40
+music_stats = cpu, gpu, ram, net     # footer line; none = off
 spectrum_style = mirror
 spectrum_palette = neon
 
@@ -780,6 +789,7 @@ text_backdrop = true
 music_screen = true
 music_bg = gradient
 music_bg_brightness = 40
+music_stats = cpu, gpu, ram
 
 # --- Spectrum ---
 spectrum_style = led, area, mirror

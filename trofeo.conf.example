@@ -165,6 +165,9 @@ language = en
 # music_bg_fit = center      # center = centred slice, stretch = whole cover squeezed (blur only)
 # music_bg_color = #121218   # the color for music_bg = solid
 # music_progress = true    # progress bar and times (only if the player reports them)
+# Small system info line at the very bottom: cpu, gpu, ram, net, disk, time, uptime
+# (in the order given), all, or none to turn it off.
+# music_stats = cpu, gpu, ram
 
 # --- Spectrum styles & colors ---------------------------------------------------
 # Style: bars (classic) | led | peaks | area | mirror. Several, comma-separated, or "all"
