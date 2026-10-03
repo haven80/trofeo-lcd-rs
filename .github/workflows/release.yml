@@ -30,7 +30,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Rust (stable, MSVC)
         uses: dtolnay/rust-toolchain@stable
@@ -59,7 +59,7 @@ jobs:
           echo "ASSET_PATH=${out}.zip" >> "$GITHUB_ENV"
 
       - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: ${{ env.ASSET_PATH }}
           generate_release_notes: true
