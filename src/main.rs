@@ -30,6 +30,7 @@ mod music_screen;
 mod netdisk;
 mod openrgb_sync;
 mod pawnio;
+mod pixel_game;
 mod spectrum;
 mod ticker;
 mod weather;
@@ -38,7 +39,7 @@ mod weather_icon;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use chrono::Local;
+use chrono::{Local, Timelike};
 use rustfft::num_complex::Complex32;
 use rustfft::FftPlanner;
 use sysinfo::System;
@@ -311,6 +312,8 @@ fn print_help() {
          \x20\x20--music-screen <true|false>  While music plays, show a now-playing card (cover, title, progress, spectrum)\n\
          \x20\x20--music-progress <true|false>  Music screen: progress bar and times (default: true)\n\
          \x20\x20--music-spectrum-color <cover|main|COLOR|PRESET>  Music screen spectrum color (default: cover)\n\
+         \x20\x20--pixel-game <true|false>  Pixel-art mini game under the clock on the default screen (default: true)\n\
+         \x20\x20--pixel-game-hero <knight|cat|both>, --pixel-game-height <20-70>, --pixel-game-hud <true|false>\n\
          \x20\x20--music-stats <list>      Music screen footer: cpu, gpu, ram, net, disk, time, uptime, all or none (default: cpu,gpu,ram)\n\
          \x20\x20--music-bg <gradient|blur|color|solid|none>  Music screen background (default: gradient)\n\
          \x20\x20--music-bg-brightness / --music-bg-blur <0-100>  Background brightness (40) / blur amount (70)\n\
@@ -678,6 +681,7 @@ const OVERRIDE_KEYS: &[&str] = &[
     "spectrum_palette_interval", "spectrum_gradient", "spectrum_rainbow_speed",
     "music_screen", "music_blur", "music_progress", "music_bg", "music_bg_brightness",
     "music_bg_blur", "music_bg_fit", "music_bg_color", "music_stats", "music_spectrum_color",
+    "pixel_game", "pixel_game_hero", "pixel_game_height", "pixel_game_hud",
 ];
 
 /// Network (`net_unit`) and RAM (`mem_unit`) units.
@@ -961,6 +965,18 @@ fn parse_ui_options(file: &ConfigFile) -> anyhow::Result<UiOptions> {
         music_bg: parse_music_bg(file)?,
         music_stats: parse_music_stats(file)?,
         music_spectrum: parse_music_spectrum(file)?,
+        pixel_game: file.get_bool("pixel_game").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(true),
+        pixel_game_hero: match file.get("pixel_game_hero") {
+            None => pixel_game::HeroChoice::Both,
+            Some(v) => pixel_game::HeroChoice::parse(v)
+                .ok_or_else(|| anyhow::anyhow!("pixel_game_hero: '{v}' not valid ({})", pixel_game::HeroChoice::NAMES))?,
+        },
+        pixel_game_height: match file.get_u32("pixel_game_height").map_err(|e| anyhow::anyhow!(e))? {
+            None => 46,
+            Some(v) if (20..=70).contains(&v) => v,
+            Some(v) => anyhow::bail!("pixel_game_height: must be between 20 and 70 (got {v})"),
+        },
+        pixel_game_hud: file.get_bool("pixel_game_hud").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(true),
         music_stats_set: file.get("music_stats").is_some(),
         music_progress: file.get_bool("music_progress").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(true),
     })
@@ -1461,6 +1477,7 @@ fn main() -> anyhow::Result<()> {
     }
     let (now_playing, track_shared) = media::spawn_track_watcher()?;
     let mut music = music_screen::MusicScreen::new();
+    let mut game = pixel_game::PixelGame::new();
     let mut now_playing_marquee = Marquee::new();
 
     let mut latest_gpu_percent: Option<f32> = None;
@@ -1614,7 +1631,22 @@ fn main() -> anyhow::Result<()> {
             last_sound.elapsed() < config.silence_timeout,
         );
         let is_idle = !music_screen_on && (!ui_show.spectrum || last_sound.elapsed() >= config.silence_timeout);
-        let target_fps = if is_idle {
+        // The pixel game lives on the default screen only (not on a layout panel, the
+        // music screen or the gaming dashboard) and needs the clock to be shown.
+        let gaming_now = latest_gpu_percent.is_some_and(|p| p > 50.0);
+        let game_wanted = opts().pixel_game
+            && ui_show.clock
+            && !music_screen_on
+            && !(gaming_now && ui_show.dashboard)
+            && ui_layouts
+                .get(layout_index.min(ui_layouts.len().saturating_sub(1)))
+                .map_or(true, |(def, _)| def.standard);
+        GAME_STRIP.store(game_wanted, std::sync::atomic::Ordering::Relaxed);
+        let game_on = game_wanted && default_areas(&fb).1.is_some();
+        let target_fps = if is_idle && game_on {
+            // An animation needs a smooth frame rate even when nothing else moves.
+            idle_fps_effective.max(config.active_fps)
+        } else if is_idle {
             idle_fps_effective
         } else {
             config.active_fps
@@ -1786,6 +1818,27 @@ fn main() -> anyhow::Result<()> {
             }
         } else {
             draw_bars(target, &bar_heights, peak_tracker.peaks(), color_mode);
+        }
+        // The pixel game strip under the clock / spectrum.
+        if game_on && !(gaming_mode && ui_show.dashboard) {
+            if let Some(rect) = default_areas(target).1 {
+                let now_t = Local::now();
+                let low = bar_heights.len().min(10).max(1);
+                let inputs = pixel_game::Inputs {
+                    cpu: sys.global_cpu_info().cpu_usage(),
+                    net_kb: latest_net_kb.0 + latest_net_kb.1,
+                    disk_mb: latest_disk_mb.0 + latest_disk_mb.1,
+                    music: last_sound.elapsed() < config.silence_timeout,
+                    bass: bar_heights.iter().take(low).sum::<f32>() / low as f32,
+                    weather: latest_weather.as_ref().map(|w| w.icon),
+                    hour: now_t.hour(),
+                    minute: now_t.minute(),
+                    second: now_t.second(),
+                    unix_secs: now_t.timestamp().max(0) as u64,
+                };
+                let o = opts();
+                game.frame(target, rect, &inputs, o.pixel_game_hero, o.pixel_game_hud);
+            }
         }
         // The music screen is a full-panel card of its own: no status lines/ticker on top.
         if !music_screen_on {
@@ -2002,6 +2055,13 @@ struct UiOptions {
     music_stats_set: bool,
     /// Music screen spectrum color: from the cover, as on the main screen, or its own.
     music_spectrum: music_screen::SpectrumColor,
+    /// Pixel-art mini game under the clock on the default screen (see `pixel_game.rs`).
+    pixel_game: bool,
+    pixel_game_hero: pixel_game::HeroChoice,
+    /// Share of the content area the game strip takes, in percent.
+    pixel_game_height: u32,
+    /// Show the coin counter in a corner of the game.
+    pixel_game_hud: bool,
     /// Music screen: show the progress bar and times (when the player reports them).
     music_progress: bool,
 }
@@ -2048,6 +2108,10 @@ impl Default for UiOptions {
             music_stats: Vec::new(),
             music_stats_set: false,
             music_spectrum: music_screen::SpectrumColor::Cover,
+            pixel_game: true,
+            pixel_game_hero: pixel_game::HeroChoice::Both,
+            pixel_game_height: 46,
+            pixel_game_hud: true,
             music_progress: true,
         }
     }
@@ -2064,6 +2128,8 @@ fn set_ui_options(o: UiOptions) {
 #[cfg(test)]
 thread_local! {
     static TEST_OPTS: std::cell::RefCell<Option<UiOptions>> = const { std::cell::RefCell::new(None) };
+    /// Per-test stand-in for `GAME_STRIP` (tests run in parallel threads).
+    static TEST_GAME_STRIP: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// true while a panel layout (not `default`) is active: `opts().show` uses `layout_show`.
@@ -2071,6 +2137,46 @@ thread_local! {
 static ACTIVE_ITEMS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 static ACTIVE_PANEL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// true while the pixel-game strip shares the default screen with the clock / spectrum.
+static GAME_STRIP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Height in px of the pixel-game strip in a content area `content_h` tall, taking `pct`
+/// percent of it (at most 260 px). 0 = not enough room to be worth drawing.
+fn game_strip_height(content_h: u32, pct: u32) -> u32 {
+    let gh = (content_h * pct.clamp(10, 80) / 100).min(260);
+    if gh < 84 || content_h.saturating_sub(gh) < 70 {
+        0
+    } else {
+        gh
+    }
+}
+
+/// Is the game strip part of the default screen right now?
+fn game_strip_on() -> bool {
+    #[cfg(test)]
+    return TEST_GAME_STRIP.with(|t| t.get());
+    #[cfg(not(test))]
+    GAME_STRIP.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// The default screen's content area, split in the part for the clock / spectrum and
+/// (while the pixel game is on) the game strip below it, just above the bottom info line.
+fn default_areas(fb: &Framebuffer) -> ((u32, u32, u32, u32), Option<(u32, u32, u32, u32)>) {
+    let c = content_rect(fb);
+    if !game_strip_on() {
+        return (c, None);
+    }
+    let gh = game_strip_height(c.3, opts().pixel_game_height);
+    if gh == 0 {
+        return (c, None);
+    }
+    const GAP: u32 = 6;
+    const INSET: u32 = 10;
+    let main = (c.0, c.1, c.2, c.3 - gh - GAP);
+    let game = (c.0 + INSET, c.1 + c.3 - gh, c.2.saturating_sub(2 * INSET), gh);
+    (main, Some(game))
+}
 
 fn opts() -> UiOptions {
     #[cfg(test)]
@@ -2217,7 +2323,7 @@ fn fit_scale(text: &str, max_scale: u32, max_width: u32) -> u32 {
 
 fn draw_bars(fb: &mut Framebuffer, heights: &[f32], peaks: &[f32], color_mode: ColorMode) {
     let o = opts();
-    let rect = content_rect(fb);
+    let rect = default_areas(fb).0;
     let sw = rect.2 * o.spectrum_w.clamp(1, 100) / 100;
     let sh = rect.3 * o.spectrum_h.clamp(1, 100) / 100;
     let (area_left, area_top) = o.spectrum_pos.place(rect, (sw, sh), (0, 0));
@@ -2436,7 +2542,7 @@ fn draw_game_dashboard(
 /// still drawn separately as usual, unaffected by this function.
 fn draw_idle_clock(fb: &mut Framebuffer, color_mode: ColorMode) {
     let o = opts();
-    let rect = content_rect(fb);
+    let rect = default_areas(fb).0;
     let width = rect.2;
 
     let (r, g, b) = o.clock_color.unwrap_or_else(|| accent_color(color_mode));
@@ -2454,7 +2560,7 @@ fn draw_idle_clock(fb: &mut Framebuffer, color_mode: ColorMode) {
             lines.push((i18n::date_long(&now), o.clock_date_size));
         }
     }
-    let lines: Vec<(String, u32)> = lines
+    let mut lines: Vec<(String, u32)> = lines
         .into_iter()
         .map(|(t, max)| {
             let sc = fit_scale(&t, max, max_w);
@@ -2462,7 +2568,26 @@ fn draw_idle_clock(fb: &mut Framebuffer, color_mode: ColorMode) {
         })
         .collect();
 
-    let gap = 20u32;
+    // With the pixel game below the clock there is less room: shrink the whole block
+    // (keeping the time : date proportion) until it fits the area's height.
+    let gap = if game_strip_on() { 10u32 } else { 20u32 };
+    let total_h = |ls: &[(String, u32)]| -> u32 {
+        ls.iter().map(|(_, sc)| Framebuffer::text_height(*sc)).sum::<u32>() + gap * (ls.len() as u32 - 1)
+    };
+    if total_h(&lines) + 8 > rect.3 {
+        let full = lines.clone();
+        let t0 = full[0].1.max(1);
+        for ts in (1..t0).rev() {
+            // The date keeps its proportion to the time (but stays readable: at least 2).
+            for (i, (_, sc)) in lines.iter_mut().enumerate() {
+                *sc = if i == 0 { ts } else { (full[i].1 * ts / t0).max(2).min(full[i].1) };
+            }
+            if total_h(&lines) + 8 <= rect.3 {
+                break;
+            }
+        }
+    }
+
     let block_height: u32 = lines
         .iter()
         .map(|(_, sc)| Framebuffer::text_height(*sc))
@@ -3294,6 +3419,81 @@ mod layout_tests {
         }
         assert!(parse("music_spectrum_color = rainbowish\n").is_err());
         assert!(parse("music_spectrum_color = fire, #FF0000\n").is_err()); // presets and colors do not mix
+    }
+
+    /// The game strip sits between the clock and the info lines, on the classic default
+    /// screen and on the per-item "default2" one, and nothing is drawn on top of it.
+    #[test]
+    fn pixel_game_strip_shares_the_default_and_default2_screens() {
+        let sys = System::new_all();
+        let gpu = gpu_amd::GpuAmdData::default();
+        let configs = [
+            ("classic", ""),
+            ("items_top", "layout = default2\ncpu_size = 4\ncpu_position = top-left\nram_size = 3\nram_position = top-right\ngpu_size = 4\ngpu_position = top\n"),
+            ("items_bottom", "layout = default2\ncpu_size = 3\ncpu_position = bottom-left\nram_size = 3\nram_position = bottom-right\nnowplaying_position = bottom\n"),
+            ("status_bottom", "status_position = bottom-left\n"),
+        ];
+        for (name, txt) in configs {
+            let mut o = parse_ui_options(&ConfigFile::parse(txt).unwrap()).unwrap();
+            assert!(o.pixel_game, "on by default");
+            if name.starts_with("items") {
+                // What the main loop does while the "default2" layout is on screen.
+                o.status_style = StatusStyle::Items;
+            }
+            TEST_OPTS.with(|t| *t.borrow_mut() = Some(o));
+            TEST_GAME_STRIP.with(|t| t.set(true));
+            let mut fb = Framebuffer::new(Orientation::Landscape.canvas());
+            fb.clear(0, 0, 0);
+            let (main_rect, game_rect) = default_areas(&fb);
+            let game_rect = game_rect.unwrap_or_else(|| panic!("{name}: no room for the game"));
+            let content = content_rect(&fb);
+            // The strip is inside the content area (so clear of the info bands), below the clock area.
+            assert!(game_rect.1 >= main_rect.1 + main_rect.3, "{name}: strip must be under the clock area");
+            assert!(game_rect.1 + game_rect.3 <= content.1 + content.3, "{name}: strip leaks into the info band");
+            assert!(game_rect.3 >= 84 && main_rect.3 >= 70, "{name}: {main_rect:?} {game_rect:?}");
+            draw_idle_clock(&mut fb, ColorMode::Default);
+            // The clock must stay out of the strip.
+            let lit = |r: (u32, u32, u32, u32)| {
+                (r.1..r.1 + r.3).any(|y| (r.0..r.0 + r.2).any(|x| fb.as_bytes()[((y * fb.width() + x) * 3) as usize..][..3] != [0, 0, 0]))
+            };
+            assert!(!lit(game_rect), "{name}: the clock spilled into the game strip");
+            assert!(lit(main_rect), "{name}: the clock should still be drawn");
+            let mut pg = pixel_game::PixelGame::new();
+            pg.frame(&mut fb, game_rect, &pixel_game::Inputs::default(), pixel_game::HeroChoice::Both, true);
+            let mut marquee = Marquee::new();
+            draw_status_lines(
+                &mut fb, &sys, Some(37.0), &gpu, (123.0, 45.0), (1.5, 0.2), Some((40.0, false)),
+                Some(61.0), Some(88.0), Some(4900), Some("Artist - Song"), None, &mut marquee,
+            );
+            if let Ok(dir) = std::env::var("TROFEO_DUMP_DIR") {
+                std::fs::write(
+                    format!("{dir}/game_{name}.ppm"),
+                    [format!("P6\n{} {}\n255\n", fb.width(), fb.height()).into_bytes(), fb.as_bytes().to_vec()].concat(),
+                ).unwrap();
+            }
+        }
+        // Switched off (or no room): the old full-height clock area.
+        TEST_GAME_STRIP.with(|t| t.set(false));
+        let fb = Framebuffer::new(Orientation::Landscape.canvas());
+        assert_eq!(default_areas(&fb), (content_rect(&fb), None));
+        assert_eq!(game_strip_height(120, 46), 0); // too short a content area
+        assert!(game_strip_height(352, 46) >= 84 && game_strip_height(1700, 46) <= 260);
+        TEST_OPTS.with(|t| *t.borrow_mut() = None);
+    }
+
+    #[test]
+    fn pixel_game_options_parse() {
+        use pixel_game::HeroChoice::*;
+        let parse = |t: &str| parse_ui_options(&ConfigFile::parse(t).unwrap());
+        let d = parse("").unwrap();
+        assert!(d.pixel_game && d.pixel_game_hud && d.pixel_game_hero == Both && d.pixel_game_height == 46);
+        let o = parse("pixel_game = false\npixel_game_hero = cat\npixel_game_height = 30\npixel_game_hud = no\n").unwrap();
+        assert!(!o.pixel_game && !o.pixel_game_hud && o.pixel_game_hero == Cat && o.pixel_game_height == 30);
+        assert_eq!(parse("pixel_game_hero = KNIGHT\n").unwrap().pixel_game_hero, Knight);
+        assert!(parse("pixel_game_hero = dragon\n").is_err());
+        assert!(parse("pixel_game_height = 10\n").is_err());
+        assert!(parse("pixel_game_height = 90\n").is_err());
+        assert!(parse("pixel_game = maybe\n").is_err());
     }
 
     #[test]
