@@ -45,9 +45,9 @@ system status (CPU/GPU/RAM/temp) stays readable while playing.
   scrolling line on top of any screen, and/or its own full panel.
 - Sync EQ bar color with an **OpenRGB** device.
 - Adaptive FPS: drops to idle when silent → saves CPU.
-![Overview](img/anteprima_stili_1.png)
-![Overview](img/anteprima_stili_2.png)
-![Overview](img/anteprima_stili_3.png)
+![Overvieweq1](img/anteprima_stili_1.png)
+![Overvieweq2](img/anteprima_stili_2.png)
+![Overvieweq3](img/anteprima_stili_3.png)
 ## Usage
 
 ```bash
