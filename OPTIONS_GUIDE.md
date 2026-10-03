@@ -327,6 +327,52 @@ spectrum_palette = neon
 # music_bg_fit = center
 ```
 
+## Pixel game (mini platformer under the clock)
+
+| Key | CLI | Values | Default |
+|---|---|---|---|
+| `pixel_game` | `--pixel-game` | `true`/`false` | `true` |
+| `pixel_game_hero` | `--pixel-game-hero` | `knight` / `cat` / `both` | `both` |
+| `pixel_game_height` | `--pixel-game-height` | `20`-`70` (% of the area) | `46` |
+| `pixel_game_hud` | `--pixel-game-hud` | `true`/`false` | `true` |
+
+On the **default screen** (and on `default2`, the one with per-item styling) a strip of
+pixel-art game is drawn **under the clock**: the clock shrinks to make room, and the game
+sits just above the info line when that is at the bottom (below it when the info is on
+top). A little knight or cat runs along a scrolling landscape and jumps over rocks, bushes,
+crates, slimes and holes by itself. It never shows on the preset layout panels, the music
+screen or the in-game dashboard, and it needs the clock to be shown (`hide = clock` turns it off too).
+
+The world reacts to what your computer is doing:
+
+- **CPU load** sets the running speed; above 80 % the hero sprints and kicks up dust.
+- **Music**: while sound plays the hero hops on the bass and little notes float up.
+  (On the default screen the spectrum then takes the clock's place above the game.)
+- **Network bursts** drop a row of coins to collect; **disk bursts** drop a treasure chest.
+  The counter in the top-left corner (`pixel_game_hud`) shows the coins collected since start.
+- **On the hour** there are fireworks and a victory dance.
+- **The sky follows the real time**: dawn, day with sun and birds, dusk, night with moon and stars.
+- **The weather** (the same data as the `weather` item) decides sun / partly cloudy / overcast,
+  rain, snow, fog and thunderstorms with lightning. Without weather data the sky is clear.
+- The knight cuts slimes down when running slowly; the cat just jumps. With `both`
+  they take turns every 5 minutes (with a little puff of smoke).
+
+`pixel_game_height` is the share of the free area the strip takes: more makes the game
+bigger and the clock smaller. If the area is too short for it (a very tall info block, a
+tiny panel) the game is simply not drawn.
+
+**Frame rate:** an animation needs smooth frames, so while the game is on screen the
+idle screen runs at `--active-fps` (15 by default) instead of `--idle-fps` (2). Drawing the
+game itself is cheap (about 0.3 ms per frame); the cost is JPEG-encoding and sending more
+frames to the panel. If you prefer the lowest possible load, set `pixel_game = false`.
+
+```ini
+pixel_game = true
+pixel_game_hero = cat         # knight | cat | both
+pixel_game_height = 50
+pixel_game_hud = false
+```
+
 ## Positions
 
 Anywhere a "position" is accepted (`status_position`, `clock_position`,
@@ -796,6 +842,10 @@ layout_interval = 15
 # --- Panels ---
 panel_opacity = 60
 text_backdrop = true
+
+# --- Pixel game under the clock ---
+pixel_game = true
+pixel_game_hero = both
 
 # --- Music screen ---
 music_screen = true

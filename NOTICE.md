@@ -47,6 +47,9 @@ Starting from the `sukualam/trofeo-lcd` codebase, this fork has:
   glow, artist/title/album, progress bar, side spectrum, colors taken from the
   cover, and a configurable background: gradient, blurred cover, flat color or none, and a selectable footer of CPU/GPU/RAM stats, and its own spectrum color: from the cover or fixed) fed by the Windows media controls or
   `playerctl` on Linux.
+- Added a **pixel-art mini game** under the clock: a self-playing platformer (original
+  knight and cat heroes) whose speed, jumps, coins, fireworks, sky and weather react to CPU
+  load, music, network/disk activity, the clock and the weather module.
 - Added an **OpenRGB** sync option, a global **screenshot hotkey**
   (lossless PNG), a **console-hide** option, and an adaptive idle/active FPS
   system.

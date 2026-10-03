@@ -173,6 +173,17 @@ language = en
 #   #1DB954 = one fixed color    #FF0080, #00FFFF = gradient    fire, ocean = presets (rotate)
 # music_spectrum_color = cover
 
+# --- Pixel game --------------------------------------------------------------------
+# A little self-playing pixel-art platformer under the clock (default screen and
+# "default2"): a knight or a cat runs and jumps over obstacles. The CPU load sets its
+# speed, music makes it hop, network / disk bursts drop coins / a chest, the hour brings
+# fireworks, and the sky follows the real time of day and the weather.
+# While it is shown the idle screen runs at --active-fps (smooth animation).
+# pixel_game = true
+# pixel_game_hero = both      # knight | cat | both (they take turns every 5 minutes)
+# pixel_game_height = 46      # 20-70: % of the free area taken by the game strip
+# pixel_game_hud = true       # coin counter in the corner
+
 # --- Spectrum styles & colors ---------------------------------------------------
 # Style: bars (classic) | led | peaks | area | mirror. Several, comma-separated, or "all"
 # rotate every spectrum_style_interval seconds.
