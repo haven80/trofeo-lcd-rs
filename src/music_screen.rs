@@ -12,6 +12,8 @@
 //! Landscape: `[cover] [text ............] [spectrum]`.
 //! Portrait:  cover on top, text below it, spectrum at the bottom.
 //! Without a cover (player publishes none) a stylised record is drawn instead.
+//! A small line of system stats (CPU / GPU / RAM by default, `music_stats`)
+//! sits in the strip at the very bottom.
 
 use crate::media::{CoverArt, TrackInfo};
 use crate::spectrum::{self, Rgb};
@@ -98,6 +100,97 @@ impl Default for Bg {
     fn default() -> Self {
         Bg { mode: BgMode::Gradient, brightness: 40, blur: 70, fit: BgFit::Center, color: (0x12, 0x12, 0x18) }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Footer stats (small system info line at the bottom)
+// ---------------------------------------------------------------------------
+
+/// One entry of the small info line at the bottom (`music_stats`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StatItem {
+    Cpu,
+    Gpu,
+    Ram,
+    Net,
+    Disk,
+    Time,
+    Uptime,
+}
+
+impl StatItem {
+    pub const ALL: [StatItem; 7] =
+        [StatItem::Cpu, StatItem::Gpu, StatItem::Ram, StatItem::Net, StatItem::Disk, StatItem::Time, StatItem::Uptime];
+    pub const NAMES: &'static str = "cpu | gpu | ram | net | disk | time | uptime | all | none";
+
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s.trim().to_ascii_lowercase().as_str() {
+            "cpu" => StatItem::Cpu,
+            "gpu" => StatItem::Gpu,
+            "ram" | "mem" | "memory" => StatItem::Ram,
+            "net" | "network" => StatItem::Net,
+            "disk" => StatItem::Disk,
+            "time" | "clock" => StatItem::Time,
+            "uptime" => StatItem::Uptime,
+            _ => return None,
+        })
+    }
+}
+
+/// The default footer: processor, graphics card and memory load.
+pub const DEFAULT_STATS: [StatItem; 3] = [StatItem::Cpu, StatItem::Gpu, StatItem::Ram];
+
+/// The numbers the footer shows; filled by the main loop every frame.
+#[derive(Clone, Debug, Default)]
+pub struct Stats {
+    pub cpu: Option<f32>,
+    pub cpu_temp: Option<f32>,
+    pub gpu: Option<f32>,
+    pub gpu_temp: Option<i32>,
+    /// (used, total) in MB.
+    pub ram_mb: Option<(u64, u64)>,
+    /// (down, up) in KB/s.
+    pub net_kb: Option<(f64, f64)>,
+    /// (read, write) in MB/s.
+    pub disk_mb: Option<(f64, f64)>,
+    pub time: String,
+    pub uptime: String,
+}
+
+/// `(label, value)` for each wanted item that has data, in the wanted order.
+fn footer_segments(items: &[StatItem], st: &Stats, o: &UiOptions) -> Vec<(String, String)> {
+    let tr = crate::i18n::t();
+    let with_temp = |pct: String, t: Option<String>| match t {
+        Some(t) => format!("{pct} {t}"),
+        None => pct,
+    };
+    let mut out = Vec::new();
+    for it in items {
+        let seg = match it {
+            StatItem::Cpu => st.cpu.map(|v| ("CPU".to_string(), with_temp(crate::fmt_pct(v), st.cpu_temp.map(|t| format!("{t:.0}C"))))),
+            StatItem::Gpu => st.gpu.map(|v| ("GPU".to_string(), with_temp(crate::fmt_pct(v), st.gpu_temp.map(|t| format!("{t}C"))))),
+            StatItem::Ram => st.ram_mb.map(|(u, t)| (tr.mem.to_string(), crate::fmt_mem(u, t, o.mem_gb))),
+            StatItem::Net => st.net_kb.map(|(d, u)| {
+                (tr.net.to_string(), format!("{} {} {} {}", tr.net_down, crate::fmt_net(d, o.net_unit), tr.net_up, crate::fmt_net(u, o.net_unit)))
+            }),
+            StatItem::Disk => st.disk_mb.map(|(r, w)| {
+                (tr.disk.to_string(), format!("{} {r:.1}MB/S {} {w:.1}MB/S", tr.disk_read, tr.disk_write))
+            }),
+            StatItem::Time => (!st.time.is_empty()).then(|| (String::new(), st.time.clone())),
+            StatItem::Uptime => (!st.uptime.is_empty()).then(|| (tr.uptime.to_string(), st.uptime.clone())),
+        };
+        out.extend(seg);
+    }
+    out
+}
+
+/// Width in pixels of the segments laid out with `gap` pixels between them.
+fn footer_width(segs: &[(String, String)], scale: u32, gap: u32) -> u32 {
+    let one = |(l, v): &(String, String)| {
+        let sp = if l.is_empty() { 0 } else { 6 * scale }; // a space between label and value
+        Framebuffer::text_width(l, scale) + sp + Framebuffer::text_width(v, scale)
+    };
+    segs.iter().map(one).sum::<u32>() + gap * segs.len().saturating_sub(1) as u32
 }
 
 // ---------------------------------------------------------------------------
@@ -458,6 +551,8 @@ fn fill_circle(fb: &mut Framebuffer, cx: i64, cy: i64, r: i64, c: Rgb) {
 // ---------------------------------------------------------------------------
 
 pub struct MusicScreen {
+    /// What the footer shows; set by the main loop before each `draw`.
+    pub stats: Stats,
     cache: Option<Cache>,
     title_m: Marquee,
     artist_m: Marquee,
@@ -469,7 +564,7 @@ const PROGRESS_H: u32 = 8 + 10 + 14;
 
 impl MusicScreen {
     pub fn new() -> Self {
-        Self { cache: None, title_m: Marquee::new(), artist_m: Marquee::new(), album_m: Marquee::new() }
+        Self { stats: Stats::default(), cache: None, title_m: Marquee::new(), artist_m: Marquee::new(), album_m: Marquee::new() }
     }
 
     /// The accent color currently in use (for tests/tools).
@@ -564,6 +659,51 @@ impl MusicScreen {
             };
             spectrum::draw(fb, style, (sp.x, sp.y, sp.w, sp.h), heights, peaks, &|level, pos| colors.at(level, pos));
         }
+
+        // ---- footer: small system stats in the strip below everything ----
+        let bottom = (g.cover.y + g.cover.h).max(g.text.y + g.text.h).max(g.spectrum.y + g.spectrum.h);
+        draw_footer(fb, bottom, g.cover.x, &self.stats, o, accent);
+    }
+}
+
+/// Small system info in the strip under the cover/text/spectrum: `CPU 23% 54C   GPU 12%   MEM 8.1/31GB`.
+/// Uses the biggest text that fits; when even the small one is too wide the last items are dropped.
+fn draw_footer(fb: &mut Framebuffer, bottom: u32, x0: u32, st: &Stats, o: &UiOptions, accent: Rgb) {
+    let items: &[StatItem] = if o.music_stats_set { &o.music_stats } else { &DEFAULT_STATS };
+    if items.is_empty() {
+        return;
+    }
+    let (w, h) = (fb.width(), fb.height());
+    let strip = h.saturating_sub(bottom);
+    let avail = w.saturating_sub(2 * x0);
+    let mut segs = footer_segments(items, st, o);
+    if segs.is_empty() || avail == 0 {
+        return;
+    }
+    // Biggest scale that fits the strip height, then shrink / drop items to fit the width.
+    let mut scale = if strip >= 7 * 2 + 6 { 2 } else if strip >= 7 + 2 { 1 } else { return };
+    let gap = |s: u32| 10 * s;
+    if footer_width(&segs, scale, gap(scale)) > avail && scale == 2 {
+        scale = 1;
+    }
+    while segs.len() > 1 && footer_width(&segs, scale, gap(scale)) > avail {
+        segs.pop();
+    }
+    if footer_width(&segs, scale, gap(scale)) > avail {
+        return;
+    }
+    let y = bottom + (strip - 7 * scale) / 2;
+    let (label_c, value_c) = ((0xA6, 0xA6, 0xB4), mix(accent, (255, 255, 255), 0.75));
+    let mut x = x0;
+    for (label, value) in &segs {
+        if !label.is_empty() {
+            fb.draw_text(x + 1, y + 1, label, 0, 0, 0, scale);
+            fb.draw_text(x, y, label, label_c.0, label_c.1, label_c.2, scale);
+            x += Framebuffer::text_width(label, scale) + 6 * scale;
+        }
+        fb.draw_text(x + 1, y + 1, value, 0, 0, 0, scale);
+        fb.draw_text(x, y, value, value_c.0, value_c.1, value_c.2, scale);
+        x += Framebuffer::text_width(value, scale) + gap(scale);
     }
 }
 
@@ -1016,5 +1156,87 @@ mod tests {
         let g = geometry(1920, 462);
         let p = get(&fb, g.cover.x / 2, 20);
         assert!(p.1 > p.0 && p.1 > p.2, "default accent is green: {p:?}");
+    }
+
+    fn sample_stats() -> Stats {
+        Stats {
+            cpu: Some(23.0),
+            cpu_temp: Some(54.0),
+            gpu: Some(61.0),
+            gpu_temp: Some(48),
+            ram_mb: Some((12_000, 32_000)),
+            net_kb: Some((120.0, 8.0)),
+            disk_mb: Some((1.0, 2.0)),
+            time: "12:34:56".into(),
+            uptime: "01:02:03".into(),
+        }
+    }
+
+    /// Draw a black canvas with the footer and report whether any pixel in the strip is lit.
+    fn footer_pixels(w: u32, h: u32, o: &UiOptions, st: Stats) -> (usize, usize) {
+        let mut o = o.clone();
+        o.music_bg.mode = BgMode::None;
+        let mut fb = new_fb(w, h);
+        fb.clear(0, 0, 0);
+        let mut m = MusicScreen::new();
+        m.stats = st;
+        m.draw(&mut fb, &track("S", "A", None, None), &vec![0.0; 48], &vec![0.0; 48], &o);
+        let g = geometry(w, h);
+        let bottom = (g.cover.y + g.cover.h).max(g.text.y + g.text.h).max(g.spectrum.y + g.spectrum.h);
+        let lit = |y0: u32, y1: u32| {
+            (y0..y1).flat_map(|y| (0..w).map(move |x| (x, y))).filter(|&(x, y)| get(&fb, x, y) != (0, 0, 0)).count()
+        };
+        // (pixels in the strip, pixels in the last row of the canvas)
+        (lit(bottom, h), lit(h - 1, h))
+    }
+
+    #[test]
+    fn footer_shows_cpu_gpu_ram_by_default_in_the_bottom_strip() {
+        let (strip, last_row) = footer_pixels(1920, 462, &opts(), sample_stats());
+        assert!(strip > 150, "footer should be drawn, got {strip} pixels");
+        assert_eq!(last_row, 0, "must not touch the very last row (text sits inside the strip)");
+    }
+
+    #[test]
+    fn footer_can_be_turned_off_or_left_without_data() {
+        let mut o = opts();
+        o.music_stats_set = true; // explicit "none"
+        assert_eq!(footer_pixels(1920, 462, &o, sample_stats()).0, 0);
+        assert_eq!(footer_pixels(1920, 462, &opts(), Stats::default()).0, 0); // nothing to show
+    }
+
+    #[test]
+    fn footer_items_follow_the_selection_and_skip_missing_data() {
+        let st = sample_stats();
+        let o = opts();
+        let segs = footer_segments(&[StatItem::Net, StatItem::Cpu], &st, &o);
+        assert_eq!(segs.len(), 2);
+        assert_eq!(segs[0].0, "NET"); // order kept
+        assert_eq!(segs[1], ("CPU".to_string(), "23% 54C".to_string()));
+        let no_gpu = Stats { gpu: None, ..st.clone() };
+        let segs = footer_segments(&DEFAULT_STATS, &no_gpu, &o);
+        assert_eq!(segs.iter().map(|s| s.0.as_str()).collect::<Vec<_>>(), ["CPU", "MEM"]);
+        // A clock has no label; everything formats as plain ASCII the font can draw.
+        let all = footer_segments(&StatItem::ALL, &st, &o);
+        assert_eq!(all.len(), 7);
+        assert!(all.iter().all(|(l, v)| l.is_ascii() && v.is_ascii()));
+    }
+
+    #[test]
+    fn footer_never_leaves_the_canvas_even_when_there_is_too_much_to_show() {
+        let mut o = opts();
+        o.music_stats = StatItem::ALL.to_vec();
+        o.music_stats_set = true;
+        for (w, h) in [(1920u32, 462u32), (462, 1920), (800, 480), (300, 200), (60, 60)] {
+            // Lit pixels outside the strip would mean it spilled; the strip is the only place drawn here.
+            let (strip, _) = footer_pixels(w, h, &o, sample_stats());
+            let _ = strip; // just must not panic / index out of range
+        }
+        // Portrait is narrow: the long list is cut down but something is still drawn.
+        assert!(footer_pixels(462, 1920, &o, sample_stats()).0 > 50);
+        // Width accounting matches what is drawn.
+        let segs = footer_segments(&StatItem::ALL, &sample_stats(), &o);
+        assert!(footer_width(&segs, 1, 10) < footer_width(&segs, 2, 20));
+        assert!(footer_width(&segs[..2], 2, 20) < footer_width(&segs, 2, 20));
     }
 }

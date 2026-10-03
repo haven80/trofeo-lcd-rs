@@ -310,6 +310,7 @@ fn print_help() {
          \x20\x20--layout-hold-on-music <true|false>  While music plays, stay on the first layout (no rotation)\n\
          \x20\x20--music-screen <true|false>  While music plays, show a now-playing card (cover, title, progress, spectrum)\n\
          \x20\x20--music-progress <true|false>  Music screen: progress bar and times (default: true)\n\
+         \x20\x20--music-stats <list>      Music screen footer: cpu, gpu, ram, net, disk, time, uptime, all or none (default: cpu,gpu,ram)\n\
          \x20\x20--music-bg <gradient|blur|color|solid|none>  Music screen background (default: gradient)\n\
          \x20\x20--music-bg-brightness / --music-bg-blur <0-100>  Background brightness (40) / blur amount (70)\n\
          \x20\x20--music-bg-fit <center|stretch>, --music-bg-color <color>  Blur fit; color for 'solid'\n\
@@ -675,7 +676,7 @@ const OVERRIDE_KEYS: &[&str] = &[
     "spectrum_style", "spectrum_style_interval", "spectrum_palette",
     "spectrum_palette_interval", "spectrum_gradient", "spectrum_rainbow_speed",
     "music_screen", "music_blur", "music_progress", "music_bg", "music_bg_brightness",
-    "music_bg_blur", "music_bg_fit", "music_bg_color",
+    "music_bg_blur", "music_bg_fit", "music_bg_color", "music_stats",
 ];
 
 /// Network (`net_unit`) and RAM (`mem_unit`) units.
@@ -957,8 +958,38 @@ fn parse_ui_options(file: &ConfigFile) -> anyhow::Result<UiOptions> {
         },
         music_screen: file.get_bool("music_screen").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(false),
         music_bg: parse_music_bg(file)?,
+        music_stats: parse_music_stats(file)?,
+        music_stats_set: file.get("music_stats").is_some(),
         music_progress: file.get_bool("music_progress").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(true),
     })
+}
+
+/// `music_stats = cpu, gpu, ram` / `all` / `none`: the small info line at the bottom
+/// of the music screen (order is kept; unset = cpu, gpu, ram).
+fn parse_music_stats(file: &ConfigFile) -> anyhow::Result<Vec<music_screen::StatItem>> {
+    use music_screen::StatItem;
+    let Some(list) = file.get("music_stats") else { return Ok(Vec::new()) };
+    let mut out: Vec<StatItem> = Vec::new();
+    for raw in list.split(',') {
+        let name = raw.trim();
+        if name.is_empty() || name.eq_ignore_ascii_case("none") || name.eq_ignore_ascii_case("off") {
+            continue;
+        }
+        if name.eq_ignore_ascii_case("all") {
+            for it in StatItem::ALL {
+                if !out.contains(&it) {
+                    out.push(it);
+                }
+            }
+            continue;
+        }
+        let it = StatItem::parse(name)
+            .ok_or_else(|| anyhow::anyhow!("music_stats: '{name}' not valid ({})", StatItem::NAMES))?;
+        if !out.contains(&it) {
+            out.push(it);
+        }
+    }
+    Ok(out)
 }
 
 /// `music_bg*` keys -> the music screen background. The old `music_blur = false`
@@ -1672,6 +1703,17 @@ fn main() -> anyhow::Result<()> {
             );
         } else if music_screen_on {
             if let Some(t) = &track {
+                music.stats = music_screen::Stats {
+                    cpu: Some(sys.global_cpu_info().cpu_usage()),
+                    cpu_temp: latest_cpu_temp,
+                    gpu: latest_gpu_percent,
+                    gpu_temp: latest_gpu_data.temp_edge_c,
+                    ram_mb: Some((sys.used_memory() / 1024 / 1024, sys.total_memory() / 1024 / 1024)),
+                    net_kb: Some(latest_net_kb),
+                    disk_mb: Some(latest_disk_mb),
+                    time: Local::now().format("%H:%M:%S").to_string(),
+                    uptime: format_uptime(System::uptime()),
+                };
                 music.draw(target, t, &bar_heights, peak_tracker.peaks(), &opts());
             }
         } else if is_idle {
@@ -1909,6 +1951,10 @@ struct UiOptions {
     /// Music screen background: mode (gradient / blur / color / solid / none),
     /// brightness, blur amount, fit and the solid color.
     music_bg: music_screen::Bg,
+    /// Music screen footer: which system stats to show in small text at the bottom.
+    /// `music_stats_set` tells "not configured" (default cpu, gpu, ram) from "none".
+    music_stats: Vec<music_screen::StatItem>,
+    music_stats_set: bool,
     /// Music screen: show the progress bar and times (when the player reports them).
     music_progress: bool,
 }
@@ -1952,6 +1998,8 @@ impl Default for UiOptions {
             spectrum_rainbow_speed: 30,
             music_screen: false,
             music_bg: music_screen::Bg::default(),
+            music_stats: Vec::new(),
+            music_stats_set: false,
             music_progress: true,
         }
     }
@@ -3170,6 +3218,20 @@ mod layout_tests {
         let o = parse("music_screen = true\nmusic_progress = no\n").unwrap();
         assert!(o.music_screen && !o.music_progress);
         assert!(parse("music_screen = sometimes\n").is_err());
+    }
+
+    #[test]
+    fn music_stats_option_parses() {
+        use music_screen::StatItem::*;
+        let parse = |t: &str| parse_ui_options(&ConfigFile::parse(t).unwrap());
+        let d = parse("").unwrap();
+        assert!(!d.music_stats_set && d.music_stats.is_empty()); // unset = built-in default (cpu, gpu, ram)
+        let o = parse("music_stats = net, cpu, net\n").unwrap();
+        assert!(o.music_stats_set && o.music_stats == [Net, Cpu]); // order kept, duplicates dropped
+        assert_eq!(parse("music_stats = all\n").unwrap().music_stats.len(), 7);
+        let n = parse("music_stats = none\n").unwrap();
+        assert!(n.music_stats_set && n.music_stats.is_empty()); // explicitly nothing
+        assert!(parse("music_stats = cpu, fans\n").is_err());
     }
 
     #[test]
