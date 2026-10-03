@@ -1,6 +1,10 @@
 # trofeo_lcd
 ![overview](img/overview.png)
 ![overview2](img/overview2.jpeg)
+![overview2](img/overview3.jpeg)
+![overview2](img/overview4.jpeg)
+![overview2](img/overview5.jpeg)
+![overview2](img/overview6.jpeg)
 
 
 **A lightweight, open-source alternative to the official Thermalright TRCC
