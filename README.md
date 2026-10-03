@@ -23,11 +23,16 @@ depending on the moment:
 
 **Idle** — audio is quiet, so the EQ bars are low and the top bar shows
 system info: CPU usage & real-time frequency, RAM, uptime, clock and date.
+Under the clock, a little self-playing **pixel-art game** runs
+(see [Pixel game](#pixel-game-under-the-clock)).
 
 ![Idle — EQ idle & system info](img/idle.png)
 
+![Idle — clock, system info and the pixel game](img/pixel_game.png)
+
 **Media** — a song is playing: the stripes follow the music, and the top bar
 shows the now-playing track (title/artist/album from the media controls).
+With `music_screen = true` the whole panel becomes a Spotify-style now-playing card.
 ![Music_Screen — now playing](img/anteprima_musica_varianti.png)
 
 
@@ -39,8 +44,14 @@ system status (CPU/GPU/RAM/temp) stays readable while playing.
 ## Features
 
 - EQ bars (48) from currently playing audio (WASAPI loopback on Windows,
-  PulseAudio/PipeWire on Linux), colored green→yellow→red.
+  PulseAudio/PipeWire on Linux), colored green→yellow→red — or any of 9 color
+  palettes and 5 drawing styles.
 - System info: CPU %, real-time CPU frequency, RAM, uptime, clock & date.
+- **Music screen**: a Spotify-style now-playing card (album cover, artist/title,
+  progress bar, spectrum, colors taken from the cover).
+- **Pixel game** under the clock: a self-playing pixel-art platformer (a knight
+  or a cat) that reacts to CPU load, music, network/disk bursts, the hour, and
+  the real weather and time of day.
 - Can also drive a **DeepCool** display (sends CPU data over HID).
 - **Second monitor mode** (`trofeo_screen`): the LCD becomes a real second
   monitor.
@@ -171,6 +182,30 @@ Also settable in `trofeo.conf` (see `trofeo.conf.example`) or via CLI:
   `background_offset_x/y`.
 
 Every key is also a CLI flag (`--hide spectrum`, `--clock-position top-right`).
+
+### Pixel game under the clock
+
+![Pixel game — scenes at different times of day and weather](img/pixel_game_scenes.png)
+
+On the default screen (and on `default2`, the per-item one) a strip of
+**pixel-art game** is drawn under the clock, which shrinks to make room. A
+little knight or cat (`pixel_game_hero = knight | cat | both`) runs through a
+scrolling landscape and jumps over rocks, bushes, crates, slimes and holes by
+itself, and the world reacts to your computer:
+
+- **CPU load** sets the running speed (a sprint with dust at high load);
+- **music** makes the hero hop on the bass, with notes floating up;
+- **network bursts** drop rows of coins and **disk bursts** a treasure chest;
+- **on the hour** there are fireworks and a victory dance;
+- the **sky follows the real time** (dawn, day, dusk, night with moon and stars)
+  and the **weather** from the weather module (clouds, rain, snow, fog, thunderstorms).
+
+It is on by default; `pixel_game = false` turns it off, `pixel_game_height = 20-70`
+sets how much room it takes and `pixel_game_hud = false` hides the coin counter.
+It never shows on the preset layout panels, the music screen or the in-game
+dashboard. Because an animation needs smooth frames, the idle screen runs at
+`--active-fps` while it is visible — see [Performance](#performance). Details in the
+**[Options guide](./OPTIONS_GUIDE.md#pixel-game-mini-platformer-under-the-clock)**.
 
 ### Brightness, DeepCool, FPS
 
@@ -316,12 +351,16 @@ Requires a *Virtual Display Driver* (VDD) at 1920×462 — see
 - `src/dxgi_capture.rs` + `src/bin/screen.rs` — second monitor mode.
 - `src/weather.rs` + `src/weather_icon.rs` — weather (Open-Meteo) and its condition icons.
 - `src/ticker.rs` — news ticker: RSS/Atom feeds, plain-text URLs, or a local file.
+- `src/spectrum.rs` — spectrum styles and color palettes.
+- `src/media.rs` + `src/music_screen.rs` — now-playing info (Windows media controls / `playerctl`) and the Spotify-style music screen.
+- `src/pixel_game.rs` — the self-playing pixel-art platformer under the clock.
 - `src/main.rs` — main loop: audio → FFT → EQ bars → send to screen.
 
 ## Performance
 
 Measured on a Windows PC (12 logical processors), running `trofeo_lcd` at
-default settings (idle FPS 2 / active 15, DeepCool enabled):
+default settings (idle FPS 2 / active 15, DeepCool enabled), before the pixel
+game existed:
 
 | Metric | Measured |
 |---|---|
@@ -330,6 +369,13 @@ default settings (idle FPS 2 / active 15, DeepCool enabled):
 It stays this light thanks to adaptive FPS (JPEG encode + USB transfer only
 happen while there is audio) and the CPU optimizations in `src/main.rs` /
 `src/lib.rs`.
+
+The **pixel game** (on by default) trades some of that for animation: while it
+is on screen the idle screen runs at the active FPS (15) instead of the idle
+one (2). Drawing the game itself costs well under a millisecond per frame; the
+extra load is JPEG-encoding and sending more frames. Set `pixel_game = false`
+to get the minimal-load behavior measured above. These figures have not been
+re-measured with the game on.
 
 ## Credits
 
