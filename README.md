@@ -1,4 +1,5 @@
 # trofeo_lcd
+![overview](img/overview.png)
 
 **A lightweight, open-source alternative to the official Thermalright TRCC
 software.** Audio visualizer + system info monitor for the
@@ -21,8 +22,8 @@ system info: CPU usage & real-time frequency, RAM, uptime, clock and date.
 
 **Media** — a song is playing: the stripes follow the music, and the top bar
 shows the now-playing track (title/artist/album from the media controls).
+![Music_Screen — now playing](img/anteprima_musica_varianti.png)
 
-![Media — now playing](img/media.png)
 
 **Gaming** — a game is in the foreground: game info is detected and the
 system status (CPU/GPU/RAM/temp) stays readable while playing.
