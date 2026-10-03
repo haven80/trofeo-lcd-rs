@@ -310,6 +310,7 @@ fn print_help() {
          \x20\x20--layout-hold-on-music <true|false>  While music plays, stay on the first layout (no rotation)\n\
          \x20\x20--music-screen <true|false>  While music plays, show a now-playing card (cover, title, progress, spectrum)\n\
          \x20\x20--music-progress <true|false>  Music screen: progress bar and times (default: true)\n\
+         \x20\x20--music-spectrum-color <cover|main|COLOR|PRESET>  Music screen spectrum color (default: cover)\n\
          \x20\x20--music-stats <list>      Music screen footer: cpu, gpu, ram, net, disk, time, uptime, all or none (default: cpu,gpu,ram)\n\
          \x20\x20--music-bg <gradient|blur|color|solid|none>  Music screen background (default: gradient)\n\
          \x20\x20--music-bg-brightness / --music-bg-blur <0-100>  Background brightness (40) / blur amount (70)\n\
@@ -676,7 +677,7 @@ const OVERRIDE_KEYS: &[&str] = &[
     "spectrum_style", "spectrum_style_interval", "spectrum_palette",
     "spectrum_palette_interval", "spectrum_gradient", "spectrum_rainbow_speed",
     "music_screen", "music_blur", "music_progress", "music_bg", "music_bg_brightness",
-    "music_bg_blur", "music_bg_fit", "music_bg_color", "music_stats",
+    "music_bg_blur", "music_bg_fit", "music_bg_color", "music_stats", "music_spectrum_color",
 ];
 
 /// Network (`net_unit`) and RAM (`mem_unit`) units.
@@ -959,9 +960,53 @@ fn parse_ui_options(file: &ConfigFile) -> anyhow::Result<UiOptions> {
         music_screen: file.get_bool("music_screen").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(false),
         music_bg: parse_music_bg(file)?,
         music_stats: parse_music_stats(file)?,
+        music_spectrum: parse_music_spectrum(file)?,
         music_stats_set: file.get("music_stats").is_some(),
         music_progress: file.get_bool("music_progress").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(true),
     })
+}
+
+/// `music_spectrum_color = cover | main | #RRGGBB | #RRGGBB, #RRGGBB | fire, ocean | all`:
+/// the spectrum's colors on the music screen. A single color is used flat, two or more
+/// make a gradient (quiet -> loud), preset names (several rotate) use the presets.
+/// `purple` is both a preset and a color name: the preset wins (use #800080 for the color).
+fn parse_music_spectrum(file: &ConfigFile) -> anyhow::Result<music_screen::SpectrumColor> {
+    use music_screen::SpectrumColor;
+    let Some(list) = file.get("music_spectrum_color") else { return Ok(SpectrumColor::Cover) };
+    let toks: Vec<&str> = list.split(',').map(str::trim).filter(|t| !t.is_empty()).collect();
+    match toks.as_slice() {
+        [] => return Ok(SpectrumColor::Cover),
+        [t] if t.eq_ignore_ascii_case("cover") || t.eq_ignore_ascii_case("copertina") => return Ok(SpectrumColor::Cover),
+        [t] if t.eq_ignore_ascii_case("main") || t.eq_ignore_ascii_case("same") => return Ok(SpectrumColor::Main),
+        _ => {}
+    }
+    let is_preset = |t: &str| t.eq_ignore_ascii_case("all") || t.eq_ignore_ascii_case("rotate") || spectrum::Palette::parse(t).is_some();
+    if toks.iter().all(|t| is_preset(t)) {
+        let mut out = Vec::new();
+        for t in &toks {
+            if t.eq_ignore_ascii_case("all") || t.eq_ignore_ascii_case("rotate") {
+                out.extend(spectrum::Palette::presets());
+            } else if let Some(p) = spectrum::Palette::parse(t) {
+                out.push(p);
+            }
+        }
+        out.dedup();
+        return Ok(SpectrumColor::Palettes(out));
+    }
+    let mut stops = Vec::new();
+    for t in &toks {
+        match parse_color(t) {
+            Ok(ColorMode::Custom(r, g, b)) => stops.push((r, g, b)),
+            _ => anyhow::bail!(
+                "music_spectrum_color: '{t}' is not valid (cover | main | #RRGGBB | color names | {} | all)",
+                spectrum::Palette::NAMES
+            ),
+        }
+    }
+    if stops.len() == 1 {
+        stops.push(stops[0]); // one color = flat
+    }
+    Ok(SpectrumColor::Palettes(vec![spectrum::Palette::Custom(stops)]))
 }
 
 /// `music_stats = cpu, gpu, ram` / `all` / `none`: the small info line at the bottom
@@ -1955,6 +2000,8 @@ struct UiOptions {
     /// `music_stats_set` tells "not configured" (default cpu, gpu, ram) from "none".
     music_stats: Vec<music_screen::StatItem>,
     music_stats_set: bool,
+    /// Music screen spectrum color: from the cover, as on the main screen, or its own.
+    music_spectrum: music_screen::SpectrumColor,
     /// Music screen: show the progress bar and times (when the player reports them).
     music_progress: bool,
 }
@@ -2000,6 +2047,7 @@ impl Default for UiOptions {
             music_bg: music_screen::Bg::default(),
             music_stats: Vec::new(),
             music_stats_set: false,
+            music_spectrum: music_screen::SpectrumColor::Cover,
             music_progress: true,
         }
     }
@@ -3218,6 +3266,34 @@ mod layout_tests {
         let o = parse("music_screen = true\nmusic_progress = no\n").unwrap();
         assert!(o.music_screen && !o.music_progress);
         assert!(parse("music_screen = sometimes\n").is_err());
+    }
+
+    #[test]
+    fn music_spectrum_color_option_parses() {
+        use music_screen::SpectrumColor::*;
+        let parse = |t: &str| parse_ui_options(&ConfigFile::parse(t).unwrap());
+        assert_eq!(parse("").unwrap().music_spectrum, Cover);
+        assert_eq!(parse("music_spectrum_color = cover\n").unwrap().music_spectrum, Cover);
+        assert_eq!(parse("music_spectrum_color = Main\n").unwrap().music_spectrum, Main);
+        // One color = flat; two or more = a gradient, quiet -> loud.
+        assert_eq!(
+            parse("music_spectrum_color = #0050FF\n").unwrap().music_spectrum,
+            Palettes(vec![spectrum::Palette::Custom(vec![(0, 0x50, 255), (0, 0x50, 255)])])
+        );
+        assert_eq!(
+            parse("music_spectrum_color = red, #FFFF00\n").unwrap().music_spectrum,
+            Palettes(vec![spectrum::Palette::Custom(vec![(255, 0, 0), (255, 255, 0)])])
+        );
+        // Preset names (several rotate), independent of the main spectrum_palette.
+        let o = parse("spectrum_palette = ocean\nmusic_spectrum_color = fire, neon\n").unwrap();
+        assert_eq!(o.music_spectrum, Palettes(vec![spectrum::Palette::Fire, spectrum::Palette::Neon]));
+        assert_eq!(o.spectrum_palettes, vec![spectrum::Palette::Ocean]);
+        match parse("music_spectrum_color = all\n").unwrap().music_spectrum {
+            Palettes(p) => assert!(p.len() >= 7),
+            other => panic!("{other:?}"),
+        }
+        assert!(parse("music_spectrum_color = rainbowish\n").is_err());
+        assert!(parse("music_spectrum_color = fire, #FF0000\n").is_err()); // presets and colors do not mix
     }
 
     #[test]

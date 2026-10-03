@@ -13,7 +13,8 @@
 //! Portrait:  cover on top, text below it, spectrum at the bottom.
 //! Without a cover (player publishes none) a stylised record is drawn instead.
 //! A small line of system stats (CPU / GPU / RAM by default, `music_stats`)
-//! sits in the strip at the very bottom.
+//! sits in the strip at the very bottom. The spectrum takes the cover's color
+//! unless `music_spectrum_color` says otherwise.
 
 use crate::media::{CoverArt, TrackInfo};
 use crate::spectrum::{self, Rgb};
@@ -135,6 +136,19 @@ impl StatItem {
             _ => return None,
         })
     }
+}
+
+/// Where the spectrum's colors come from on the music screen (`music_spectrum_color`),
+/// independent of the main screen's `spectrum_palette`.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SpectrumColor {
+    /// The accent color taken from the cover (default).
+    Cover,
+    /// Whatever `spectrum_palette` / `spectrum_gradient` says for the main screen
+    /// (the cover color when those are not set).
+    Main,
+    /// Own palette(s): a fixed color, a gradient, or presets that rotate.
+    Palettes(Vec<spectrum::Palette>),
 }
 
 /// The default footer: processor, graphics card and memory load.
@@ -650,7 +664,13 @@ impl MusicScreen {
                 spectrum::pick_style(&o.spectrum_styles, o.spectrum_style_interval, time)
             };
             let own = [spectrum::Palette::Custom(accent_stops(accent))];
-            let palettes: &[spectrum::Palette] = if o.spectrum_palettes.is_empty() { &own } else { &o.spectrum_palettes };
+            let palettes: &[spectrum::Palette] = match &o.music_spectrum {
+                SpectrumColor::Cover => &own,
+                SpectrumColor::Main if o.spectrum_palettes.is_empty() => &own,
+                SpectrumColor::Main => &o.spectrum_palettes,
+                SpectrumColor::Palettes(p) if p.is_empty() => &own,
+                SpectrumColor::Palettes(p) => p,
+            };
             let colors = spectrum::Colors {
                 palettes,
                 interval: o.spectrum_palette_interval as f32,
@@ -997,6 +1017,7 @@ mod tests {
         o.music_bg.mode = BgMode::None;
         o.spectrum_styles = vec![spectrum::Style::Led];
         o.spectrum_palettes = vec![spectrum::Palette::Matrix];
+        o.music_spectrum = SpectrumColor::Main; // follow the main screen's palette
         let mut fb = new_fb(1920, 462);
         fb.clear(0, 0, 0);
         MusicScreen::new().draw(&mut fb, &track("S", "A", Some(solid_cover((200, 30, 30), 16)), None), &vec![1.0; 48], &vec![1.0; 48], &o);
@@ -1238,5 +1259,49 @@ mod tests {
         let segs = footer_segments(&StatItem::ALL, &sample_stats(), &o);
         assert!(footer_width(&segs, 1, 10) < footer_width(&segs, 2, 20));
         assert!(footer_width(&segs[..2], 2, 20) < footer_width(&segs, 2, 20));
+    }
+
+    /// The brightest-saturated hue family found in the spectrum area: (reddish, greenish, bluish) pixel counts.
+    fn spectrum_hues(o: &UiOptions) -> (usize, usize, usize) {
+        let mut o = o.clone();
+        o.music_bg.mode = BgMode::None;
+        o.spectrum_styles = vec![spectrum::Style::Led];
+        let mut fb = new_fb(1920, 462);
+        fb.clear(0, 0, 0);
+        MusicScreen::new().draw(&mut fb, &track("S", "A", Some(solid_cover((200, 30, 30), 16)), None), &vec![1.0; 48], &vec![1.0; 48], &o);
+        let sp = geometry(1920, 462).spectrum;
+        let (mut r, mut g, mut b) = (0, 0, 0);
+        for y in (sp.y..sp.y + sp.h).step_by(3) {
+            for x in (sp.x..sp.x + sp.w).step_by(3) {
+                let p = get(&fb, x, y);
+                let (pr, pg, pb) = (p.0 as i32, p.1 as i32, p.2 as i32);
+                if pr > pg + 30 && pr > pb + 30 { r += 1; }
+                if pg > pr + 30 && pg > pb + 30 { g += 1; }
+                if pb > pr + 30 && pb > pg + 30 { b += 1; }
+            }
+        }
+        (r, g, b)
+    }
+
+    #[test]
+    fn music_spectrum_color_is_independent_from_the_main_screen_palette() {
+        let mut o = opts();
+        o.spectrum_palettes = vec![spectrum::Palette::Matrix]; // main screen: green
+        // Default = the cover (red here), whatever the main screen uses.
+        assert_eq!(o.music_spectrum, SpectrumColor::Cover);
+        let (r, g, _) = spectrum_hues(&o);
+        assert!(r > 200 && g == 0, "cover color expected: red {r} green {g}");
+        // `main` follows the main screen's palette again.
+        o.music_spectrum = SpectrumColor::Main;
+        let (r, g, _) = spectrum_hues(&o);
+        assert!(g > 200 && r == 0, "main palette expected: red {r} green {g}");
+        // `main` without any main palette still uses the cover.
+        o.spectrum_palettes.clear();
+        assert!(spectrum_hues(&o).0 > 200);
+        // A fixed color (flat gradient) ignores both.
+        o.spectrum_palettes = vec![spectrum::Palette::Matrix];
+        o.music_spectrum = SpectrumColor::Palettes(vec![spectrum::Palette::Custom(vec![(0, 80, 255), (0, 80, 255)])]);
+        let (r, g, b) = spectrum_hues(&o);
+        assert!(b > 200 && r == 0 && g == 0, "fixed blue expected: {r} {g} {b}");
     }
 }
