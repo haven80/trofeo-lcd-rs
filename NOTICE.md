@@ -43,6 +43,10 @@ Starting from the `sukualam/trofeo-lcd` codebase, this fork has:
   LED segments, peak caps, filled wave, mirror), seven gradient presets plus a
   scrolling rainbow and custom gradients, with optional timed rotation of both,
   and `layout_hold_on_music` to keep the first layout on screen while music plays.
+- Added a **music screen**: a Spotify-style now-playing card (album cover with
+  glow, artist/title/album, progress bar, side spectrum, colors and blurred
+  background taken from the cover) fed by the Windows media controls or
+  `playerctl` on Linux.
 - Added an **OpenRGB** sync option, a global **screenshot hotkey**
   (lossless PNG), a **console-hide** option, and an adaptive idle/active FPS
   system.

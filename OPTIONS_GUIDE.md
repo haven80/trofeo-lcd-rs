@@ -238,6 +238,46 @@ spectrum_palette = rainbow
 spectrum_rainbow_speed = 10
 ```
 
+## Music screen (now-playing card)
+
+| Key | CLI | Values | Default |
+|---|---|---|---|
+| `music_screen` | `--music-screen` | `true`/`false` | `false` |
+| `music_blur` | `--music-blur` | `true`/`false` | `true` |
+| `music_progress` | `--music-progress` | `true`/`false` | `true` |
+
+With `music_screen = true`, while a track is playing the whole panel becomes a
+Spotify-style card: the **album cover** on the left (rounded, with a soft glow),
+**artist, title and album** next to it, a **progress bar with times**, and the
+**spectrum on the side**. The background is the cover itself, blurred and
+darkened, and the accent color (artist line, progress bar, spectrum) is taken
+from the cover, so every album gets its own look. Titles too long to fit scroll.
+In portrait orientation the cover goes on top, the text below it and the
+spectrum at the bottom. When the music stops the normal screen/layout comes back.
+
+- The card replaces the status lines and the ticker while it is shown (it is a
+  full screen of its own). The in-game dashboard still wins while you are gaming.
+- The spectrum uses your `spectrum_style` / `spectrum_palette` if you set them;
+  otherwise it draws bars tinted with the cover's accent color.
+- `music_blur = false` keeps whatever is behind (solid color or your
+  `background` image) instead of the blurred cover; the cover and text are drawn on top.
+- `music_progress = false` hides the bar and times. They only appear when the
+  player reports the track length; some players don't.
+- If the player provides no cover, a stylised record is drawn instead.
+- **Windows**: cover, title and position come from the system media controls
+  (the same source as the NOW PLAYING line), so any player that shows up in the
+  Windows volume/media pop-up works — Spotify, browsers, most players.
+- **Linux**: needs `playerctl` (as for NOW PLAYING); covers are loaded from the
+  player's `file://` or `https://` art URL.
+- The font only has uppercase letters without accents, so titles appear in capitals.
+
+```ini
+music_screen = true
+# optional: choose the spectrum look yourself
+spectrum_style = mirror
+spectrum_palette = neon
+```
+
 ## Positions
 
 Anywhere a "position" is accepted (`status_position`, `clock_position`,
@@ -707,6 +747,9 @@ layout_interval = 15
 # --- Panels ---
 panel_opacity = 60
 text_backdrop = true
+
+# --- Music screen ---
+music_screen = true
 
 # --- Spectrum ---
 spectrum_style = led, area, mirror
