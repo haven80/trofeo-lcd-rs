@@ -217,7 +217,7 @@ pub fn classic(level: f32) -> Rgb {
 }
 
 /// HSV (hue in degrees, s/v 0-1) to RGB.
-fn hsv(h: f32, s: f32, v: f32) -> Rgb {
+pub fn hsv(h: f32, s: f32, v: f32) -> Rgb {
     let h = h.rem_euclid(360.0) / 60.0;
     let c = v * s;
     let x = c * (1.0 - ((h % 2.0) - 1.0).abs());
@@ -235,6 +235,24 @@ fn hsv(h: f32, s: f32, v: f32) -> Rgb {
         ((g + m) * 255.0).round() as u8,
         ((b + m) * 255.0).round() as u8,
     )
+}
+
+/// RGB to HSV (hue in degrees 0-360, s/v 0-1) — the inverse of [`hsv`].
+pub fn rgb_to_hsv(c: Rgb) -> (f32, f32, f32) {
+    let (r, g, b) = (c.0 as f32 / 255.0, c.1 as f32 / 255.0, c.2 as f32 / 255.0);
+    let max = r.max(g).max(b);
+    let min = r.min(g).min(b);
+    let d = max - min;
+    let h = if d == 0.0 {
+        0.0
+    } else if max == r {
+        60.0 * (((g - b) / d).rem_euclid(6.0))
+    } else if max == g {
+        60.0 * ((b - r) / d + 2.0)
+    } else {
+        60.0 * ((r - g) / d + 4.0)
+    };
+    (h, if max == 0.0 { 0.0 } else { d / max }, max)
 }
 
 /// The active palette set + clock: resolves `(level, pos)` to a color,
@@ -529,6 +547,18 @@ mod tests {
         assert_eq!(hsv(120.0, 1.0, 1.0), (0, 255, 0));
         assert_eq!(hsv(240.0, 1.0, 1.0), (0, 0, 255));
         assert_eq!(hsv(360.0, 1.0, 1.0), (255, 0, 0));
+    }
+
+    #[test]
+    fn rgb_to_hsv_round_trips() {
+        for c in [(255, 0, 0), (0, 255, 0), (0, 0, 255), (30, 185, 84), (200, 100, 50), (128, 128, 128), (0, 0, 0), (255, 255, 255)] {
+            let (h, s, v) = rgb_to_hsv(c);
+            let back = hsv(h, s, v);
+            let close = |a: u8, b: u8| (a as i32 - b as i32).abs() <= 1;
+            assert!(close(back.0, c.0) && close(back.1, c.1) && close(back.2, c.2), "{c:?} -> {back:?}");
+        }
+        assert_eq!(rgb_to_hsv((0, 0, 255)).0, 240.0);
+        assert_eq!(rgb_to_hsv((90, 90, 90)).1, 0.0);
     }
 
     #[test]

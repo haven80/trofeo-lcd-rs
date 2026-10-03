@@ -26,6 +26,7 @@ mod layouts;
 mod gpu;
 mod gpu_amd;
 mod media;
+mod music_screen;
 mod netdisk;
 mod openrgb_sync;
 mod pawnio;
@@ -307,6 +308,8 @@ fn print_help() {
          \x20\x20                          duration with 'name:seconds' (e.g. 'default:30,weather:5')\n\
          \x20\x20--layout-spectrum <true|false>  With a layout, still show the spectrum when music is playing\n\
          \x20\x20--layout-hold-on-music <true|false>  While music plays, stay on the first layout (no rotation)\n\
+         \x20\x20--music-screen <true|false>  While music plays, show a now-playing card (cover, title, progress, spectrum)\n\
+         \x20\x20--music-blur / --music-progress <true|false>  Music screen: blurred-cover background / progress bar (default: true)\n\
          \x20\x20--spectrum-style <S>     bars | led | peaks | area | mirror | all (several, comma-separated, rotate)\n\
          \x20\x20--spectrum-palette <P>   default | rainbow | fire | ocean | sunset | neon | ice | matrix | purple | custom | all\n\
          \x20\x20--spectrum-gradient <C>  Custom palette: 2+ colors, e.g. #FF0080,#00FFFF\n\
@@ -668,6 +671,7 @@ const OVERRIDE_KEYS: &[&str] = &[
     "layout_hold_on_music", "layout_interval", "panel_opacity", "text_backdrop",
     "spectrum_style", "spectrum_style_interval", "spectrum_palette",
     "spectrum_palette_interval", "spectrum_gradient", "spectrum_rainbow_speed",
+    "music_screen", "music_blur", "music_progress",
 ];
 
 /// Network (`net_unit`) and RAM (`mem_unit`) units.
@@ -947,7 +951,16 @@ fn parse_ui_options(file: &ConfigFile) -> anyhow::Result<UiOptions> {
             Some(v) if v <= 360 => v,
             Some(v) => anyhow::bail!("spectrum_rainbow_speed: must be between 0 and 360 (got {v})"),
         },
+        music_screen: file.get_bool("music_screen").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(false),
+        music_blur: file.get_bool("music_blur").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(true),
+        music_progress: file.get_bool("music_progress").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(true),
     })
+}
+
+/// The music screen shows while it is enabled, the player reports a track,
+/// sound is actually playing and the PC isn't busy gaming (the game dashboard wins).
+fn music_screen_active(enabled: bool, has_track: bool, gaming: bool, sound_recent: bool) -> bool {
+    enabled && has_track && !gaming && sound_recent
 }
 
 /// A rotation interval in seconds (2-3600), same bounds as `layout_interval`.
@@ -1338,7 +1351,8 @@ fn main() -> anyhow::Result<()> {
     if audio_endpoint.is_none() {
         eprintln!("WARNING: master volume could not be read, the info line will show N/A.");
     }
-    let now_playing = media::spawn_now_playing_watcher()?;
+    let (now_playing, track_shared) = media::spawn_track_watcher()?;
+    let mut music = music_screen::MusicScreen::new();
     let mut now_playing_marquee = Marquee::new();
 
     let mut latest_gpu_percent: Option<f32> = None;
@@ -1483,7 +1497,15 @@ fn main() -> anyhow::Result<()> {
             std::sync::atomic::Ordering::Relaxed,
         );
         let ui_show = opts().show;
-        let is_idle = !ui_show.spectrum || last_sound.elapsed() >= config.silence_timeout;
+        // Music screen: a track is playing (sound + player info) and we're not gaming.
+        let track = track_shared.lock().ok().and_then(|g| g.clone());
+        let music_screen_on = music_screen_active(
+            opts().music_screen,
+            track.is_some(),
+            latest_gpu_percent.is_some_and(|p| p > 50.0),
+            last_sound.elapsed() < config.silence_timeout,
+        );
+        let is_idle = !music_screen_on && (!ui_show.spectrum || last_sound.elapsed() >= config.silence_timeout);
         let target_fps = if is_idle {
             idle_fps_effective
         } else {
@@ -1616,6 +1638,10 @@ fn main() -> anyhow::Result<()> {
                 latest_cpu_mhz,
                 color_mode,
             );
+        } else if music_screen_on {
+            if let Some(t) = &track {
+                music.draw(target, t, &bar_heights, peak_tracker.peaks(), &opts());
+            }
         } else if is_idle {
             if let Some(def) = active_def {
                 let wd = layouts::WidgetData {
@@ -1642,23 +1668,26 @@ fn main() -> anyhow::Result<()> {
         } else {
             draw_bars(target, &bar_heights, peak_tracker.peaks(), color_mode);
         }
-        draw_status_lines(
-            target,
-            &sys,
-            latest_gpu_percent,
-            &latest_gpu_data,
-            latest_net_kb,
-            latest_disk_mb,
-            latest_volume,
-            latest_cpu_temp,
-            latest_cpu_power,
-            latest_cpu_mhz,
-            now_playing_title.as_deref(),
-            latest_weather.as_ref(),
-            &mut now_playing_marquee,
-        );
-        if ui_show.ticker {
-            draw_ticker_bar(target, &latest_ticker, &mut ticker_marquee);
+        // The music screen is a full-panel card of its own: no status lines/ticker on top.
+        if !music_screen_on {
+            draw_status_lines(
+                target,
+                &sys,
+                latest_gpu_percent,
+                &latest_gpu_data,
+                latest_net_kb,
+                latest_disk_mb,
+                latest_volume,
+                latest_cpu_temp,
+                latest_cpu_power,
+                latest_cpu_mhz,
+                now_playing_title.as_deref(),
+                latest_weather.as_ref(),
+                &mut now_playing_marquee,
+            );
+            if ui_show.ticker {
+                draw_ticker_bar(target, &latest_ticker, &mut ticker_marquee);
+            }
         }
         if composite {
             let panel = (config.ui.panel_opacity < 100)
@@ -1842,6 +1871,14 @@ struct UiOptions {
     spectrum_palette_interval: u32,
     /// Hue scroll speed of the `rainbow` palette, degrees per second (0 = static).
     spectrum_rainbow_speed: u32,
+    /// While a track plays, replace the whole screen with the now-playing card
+    /// (cover, artist/title, progress, spectrum) — see `music_screen.rs`.
+    music_screen: bool,
+    /// Music screen: use the blurred cover as the background (default), or
+    /// leave whatever is behind (solid color / `background` image).
+    music_blur: bool,
+    /// Music screen: show the progress bar and times (when the player reports them).
+    music_progress: bool,
 }
 
 impl Default for UiOptions {
@@ -1881,6 +1918,9 @@ impl Default for UiOptions {
             spectrum_palettes: Vec::new(),
             spectrum_palette_interval: 20,
             spectrum_rainbow_speed: 30,
+            music_screen: false,
+            music_blur: true,
+            music_progress: true,
         }
     }
 }
@@ -3078,6 +3118,25 @@ mod layout_tests {
         assert_eq!(rotation_index(&o.layouts, 31, false), 1);
         assert_eq!(rotation_index(&o.layouts, 36, false), 2);
         assert_eq!(rotation_index(&[], 5, false), 0);
+    }
+
+    #[test]
+    fn music_screen_only_shows_for_a_playing_track_when_enabled_and_not_gaming() {
+        assert!(music_screen_active(true, true, false, true));
+        assert!(!music_screen_active(false, true, false, true)); // option off
+        assert!(!music_screen_active(true, false, false, true)); // player reports nothing
+        assert!(!music_screen_active(true, true, true, true)); // gaming dashboard wins
+        assert!(!music_screen_active(true, true, false, false)); // silence / paused
+    }
+
+    #[test]
+    fn music_screen_options_parse() {
+        let parse = |t: &str| parse_ui_options(&ConfigFile::parse(t).unwrap());
+        let d = parse("").unwrap();
+        assert!(!d.music_screen && d.music_blur && d.music_progress); // off by default; nice look by default
+        let o = parse("music_screen = true\nmusic_blur = false\nmusic_progress = no\n").unwrap();
+        assert!(o.music_screen && !o.music_blur && !o.music_progress);
+        assert!(parse("music_screen = sometimes\n").is_err());
     }
 
     #[test]
