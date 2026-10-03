@@ -23,8 +23,9 @@ inline-commented version you can copy and edit directly, see
   has an error, the previous (working) settings stay active, and the reason is
   written to `trofeo-errors.txt` next to the executable (useful with
   `hide_console = true`, where you can't see the console).
-- **Comments and quoting**: `#` starts a comment, except when a value itself
-  starts with `#` (a hex color, e.g. `cpu_color = #FFC800`). Values can be
+- **Comments and quoting**: `#` starts a comment, except when it begins a hex
+  color: at the start of a value (`cpu_color = #FFC800`) or right after a comma
+  in a list (`spectrum_gradient = #FF0080, #00FFFF`). Values can be
   quoted (`orientation = "portrait"`) or not — quotes are optional and
   stripped either way.
 - **Booleans** accept `true`/`false`, `1`/`0`, `yes`/`no`, `on`/`off`.
@@ -171,6 +172,70 @@ yellow, cyan, magenta, white, orange, purple`.
 color = default          # gradient spectrum
 text_color = #E0E0E0
 clock_color = orange
+```
+
+## Spectrum styles and colors
+
+The EQ spectrum (shown while music plays) can be drawn in several styles and
+with several color palettes. All keys apply live (no restart) and are also CLI
+flags (`--spectrum-style led`, ...). With none of them set, the spectrum looks
+exactly as it always did.
+
+| Key | CLI | Values | Default |
+|---|---|---|---|
+| `spectrum_style` | `--spectrum-style` | `bars`, `led`, `peaks`, `area`, `mirror`, a comma list, or `all` | `bars` |
+| `spectrum_style_interval` | `--spectrum-style-interval` | `2`-`3600` seconds | `30` |
+| `spectrum_palette` | `--spectrum-palette` | `default`, `rainbow`, `fire`, `ocean`, `sunset`, `neon`, `ice`, `matrix`, `purple`, `custom`, a comma list, or `all` | unset (uses `color`) |
+| `spectrum_palette_interval` | `--spectrum-palette-interval` | `2`-`3600` seconds | `20` |
+| `spectrum_gradient` | `--spectrum-gradient` | 2 or more colors, comma-separated | none |
+| `spectrum_rainbow_speed` | `--spectrum-rainbow-speed` | `0`-`360` degrees/second | `30` |
+
+**Styles**
+
+- `bars` — the classic solid bars.
+- `led` — bars made of separate LED-like segments, with dim "ghost" segments
+  above the lit ones (hi-fi VU look).
+- `peaks` — solid bars plus a small cap that holds at the loudest recent
+  level, then falls slowly.
+- `area` — a smooth filled wave with a bright outline.
+- `mirror` — bars growing up *and* down from a centre line.
+
+One style stays fixed. Several (`spectrum_style = led, area, mirror`) or `all`
+rotate every `spectrum_style_interval` seconds.
+
+**Palettes**
+
+- `default` — the original green → yellow → red gradient by level.
+- `rainbow` — hue by position across the bars, scrolling over time
+  (`spectrum_rainbow_speed`; `0` keeps it still).
+- `fire`, `ocean`, `sunset`, `neon`, `ice`, `matrix`, `purple` — ready-made
+  gradients from quiet (bottom/low) to loud (top/high).
+- `custom` — your own gradient from `spectrum_gradient`. Colors are hex
+  (`#FF0080`) or names (`red, orange, ...`), at least 2, spread evenly from
+  quiet to loud. Setting `spectrum_gradient` without `spectrum_palette` uses
+  it directly.
+
+One palette stays fixed. Several (`spectrum_palette = fire, ocean, neon`) or
+`all` (every preset, including the rainbow) rotate every
+`spectrum_palette_interval` seconds, with a 2-second cross-fade between them.
+A palette overrides `color` (and the OpenRGB color) for the spectrum only;
+`color` still applies to everything else it did before.
+
+```ini
+spectrum_style = led
+spectrum_palette = neon
+
+# Rotate everything: a new look every 30s, new colors every 20s
+spectrum_style = all
+spectrum_palette = all
+
+# Your own colors, hot pink to cyan
+spectrum_gradient = #FF0080, #00FFFF
+
+# Slow rainbow, mirrored
+spectrum_style = mirror
+spectrum_palette = rainbow
+spectrum_rainbow_speed = 10
 ```
 
 ## Positions
@@ -472,6 +537,7 @@ background = C:\Pictures\bg.jpg
 | `layout` | `--layout` | one or more names, comma-separated, each optionally `name:seconds` | none (standard screen) |
 | `layout_interval` | `--layout-interval` | `2`-`3600` | `15` |
 | `layout_spectrum` | `--layout-spectrum` | `true`/`false` | `false` |
+| `layout_hold_on_music` | `--layout-hold-on-music` | `true`/`false` | `false` |
 
 Names (`trofeo_lcd.exe --layout list` prints these with descriptions):
 `default, default2, cpu-gpu, temps, overview, grid6, clock-center, io, music,
@@ -485,6 +551,13 @@ gaming, cpu, gpu, weather, news`.
   on top of a panel layout; the game dashboard stays on regardless — turn it
   off with `hide = dashboard`). Set `layout_spectrum = true` to keep the audio
   spectrum visible on top of a panel layout while music is playing.
+
+**Staying put while music plays**: with `layout_hold_on_music = true` the
+rotation freezes on the *first* layout of the list as soon as music starts
+(put the screen you want with the spectrum first, e.g. `layout = default,
+weather, cpu-gpu`), instead of the spectrum covering whichever panel happened
+to be up. When the music stops the rotation starts again from the first
+layout.
 
 **Rotation**: list several layouts to cycle through them. By default each
 gets `layout_interval` seconds; give any entry its own duration with
@@ -634,6 +707,11 @@ layout_interval = 15
 # --- Panels ---
 panel_opacity = 60
 text_backdrop = true
+
+# --- Spectrum ---
+spectrum_style = led, area, mirror
+spectrum_palette = fire, ocean, neon
+layout_hold_on_music = true
 
 # --- Units ---
 net_unit = auto

@@ -39,6 +39,10 @@ Starting from the `sukualam/trofeo-lcd` codebase, this fork has:
 - Added a **news ticker**: RSS/Atom feeds, any plain-text URL, or a local
   file, shown as a scrolling chyron on top of any screen and/or its own full
   panel (`layout = news`).
+- Added **spectrum styles and palettes**: five drawing styles (classic bars,
+  LED segments, peak caps, filled wave, mirror), seven gradient presets plus a
+  scrolling rainbow and custom gradients, with optional timed rotation of both,
+  and `layout_hold_on_music` to keep the first layout on screen while music plays.
 - Added an **OpenRGB** sync option, a global **screenshot hotkey**
   (lossless PNG), a **console-hide** option, and an adaptive idle/active FPS
   system.

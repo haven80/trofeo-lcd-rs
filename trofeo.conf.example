@@ -147,6 +147,24 @@ language = en
 # If you set per-item options without writing "layout", default2 is used.
 # layout_interval = 15       # default seconds per layout when an entry has no ":seconds" (2-3600)
 # layout_spectrum = false    # true = show the spectrum while music is playing
+# layout_hold_on_music = false  # true = while music plays, stay on the FIRST layout of the
+#                               # list (no rotation); rotation restarts when the music stops
+
+# --- Spectrum styles & colors ---------------------------------------------------
+# Style: bars (classic) | led | peaks | area | mirror. Several, comma-separated, or "all"
+# rotate every spectrum_style_interval seconds.
+# spectrum_style = bars
+# spectrum_style_interval = 30
+# Color palette: default | rainbow | fire | ocean | sunset | neon | ice | matrix | purple |
+# custom. Several, comma-separated, or "all" rotate (with a cross-fade) every
+# spectrum_palette_interval seconds. Unset = use "color" as before.
+# spectrum_palette = fire, ocean, neon
+# spectrum_palette_interval = 20
+# Your own gradient (2+ colors, quiet -> loud). On its own it is used directly;
+# add "custom" to a palette list to rotate it with the presets.
+# spectrum_gradient = #FF0080, #00FFFF
+# Hue scroll speed of the "rainbow" palette, degrees per second (0 = static).
+# spectrum_rainbow_speed = 30
 
 # --- Panel transparency -------------------------------------------------------
 # Background opacity of the panels (layouts and the in-game dashboard): 100 = solid,

@@ -1,5 +1,5 @@
 # trofeo_lcd
-![Overview](img/overview.png)
+
 **A lightweight, open-source alternative to the official Thermalright TRCC
 software.** Audio visualizer + system info monitor for the
 **Thermalright Trofeo Vision 9.16 LCD** (USB `0416:5408`, "LY" protocol).
@@ -138,6 +138,11 @@ Also settable in `trofeo.conf` (see `trofeo.conf.example`) or via CLI:
 
 ### What to show, where, and colors
 
+- **Spectrum looks**: `spectrum_style = bars | led | peaks | area | mirror | all`
+  and `spectrum_palette = rainbow | fire | ocean | sunset | neon | ice | matrix |
+  purple | all` (or your own `spectrum_gradient = #FF0080, #00FFFF`); lists
+  rotate on a timer. `layout_hold_on_music = true` keeps the first layout on
+  screen while music plays instead of rotating.
 - `show = cpu, gpu, …` / `hide = spectrum, clock_date, …` choose what is drawn
   (`cpu gpu uptime time date mem net disk volume nowplaying weather ticker
   spectrum clock clock_date dashboard`). Hiding `spectrum` keeps the big clock
