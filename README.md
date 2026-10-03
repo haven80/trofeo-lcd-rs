@@ -1,5 +1,4 @@
 # trofeo_lcd
-![Overview](img/overview.png)
 
 **A lightweight, open-source alternative to the official Thermalright TRCC
 software.** Audio visualizer + system info monitor for the
@@ -22,8 +21,6 @@ system info: CPU usage & real-time frequency, RAM, uptime, clock and date.
 
 **Media** — a song is playing: the stripes follow the music, and the top bar
 shows the now-playing track (title/artist/album from the media controls).
-![Musci_Screen — now playing](img/anteprima_musica_varianti.png)
-anteprima_musica_varianti.png
 
 ![Media — now playing](img/media.png)
 
@@ -46,9 +43,7 @@ system status (CPU/GPU/RAM/temp) stays readable while playing.
   scrolling line on top of any screen, and/or its own full panel.
 - Sync EQ bar color with an **OpenRGB** device.
 - Adaptive FPS: drops to idle when silent → saves CPU.
-![Overvieweq1](img/anteprima_stili_1.png)
-![Overvieweq2](img/anteprima_stili_2.png)
-![Overvieweq3](img/anteprima_stili_3.png)
+
 ## Usage
 
 ```bash
@@ -145,8 +140,9 @@ Also settable in `trofeo.conf` (see `trofeo.conf.example`) or via CLI:
 
 - **Music screen**: `music_screen = true` turns the panel into a Spotify-style
   now-playing card while a track plays — album cover with glow, artist/title,
-  progress bar, spectrum on the side, all tinted with the cover's colors over a
-  blurred copy of the cover. Needs the player's cover to be exposed by the
+  progress bar, spectrum on the side, all tinted with the cover's colors. The
+  background is configurable (`music_bg = gradient | blur | color | solid | none`,
+  with brightness / blur / fit options). Needs the player's cover to be exposed by the
   system (Windows media controls / `playerctl` on Linux).
 - **Spectrum looks**: `spectrum_style = bars | led | peaks | area | mirror | all`
   and `spectrum_palette = rainbow | fire | ocean | sunset | neon | ice | matrix |

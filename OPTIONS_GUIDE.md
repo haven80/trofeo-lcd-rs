@@ -243,14 +243,18 @@ spectrum_rainbow_speed = 10
 | Key | CLI | Values | Default |
 |---|---|---|---|
 | `music_screen` | `--music-screen` | `true`/`false` | `false` |
-| `music_blur` | `--music-blur` | `true`/`false` | `true` |
+| `music_bg` | `--music-bg` | `gradient` / `blur` / `color` / `solid` / `none` | `gradient` |
+| `music_bg_brightness` | `--music-bg-brightness` | `0`-`100` | `40` |
+| `music_bg_blur` | `--music-bg-blur` | `0`-`100` (only `blur`) | `70` |
+| `music_bg_fit` | `--music-bg-fit` | `center` / `stretch` (only `blur`) | `center` |
+| `music_bg_color` | `--music-bg-color` | color (only `solid`) | `#121218` |
 | `music_progress` | `--music-progress` | `true`/`false` | `true` |
 
 With `music_screen = true`, while a track is playing the whole panel becomes a
 Spotify-style card: the **album cover** on the left (rounded, with a soft glow),
 **artist, title and album** next to it, a **progress bar with times**, and the
-**spectrum on the side**. The background is the cover itself, blurred and
-darkened, and the accent color (artist line, progress bar, spectrum) is taken
+**spectrum on the side**. The background follows the cover (see below) and
+the accent color (artist line, progress bar, spectrum) is taken
 from the cover, so every album gets its own look. Titles too long to fit scroll.
 In portrait orientation the cover goes on top, the text below it and the
 spectrum at the bottom. When the music stops the normal screen/layout comes back.
@@ -259,8 +263,24 @@ spectrum at the bottom. When the music stops the normal screen/layout comes back
   full screen of its own). The in-game dashboard still wins while you are gaming.
 - The spectrum uses your `spectrum_style` / `spectrum_palette` if you set them;
   otherwise it draws bars tinted with the cover's accent color.
-- `music_blur = false` keeps whatever is behind (solid color or your
-  `background` image) instead of the blurred cover; the cover and text are drawn on top.
+- **Background** (`music_bg`):
+  - `gradient` (default) — the cover's dominant color, brightest next to the
+    cover and fading to near-black toward the spectrum (the Spotify look).
+  - `blur` — the cover itself, blurred. `music_bg_blur` sets how much (0 = barely,
+    100 = a soft color wash). `music_bg_fit = center` takes a centred slice of the
+    cover with the panel's proportions; `stretch` squeezes the whole cover to the
+    panel (the look of versions up to 1.0.31).
+  - `color` — one flat color, the cover's dominant one.
+  - `solid` — one flat color of your choice, `music_bg_color` (`#RRGGBB`, `R,G,B`
+    or a name), the same for every track.
+  - `none` — keep whatever is behind (solid color or your `background` image);
+    the cover and text are drawn on top.
+
+  `music_bg_brightness` (0-100) is how strong the cover color is in `gradient`,
+  `blur` and `color` (lower = darker, more contrast for the text; it does not
+  affect `solid`). The glow around the cover is kept in every mode except `none`.
+  The old `music_blur = false` still works (it means `music_bg = none`) when
+  `music_bg` is not set. Without a cover, `blur` falls back to the gradient.
 - `music_progress = false` hides the bar and times. They only appear when the
   player reports the track length; some players don't.
 - If the player provides no cover, a stylised record is drawn instead.
@@ -273,9 +293,17 @@ spectrum at the bottom. When the music stops the normal screen/layout comes back
 
 ```ini
 music_screen = true
-# optional: choose the spectrum look yourself
+# optional: the background and the spectrum look
+music_bg = gradient          # gradient | blur | color | solid | none
+music_bg_brightness = 40
 spectrum_style = mirror
 spectrum_palette = neon
+
+# a softer blurred cover instead of the gradient
+# music_bg = blur
+# music_bg_blur = 60
+# music_bg_brightness = 45
+# music_bg_fit = center
 ```
 
 ## Positions
@@ -750,6 +778,8 @@ text_backdrop = true
 
 # --- Music screen ---
 music_screen = true
+music_bg = gradient
+music_bg_brightness = 40
 
 # --- Spectrum ---
 spectrum_style = led, area, mirror

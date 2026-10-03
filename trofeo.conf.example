@@ -155,7 +155,15 @@ language = en
 # glow), artist / title / album, a progress bar with times, and the spectrum on the side.
 # Colors come from the cover. It replaces the status lines while it is shown.
 # music_screen = false
-# music_blur = true        # blurred cover as the background (false = keep what is behind)
+# Background behind the card:
+#   gradient = the cover's dominant color fading to near-black (default, Spotify-like)
+#   blur     = the cover itself, blurred      color = one flat color from the cover
+#   solid    = one flat color of your choice  none  = keep what is behind (your background)
+# music_bg = gradient
+# music_bg_brightness = 40   # 0-100: how strong the cover color is (gradient/blur/color)
+# music_bg_blur = 70         # 0-100: blur amount (blur only)
+# music_bg_fit = center      # center = centred slice, stretch = whole cover squeezed (blur only)
+# music_bg_color = #121218   # the color for music_bg = solid
 # music_progress = true    # progress bar and times (only if the player reports them)
 
 # --- Spectrum styles & colors ---------------------------------------------------
