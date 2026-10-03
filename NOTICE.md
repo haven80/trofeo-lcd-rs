@@ -45,7 +45,7 @@ Starting from the `sukualam/trofeo-lcd` codebase, this fork has:
   and `layout_hold_on_music` to keep the first layout on screen while music plays.
 - Added a **music screen**: a Spotify-style now-playing card (album cover with
   glow, artist/title/album, progress bar, side spectrum, colors taken from the
-  cover, and a configurable background: gradient, blurred cover, flat color or none, and a selectable footer of CPU/GPU/RAM stats) fed by the Windows media controls or
+  cover, and a configurable background: gradient, blurred cover, flat color or none, and a selectable footer of CPU/GPU/RAM stats, and its own spectrum color: from the cover or fixed) fed by the Windows media controls or
   `playerctl` on Linux.
 - Added an **OpenRGB** sync option, a global **screenshot hotkey**
   (lossless PNG), a **console-hide** option, and an adaptive idle/active FPS

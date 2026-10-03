@@ -1,5 +1,4 @@
 # trofeo_lcd
-![Overview](img/overview.png)
 
 **A lightweight, open-source alternative to the official Thermalright TRCC
 software.** Audio visualizer + system info monitor for the
@@ -44,9 +43,6 @@ system status (CPU/GPU/RAM/temp) stays readable while playing.
   scrolling line on top of any screen, and/or its own full panel.
 - Sync EQ bar color with an **OpenRGB** device.
 - Adaptive FPS: drops to idle when silent → saves CPU.
-![Overview](img/anteprima_stili_1.png)
-![Overview](img/anteprima_stili_2.png)
-![Overview](img/anteprima_stili_3.png)
 
 ## Usage
 
@@ -147,10 +143,9 @@ Also settable in `trofeo.conf` (see `trofeo.conf.example`) or via CLI:
   progress bar, spectrum on the side, all tinted with the cover's colors. The
   background is configurable (`music_bg = gradient | blur | color | solid | none`,
   with brightness / blur / fit options), and a small footer with CPU / GPU / RAM
-  load (`music_stats`, selectable). Needs the player's cover to be exposed by the
+  load (`music_stats`, selectable). The spectrum color on this screen is its own
+  setting (`music_spectrum_color`: cover color, a fixed color, a gradient or presets). Needs the player's cover to be exposed by the
   system (Windows media controls / `playerctl` on Linux).
-  ![Music_footer](img/anteprima_footer_musica.png)
-  
 - **Spectrum looks**: `spectrum_style = bars | led | peaks | area | mirror | all`
   and `spectrum_palette = rainbow | fire | ocean | sunset | neon | ice | matrix |
   purple | all` (or your own `spectrum_gradient = #FF0080, #00FFFF`); lists

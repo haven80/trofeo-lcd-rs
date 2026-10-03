@@ -168,6 +168,10 @@ language = en
 # Small system info line at the very bottom: cpu, gpu, ram, net, disk, time, uptime
 # (in the order given), all, or none to turn it off.
 # music_stats = cpu, gpu, ram
+# Spectrum color on this screen only (the main screen keeps its own spectrum_palette):
+#   cover = taken from the album cover (default)     main = same as the main screen
+#   #1DB954 = one fixed color    #FF0080, #00FFFF = gradient    fire, ocean = presets (rotate)
+# music_spectrum_color = cover
 
 # --- Spectrum styles & colors ---------------------------------------------------
 # Style: bars (classic) | led | peaks | area | mirror. Several, comma-separated, or "all"

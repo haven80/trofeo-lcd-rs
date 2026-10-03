@@ -249,6 +249,7 @@ spectrum_rainbow_speed = 10
 | `music_bg_fit` | `--music-bg-fit` | `center` / `stretch` (only `blur`) | `center` |
 | `music_bg_color` | `--music-bg-color` | color (only `solid`) | `#121218` |
 | `music_progress` | `--music-progress` | `true`/`false` | `true` |
+| `music_spectrum_color` | `--music-spectrum-color` | `cover` / `main` / a color / several colors / preset names / `all` | `cover` |
 | `music_stats` | `--music-stats` | list of `cpu`, `gpu`, `ram`, `net`, `disk`, `time`, `uptime`; or `all` / `none` | `cpu, gpu, ram` |
 
 With `music_screen = true`, while a track is playing the whole panel becomes a
@@ -262,8 +263,18 @@ spectrum at the bottom. When the music stops the normal screen/layout comes back
 
 - The card replaces the status lines and the ticker while it is shown (it is a
   full screen of its own). The in-game dashboard still wins while you are gaming.
-- The spectrum uses your `spectrum_style` / `spectrum_palette` if you set them;
-  otherwise it draws bars tinted with the cover's accent color.
+- **Spectrum color** (`music_spectrum_color`), separate from the main screen's
+  `spectrum_palette`:
+  - `cover` (default) — tinted with the cover's accent color, so every album looks different.
+  - a **fixed color**, `music_spectrum_color = #1DB954` (or a name such as `cyan`) — flat, the same for every track.
+  - **two or more colors**, `music_spectrum_color = #FF0080, #00FFFF` — a gradient, quiet to loud.
+  - **preset names**, `music_spectrum_color = fire` or `fire, ocean, neon` (or `all`) — the same
+    presets as `spectrum_palette`; several rotate every `spectrum_palette_interval` seconds.
+  - `main` — use the main screen's `spectrum_palette` / `spectrum_gradient` (the cover color
+    if those are not set). This is how version 1.0.33 and earlier behaved.
+
+  Presets and colors cannot be mixed in one list. `purple` is a preset; for the plain
+  color write `#800080`. The spectrum *style* (`spectrum_style`) is still shared with the main screen.
 - **Background** (`music_bg`):
   - `gradient` (default) — the cover's dominant color, brightest next to the
     cover and fading to near-black toward the spectrum (the Spotify look).
@@ -305,6 +316,7 @@ music_screen = true
 music_bg = gradient          # gradient | blur | color | solid | none
 music_bg_brightness = 40
 music_stats = cpu, gpu, ram, net     # footer line; none = off
+music_spectrum_color = cover         # cover | main | #RRGGBB | fire, ocean...
 spectrum_style = mirror
 spectrum_palette = neon
 
