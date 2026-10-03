@@ -22,6 +22,8 @@ system info: CPU usage & real-time frequency, RAM, uptime, clock and date.
 
 **Media** — a song is playing: the stripes follow the music, and the top bar
 shows the now-playing track (title/artist/album from the media controls).
+![Musci_Screen — now playing](img/anteprima_musica_varianti.png)
+anteprima_musica_varianti.png
 
 ![Media — now playing](img/media.png)
 
