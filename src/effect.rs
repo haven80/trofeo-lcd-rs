@@ -58,13 +58,19 @@ pub enum Style {
     Rain,
     /// A side view of an aquarium: a moving water surface, light rays, caustics, bubbles.
     Aquarium,
+    /// Nodes drifting about, joined by thin lines while they are near each other.
+    Network,
+    /// A slowly turning sphere of nodes and lines.
+    Globe,
 }
 
 impl Style {
-    pub const NAMES: &'static str = "plasma | aurora | lava | waves | matrix | rain | aquarium";
+    pub const NAMES: &'static str = "plasma | aurora | lava | waves | matrix | rain | aquarium | network | globe";
     #[cfg(test)]
-    pub const ALL: [Style; 7] =
-        [Style::Plasma, Style::Aurora, Style::Lava, Style::Waves, Style::Matrix, Style::Rain, Style::Aquarium];
+    pub const ALL: [Style; 9] = [
+        Style::Plasma, Style::Aurora, Style::Lava, Style::Waves, Style::Matrix, Style::Rain, Style::Aquarium,
+        Style::Network, Style::Globe,
+    ];
 
     pub fn parse(s: &str) -> Option<Style> {
         match s.trim().to_ascii_lowercase().as_str() {
@@ -75,6 +81,8 @@ impl Style {
             "matrix" | "digital" | "code" | "codice" => Some(Style::Matrix),
             "rain" | "streaks" | "pioggia" | "minimal" => Some(Style::Rain),
             "aquarium" | "acquario" | "water" | "acqua" | "tank" => Some(Style::Aquarium),
+            "network" | "net" | "rete" | "plexus" | "nodes" | "nodi" => Some(Style::Network),
+            "globe" | "sphere" | "world" | "globo" | "sfera" | "mondo" => Some(Style::Globe),
             _ => None,
         }
     }
@@ -337,9 +345,10 @@ pub struct Settings {
     pub brightness: u32,
     /// Frames per second the effect is refreshed at while nothing else needs more.
     pub fps: u32,
-    /// Aquarium only: how high the water reaches, in % of the panel (0 = empty, 100 = full).
+    /// Aquarium: how high the water reaches, in % of the panel (0 = empty, 100 = full).
+    /// Network and globe: how many nodes there are (0 = few, 100 = many).
     pub level: u32,
-    /// Matrix, rain and aquarium: a light (white) variant instead of the dark one.
+    /// Matrix, rain, aquarium, network and globe: a light (white) variant instead of the dark one.
     pub light: bool,
 }
 
@@ -458,6 +467,15 @@ impl Effect {
         if matches!(style, Style::Matrix | Style::Rain) {
             let t = secs * (s.speed as f64 / 30.0);
             self.paint_rain(fb, style, s.scale, t);
+            return;
+        }
+        if matches!(style, Style::Network | Style::Globe) {
+            let t = secs * (s.speed as f64 / 30.0);
+            if style == Style::Network {
+                self.paint_network(fb, s.level, s.scale, t);
+            } else {
+                self.paint_globe(fb, s.level, s.scale, t);
+            }
             return;
         }
         self.update_grid(w, h, s.scale);
@@ -618,7 +636,7 @@ impl Effect {
                 }
             }
             // The rain styles are not a smooth field: `render_at` paints them directly.
-            Style::Matrix | Style::Rain | Style::Aquarium => {}
+            Style::Matrix | Style::Rain | Style::Aquarium | Style::Network | Style::Globe => {}
             Style::Waves => {
                 let (p1, p2, p3) = (ph(0.21), ph(0.15), ph(0.25));
                 for r in 0..rows {
@@ -1027,6 +1045,252 @@ fn palette_sig(p: &Palette) -> u64 {
 // Tests
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Network and globe (nodes joined by thin lines)
+// ---------------------------------------------------------------------------
+
+/// Grey the lines lean towards (dark / light variant).
+const NET_GREY_DARK: Rgb = (205, 212, 225);
+const NET_GREY_LIGHT: Rgb = (58, 68, 84);
+
+/// A tiny anti-aliased drawing surface over the framebuffer's RGB bytes.
+struct Pen<'a> {
+    px: &'a mut [u8],
+    w: i32,
+    h: i32,
+}
+
+impl Pen<'_> {
+    #[inline]
+    fn blend(&mut self, x: i32, y: i32, c: [u8; 3], a: f32) {
+        if x < 0 || y < 0 || x >= self.w || y >= self.h || a <= 0.0 {
+            return;
+        }
+        let a = a.min(1.0);
+        let i = ((y * self.w + x) * 3) as usize;
+        for k in 0..3 {
+            let d = self.px[i + k] as f32;
+            self.px[i + k] = (d + (c[k] as f32 - d) * a + 0.5) as u8;
+        }
+    }
+
+    /// A one-pixel anti-aliased line (Wu), `a` is its opacity.
+    fn line(&mut self, x0: f32, y0: f32, x1: f32, y1: f32, c: [u8; 3], a: f32) {
+        let (w, h) = (self.w as f32, self.h as f32);
+        if (x0 < 0.0 && x1 < 0.0) || (y0 < 0.0 && y1 < 0.0) || (x0 >= w && x1 >= w) || (y0 >= h && y1 >= h) {
+            return;
+        }
+        let steep = (y1 - y0).abs() > (x1 - x0).abs();
+        let (mut ax, mut ay, mut bx, mut by) = if steep { (y0, x0, y1, x1) } else { (x0, y0, x1, y1) };
+        if ax > bx {
+            std::mem::swap(&mut ax, &mut bx);
+            std::mem::swap(&mut ay, &mut by);
+        }
+        let dx = bx - ax;
+        let grad = if dx < 1e-4 { 0.0 } else { (by - ay) / dx };
+        let lim = if steep { self.h } else { self.w };
+        let xs = (ax.ceil() as i32).max(0);
+        let xe = (bx.floor() as i32).min(lim - 1);
+        for x in xs..=xe {
+            let y = ay + grad * (x as f32 - ax);
+            let yi = y.floor();
+            let f = y - yi;
+            let yi = yi as i32;
+            if steep {
+                self.blend(yi, x, c, a * (1.0 - f));
+                self.blend(yi + 1, x, c, a * f);
+            } else {
+                self.blend(x, yi, c, a * (1.0 - f));
+                self.blend(x, yi + 1, c, a * f);
+            }
+        }
+    }
+
+    /// A filled disc.
+    fn dot(&mut self, cx: f32, cy: f32, r: f32, c: [u8; 3], a: f32) {
+        let m = r + 1.5;
+        for y in (cy - m).floor() as i32..=(cy + m).ceil() as i32 {
+            for x in (cx - m).floor() as i32..=(cx + m).ceil() as i32 {
+                let d = ((x as f32 - cx).powi(2) + (y as f32 - cy).powi(2)).sqrt();
+                self.blend(x, y, c, (r + 0.5 - d).clamp(0.0, 1.0) * a);
+            }
+        }
+    }
+
+    /// A thin circle.
+    fn ring(&mut self, cx: f32, cy: f32, r: f32, c: [u8; 3], a: f32) {
+        let m = r + 2.0;
+        for y in (cy - m).floor() as i32..=(cy + m).ceil() as i32 {
+            for x in (cx - m).floor() as i32..=(cx + m).ceil() as i32 {
+                let d = ((x as f32 - cx).powi(2) + (y as f32 - cy).powi(2)).sqrt();
+                self.blend(x, y, c, (1.1 - (d - r).abs()).clamp(0.0, 1.0) * a);
+            }
+        }
+    }
+}
+
+/// A node of the network / globe, in screen pixels.
+struct Node {
+    x: f32,
+    y: f32,
+    /// 0 (far) .. 1 (near); always 1 in the flat network.
+    depth: f32,
+    /// Hash-based 0..1 values: palette position, size.
+    hue: f32,
+    size: f32,
+    ring: bool,
+}
+
+impl Effect {
+    fn net_ground(&self, fb: &mut Framebuffer) {
+        let base = self.rain_lut[0];
+        let ground = if self.light { self.paper } else { [base[0] / 14, base[1] / 14, base[2] / 14] };
+        for px in fb.as_bytes_mut().chunks_exact_mut(3) {
+            px.copy_from_slice(&ground);
+        }
+    }
+
+    /// Colour of a line joining nodes of hues `a` and `b`: their colours, leaning to grey.
+    fn net_line_colour(&self, a: f32, b: f32) -> [u8; 3] {
+        let pick = |u: f32| self.rain_lut[((u * RAIN_N as f32) as usize).min(RAIN_N - 1)];
+        let (ca, cb) = (pick(a), pick(b));
+        let mid = lerp_rgb((ca[0], ca[1], ca[2]), (cb[0], cb[1], cb[2]), 0.5);
+        let k = self.bright;
+        let grey = if self.light { lerp_rgb((255, 255, 255), NET_GREY_LIGHT, 0.45 + 0.55 * k) } else { dim(NET_GREY_DARK, (k * 1.3).min(1.0)) };
+        let c = lerp_rgb(mid, grey, 0.5);
+        [c.0, c.1, c.2]
+    }
+
+    /// Draws the dots (and the rings of the few "hub" nodes) of `nodes`.
+    fn net_nodes(&self, pen: &mut Pen, nodes: &[Node], r0: f32) {
+        let white = (255.0 * self.bright) as u32;
+        for n in nodes {
+            let c = self.rain_lut[((n.hue * RAIN_N as f32) as usize).min(RAIN_N - 1)];
+            let r = r0 * (0.75 + 0.9 * n.size) * (0.55 + 0.45 * n.depth);
+            let a = 0.4 + 0.6 * n.depth;
+            pen.dot(n.x, n.y, r, c, a);
+            if n.ring && n.depth > 0.45 {
+                pen.ring(n.x, n.y, r * 2.6 + 1.0, self.head(c, white), 0.85 * a);
+            }
+        }
+    }
+
+    /// A flat network: nodes drifting on small orbits around their places, joined by thin
+    /// lines while they are near each other (the lines fade as they get longer).
+    fn paint_network(&mut self, fb: &mut Framebuffer, level: u32, scale: u32, t: f64) {
+        self.net_ground(fb);
+        let (w, h) = (fb.width() as f32, fb.height() as f32);
+        let s = ((170.0 - 100.0 * level.min(100) as f32 / 100.0) * scale.clamp(25, 400) as f32 / 100.0).clamp(36.0, 600.0);
+        let link = 1.38 * s;
+        let (gx0, gy0) = (-1i32, -1i32);
+        let (gx1, gy1) = ((w / s).ceil() as i32 + 1, (h / s).ceil() as i32 + 1);
+        let mut nodes: Vec<Node> = Vec::new();
+        for gy in gy0..=gy1 {
+            for gx in gx0..=gx1 {
+                let id = ((gx + 64) as u64) << 20 | (gy + 64) as u64;
+                if unit(mix(id, 11)) < 0.10 {
+                    continue; // an empty cell, so the net is not too regular
+                }
+                let hx = (gx as f32 + 0.15 + 0.7 * unit(mix(id, 1))) * s;
+                let hy = (gy as f32 + 0.15 + 0.7 * unit(mix(id, 2))) * s;
+                let amp = 0.40 * s * (0.45 + 0.55 * unit(mix(id, 3)));
+                let (w1, w2) = (0.10 + 0.28 * unit(mix(id, 4)) as f64, 0.10 + 0.28 * unit(mix(id, 5)) as f64);
+                let (p1, p2) = (unit(mix(id, 6)) as f64 * std::f64::consts::TAU, unit(mix(id, 7)) as f64 * std::f64::consts::TAU);
+                nodes.push(Node {
+                    x: hx + amp * (w1 * t + p1).sin() as f32,
+                    y: hy + amp * (w2 * t + p2).cos() as f32,
+                    depth: 1.0,
+                    hue: unit(mix(id, 8)),
+                    size: unit(mix(id, 9)),
+                    ring: unit(mix(id, 10)) < 0.16,
+                });
+            }
+        }
+        let r0 = (2.0 * (s / 120.0).sqrt()).clamp(1.3, 7.0);
+        let mut pen = Pen { px: fb.as_bytes_mut(), w: w as i32, h: h as i32 };
+        for i in 0..nodes.len() {
+            for j in i + 1..nodes.len() {
+                let (a, b) = (&nodes[i], &nodes[j]);
+                let d = ((a.x - b.x).powi(2) + (a.y - b.y).powi(2)).sqrt();
+                if d >= link {
+                    continue;
+                }
+                let al = (1.0 - d / link).powf(0.65) * 1.0;
+                if al < 0.04 {
+                    continue;
+                }
+                let c = self.net_line_colour(a.hue, b.hue);
+                pen.line(a.x, a.y, b.x, b.y, c, al);
+            }
+        }
+        self.net_nodes(&mut pen, &nodes, r0);
+    }
+
+    /// A globe: nodes spread over a sphere that turns slowly, joined by thin lines, the near
+    /// side clearer than the far one.
+    fn paint_globe(&mut self, fb: &mut Framebuffer, level: u32, scale: u32, t: f64) {
+        self.net_ground(fb);
+        let (w, h) = (fb.width() as f32, fb.height() as f32);
+        let sc = scale.clamp(25, 400) as f32 / 100.0;
+        let r = 0.48 * h.min(w) * sc;
+        let m = (70.0 + 190.0 * level.min(100) as f32 / 100.0).round() as usize;
+        let sp = (4.0 * std::f32::consts::PI / m as f32).sqrt(); // spacing on the unit sphere
+        let link = 1.75 * sp;
+        let (yaw, tilt) = ((t * 0.12) as f32, 0.38 + 0.06 * (t * 0.07).sin() as f32);
+        let (cy_, sy_) = (yaw.cos(), yaw.sin());
+        let (ct, st) = (tilt.cos(), tilt.sin());
+        let golden = std::f32::consts::PI * (3.0 - 5.0f32.sqrt());
+        let (cx, cy) = (w / 2.0, h / 2.0);
+        let mut unit_pts: Vec<[f32; 3]> = Vec::with_capacity(m);
+        let mut nodes: Vec<Node> = Vec::with_capacity(m);
+        for i in 0..m {
+            let yy = 1.0 - 2.0 * (i as f32 + 0.5) / m as f32;
+            let rad = (1.0 - yy * yy).max(0.0).sqrt();
+            let th = i as f32 * golden;
+            let j = |k: u64| (unit(mix(i as u64, k)) - 0.5) * 0.5 * sp;
+            let mut p = [rad * th.cos() + j(1), yy + j(2), rad * th.sin() + j(3)];
+            let n = (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt();
+            p = [p[0] / n, p[1] / n, p[2] / n];
+            unit_pts.push(p);
+            // spin about the vertical axis, then tilt
+            let (x1, z1) = (p[0] * cy_ + p[2] * sy_, -p[0] * sy_ + p[2] * cy_);
+            let (y2, z2) = (p[1] * ct - z1 * st, p[1] * st + z1 * ct);
+            let persp = 1.0 / (1.0 - 0.16 * z2);
+            nodes.push(Node {
+                x: cx + r * x1 * persp,
+                y: cy - r * y2 * persp,
+                depth: (z2 + 1.0) / 2.0,
+                hue: unit(mix(i as u64, 4)),
+                size: unit(mix(i as u64, 5)),
+                ring: unit(mix(i as u64, 6)) < 0.10,
+            });
+        }
+        let mut pen = Pen { px: fb.as_bytes_mut(), w: w as i32, h: h as i32 };
+        // the outline of the sphere
+        let grey = self.net_line_colour(0.0, 0.0);
+        pen.ring(cx, cy, r, grey, 0.45);
+        for i in 0..m {
+            for j in i + 1..m {
+                let (a, b) = (&unit_pts[i], &unit_pts[j]);
+                let d = ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt();
+                if d >= link {
+                    continue;
+                }
+                let (na, nb) = (&nodes[i], &nodes[j]);
+                let depth = (na.depth + nb.depth) / 2.0;
+                let al = (1.0 - d / link).powf(0.65) * (0.25 + 0.75 * depth * depth);
+                if al < 0.03 {
+                    continue;
+                }
+                let c = self.net_line_colour(na.hue, nb.hue);
+                pen.line(na.x, na.y, nb.x, nb.y, c, al);
+            }
+        }
+        let r0 = (1.8 * (r / 230.0).sqrt()).clamp(1.2, 7.0);
+        self.net_nodes(&mut pen, &nodes, r0);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1259,7 +1523,7 @@ mod tests {
         // unless the palette itself does: with a smooth palette the biggest
         // horizontal step stays small.
         for style in Style::ALL {
-            if matches!(style, Style::Matrix | Style::Rain | Style::Aquarium) {
+            if matches!(style, Style::Matrix | Style::Rain | Style::Aquarium | Style::Network | Style::Globe) {
                 continue; // glyphs, streaks and the water surface have hard edges by design
             }
             let s = settings(style, "ocean");
@@ -1284,7 +1548,7 @@ mod tests {
         assert_eq!(Style::parse("matrix"), Some(Style::Matrix));
         assert_eq!(Style::parse("CODICE"), Some(Style::Matrix));
         assert_eq!(Style::parse("pioggia"), Some(Style::Rain));
-        assert_eq!(Style::ALL.len(), 7);
+        assert_eq!(Style::ALL.len(), 9);
         for n in ["matrix", "green", "amber", "ambra", "violet", "crimson", "snow", "bianco", "neon"] {
             assert!(Palette::parse(n).is_some(), "{n}");
         }
@@ -1493,6 +1757,85 @@ mod tests {
                 Effect::new().render_at(&mut f, &st, style, 65, 12.0);
                 std::fs::write(
                     format!("{dir}/light_{style:?}_{pal}.ppm"),
+                    [format!("P6\n{} {}\n255\n", f.width(), f.height()).into_bytes(), f.as_bytes().to_vec()].concat(),
+                ).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn network_and_globe_render_everywhere_move_and_obey_the_theme() {
+        for style in [Style::Network, Style::Globe] {
+            assert_eq!(Style::parse(if style == Style::Network { "plexus" } else { "mondo" }), Some(style));
+            for (w, h) in [(1920u32, 462u32), (1920, 400), (462, 1920), (64, 64), (3, 2)] {
+                for (level, scale) in [(0u32, 25u32), (50, 100), (100, 400)] {
+                    let mut st = settings(style, "ice");
+                    st.level = level;
+                    st.scale = scale;
+                    let mut a = fb(w, h);
+                    Effect::new().render_at(&mut a, &st, style, 70, 5.0);
+                    let mut b = fb(w, h);
+                    Effect::new().render_at(&mut b, &st, style, 70, 9.0);
+                    if w >= 64 && scale <= 100 {
+                        assert_ne!(a.as_bytes(), b.as_bytes(), "{style:?} {w}x{h} must move");
+                    }
+                    // frozen: the same picture at any time
+                    st.speed = 0;
+                    let (mut c, mut d) = (fb(w, h), fb(w, h));
+                    Effect::new().render_at(&mut c, &st, style, 70, 5.0);
+                    Effect::new().render_at(&mut d, &st, style, 70, 9.0);
+                    assert_eq!(c.as_bytes(), d.as_bytes(), "{style:?} speed 0");
+                }
+            }
+            // dark = a dark page, light = a white page; both with lines and nodes on it
+            let (mut dark, mut light) = (fb(1920, 462), fb(1920, 462));
+            let mut st = settings(style, "crimson");
+            Effect::new().render_at(&mut dark, &st, style, 70, 3.0);
+            st.light = true;
+            Effect::new().render_at(&mut light, &st, style, 70, 3.0);
+            assert!(avg_luma(&dark) < 40.0, "{style:?} dark: {}", avg_luma(&dark));
+            assert!(avg_luma(&light) > 215.0, "{style:?} light: {}", avg_luma(&light));
+            let (bd, bl) = (dark.as_bytes(), light.as_bytes());
+            assert!(bd.chunks_exact(3).any(|p| p[0] as u32 + p[1] as u32 + p[2] as u32 > 200), "{style:?} dark has bright pixels");
+            assert!(bl.chunks_exact(3).any(|p| (p[0] as u32 + p[1] as u32 + p[2] as u32) < 520), "{style:?} light has dark pixels");
+            // a different palette gives a different picture
+            let (mut x, mut y) = (fb(1920, 462), fb(1920, 462));
+            Effect::new().render_at(&mut x, &settings(style, "crimson"), style, 70, 3.0);
+            Effect::new().render_at(&mut y, &settings(style, "ocean"), style, 70, 3.0);
+            assert_ne!(x.as_bytes(), y.as_bytes());
+        }
+    }
+
+    #[test]
+    fn network_and_globe_frame_cost_is_small() {
+        for style in [Style::Network, Style::Globe] {
+            let mut st = settings(style, "ice");
+            st.level = 100;
+            let mut e = Effect::new();
+            let mut f = fb(1920, 462);
+            e.render_at(&mut f, &st, style, 70, 1.0);
+            let t0 = std::time::Instant::now();
+            for k in 0..20 {
+                e.render_at(&mut f, &st, style, 70, 2.0 + k as f64 * 0.1);
+            }
+            let ms = t0.elapsed().as_secs_f64() * 1000.0 / 20.0;
+            eprintln!("{style:?}: {ms:.1} ms per frame");
+            assert!(ms < 40.0, "{style:?} takes {ms:.1} ms");
+        }
+    }
+
+    /// With TROFEO_DUMP_DIR set, writes network / globe previews as PPM files.
+    #[test]
+    fn dump_network_previews() {
+        let Ok(dir) = std::env::var("TROFEO_DUMP_DIR") else { return };
+        for style in [Style::Network, Style::Globe] {
+            for (light, pal, bright) in [(false, "ice", 65), (true, "ice", 65), (false, "crimson", 65), (true, "crimson", 65), (false, "neon", 65), (true, "ocean", 65)] {
+                let mut st = settings(style, pal);
+                st.light = light;
+                let mut f = fb(1920, 462);
+                Effect::new().render_at(&mut f, &st, style, bright, 12.0);
+                std::fs::write(
+                    format!("{dir}/net_{style:?}_{pal}_{}.ppm", if light { "light" } else { "dark" }),
                     [format!("P6\n{} {}\n255\n", f.width(), f.height()).into_bytes(), f.as_bytes().to_vec()].concat(),
                 ).unwrap();
             }
