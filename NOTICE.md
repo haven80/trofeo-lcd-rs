@@ -64,6 +64,12 @@ Starting from the `sukualam/trofeo-lcd` codebase, this fork has:
   water level is adjustable (`effect_level`) and there are three water color presets.
 - Added a **light (white) variant** of the matrix, rain and aquarium backgrounds
   (`effect_theme = light`).
+- Added a **font option for every text** (`font = pixel | smooth`, `font_weight`): the anti-aliased
+  Poppins font, until now only in the tiles layout, can be used in all screens (status lines, clock,
+  layouts, music screen, ticker, weather), with smooth edges over any background.
+- Added **network** and **globe** backgrounds (`background_effect = network | globe`): nodes joined
+  by thin lines, drifting on a plane or turning on a sphere, in dark and light variants, with the
+  same color palettes as the other effects.
 - Added a **graphical settings editor** (`trofeo_config`, built with egui): a separate
   small program that only creates and edits `trofeo.conf` (comments preserved), with a live
   preview drawn by `trofeo_lcd` itself (`--preview-png`). It uses the

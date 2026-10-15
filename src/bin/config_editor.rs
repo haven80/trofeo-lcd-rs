@@ -77,11 +77,15 @@ impl Ed {
     }
     /// The value in force: the file's, or the field's default.
     fn effective(&self, f: &Field) -> String {
-        self.get(&f.key).unwrap_or_else(|| f.default.clone())
+        self.get(&f.key).unwrap_or_else(|| self.default_of(f))
+    }
+    /// The default of a field, which for some effect settings depends on the animated background.
+    fn default_of(&self, f: &Field) -> String {
+        f.default_for(&self.get("background_effect").unwrap_or_default())
     }
     /// The value of any key, by the field table's default.
     fn value_of(&self, key: &str, fields: &[Field]) -> String {
-        self.get(key).or_else(|| fields.iter().find(|f| f.key == key).map(|f| f.default.clone())).unwrap_or_default()
+        self.get(key).or_else(|| fields.iter().find(|f| f.key == key).map(|f| self.default_of(f))).unwrap_or_default()
     }
 }
 
@@ -412,7 +416,7 @@ fn multi_widget(ui: &mut egui::Ui, ed: &mut Ed, f: &Field, options: &[&str], l: 
         for o in options {
             let selected = on.iter().any(|w| w == o) && !(none_set && f.default.is_empty());
             if ui.selectable_label(selected, *o).clicked() {
-                let base = if none_set { f.default.clone() } else { cur.clone() };
+                let base = if none_set { ed.default_of(f) } else { cur.clone() };
                 let new = toggle_multi(&base, o, options);
                 if new.is_empty() {
                     ed.unset(&f.key);

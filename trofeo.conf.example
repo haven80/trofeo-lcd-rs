@@ -57,6 +57,13 @@ language = en
 # Decimals in the CPU/GPU/RAM percentages: 0 = "37%" (default), 1 = "37.4%"
 # percent_decimals = 0
 
+# --- Font ---------------------------------------------------------------------------
+# The font of ALL the text (status lines, big clock, layouts, music screen, ticker...):
+# pixel = the blocky 5x7 font (default); smooth = anti-aliased Poppins, with lower case,
+# accents and the degree sign. The tiles layout has its own tiles_font.
+# font = pixel
+# font_weight = auto           # smooth only: auto (by size) | light | regular | medium
+
 # --- Colors (#RRGGBB, R,G,B, or a name: red, green, blue, yellow, white...)
 # color = green              # spectrum bars (default: green->red gradient)
 # text_color = #FFFFFF       # info block and dashboard text
@@ -188,15 +195,18 @@ language = en
 # A soft animated background instead of a picture: colors that blend and drift.
 # Very light on the CPU (the picture is calculated on a coarse grid and stretched).
 # It replaces "background" while it is on, and works with margins and panel_opacity.
-# background_effect = plasma   # plasma | aurora | lava | waves | matrix | rain | aquarium | none
+# background_effect = plasma   # plasma | aurora | lava | waves | matrix | rain | aquarium | network | globe | none
 #   matrix = minimal digital rain (characters), rain = thin streaks; green by default
 #   aquarium = side view of an aquarium: moving water surface, light rays, caustics, bubbles
-# effect_level = 50            # aquarium only: how high the water reaches, 0-100 %
-# effect_theme = dark          # dark | light: matrix / rain / aquarium on a white background
+#   network = nodes drifting about, joined by thin lines (no text, only lines and dots)
+#   globe = a slowly turning sphere of nodes and lines
+# effect_level = 50            # aquarium: how high the water reaches; network / globe: how many nodes (0-100)
+# effect_theme = dark          # dark | light: matrix / rain / aquarium / network / globe on a white background
 #                              # (use a dark text_color / clock_color with light)
 # Colors: pastel | fluo | neon | candy | sunset | ocean | aurora | fire | forest | ice |
 # mono | rainbow | custom; for matrix / rain: matrix (green) | amber | violet | crimson | snow;
-# for aquarium: lagoon (default) | deep | tropical.
+# for aquarium: lagoon (default) | deep | tropical; network / globe use ice unless you choose
+# (a one-colour palette such as crimson gives grey lines with red nodes).
 # Several (comma-separated) or "all" rotate with a cross-fade.
 # effect_palette = neon
 # Your own colors (2+); used directly when effect_palette is not set, or add "custom"

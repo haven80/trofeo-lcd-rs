@@ -44,6 +44,7 @@ use std::time::Duration;
 use thiserror::Error;
 
 pub mod font;
+pub mod smooth_font;
 pub mod dxgi_capture;
 pub mod background;
 pub mod config;
@@ -610,12 +611,67 @@ fn build_chunks(variant: Variant, payload: &[u8]) -> Vec<u8> {
     chunks
 }
 
+/// `dst` = `dst` * (1 - a) + `src` * a, with `a` in 1-255.
+#[inline]
+fn blend_over(dst: &mut [u8], src: &[u8], a: u8) {
+    let a = a as u32;
+    for k in 0..3 {
+        dst[k] = ((dst[k] as u32 * (255 - a) + src[k] as u32 * a + 127) / 255) as u8;
+    }
+}
+
 /// RGB888 pixel buffer that can be filled manually (text, graphs, CPU/GPU
 /// monitoring, etc.), then encoded to JPEG for sending to the panel.
 pub struct Framebuffer {
     width: u32,
     height: u32,
     pixels: Vec<u8>, // RGB888, 3 byte per piksel
+    /// The colour the buffer was last cleared with: where the buffer is still this colour,
+    /// smooth text is drawn with a coverage (see `edge`) instead of being blended with it.
+    key: Option<[u8; 3]>,
+    /// Coverage (0 = none / opaque) of the anti-aliased edge pixels of smooth text drawn over
+    /// the `key` colour; `blit_ui` / `blit_keyed` use it to blend those pixels with whatever is
+    /// underneath instead of leaving a dark halo. Empty until smooth text is drawn.
+    edge: Vec<u8>,
+}
+
+/// The font of the program's own text (status lines, clock, panels...).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum TextFont {
+    /// The blocky 5x7 pixel font.
+    #[default]
+    Pixel,
+    /// Anti-aliased Poppins (see `smooth_font`).
+    Smooth,
+}
+
+thread_local! {
+    static TEXT_STYLE: std::cell::Cell<(TextFont, Option<smooth_font::Weight>)> = const { std::cell::Cell::new((TextFont::Pixel, None)) };
+}
+
+/// Chooses the font of `Framebuffer::draw_text` & co. for the calling thread (the one that draws
+/// the screen); `weight` forces a weight of the smooth font (`None` = by size).
+pub fn set_text_style(font: TextFont, weight: Option<smooth_font::Weight>) {
+    TEXT_STYLE.with(|c| c.set((font, weight)));
+}
+
+/// The font in use (see `set_text_style`).
+pub fn text_style() -> (TextFont, Option<smooth_font::Weight>) {
+    TEXT_STYLE.with(|c| c.get())
+}
+
+/// The em size and weight the smooth font uses for text of pixel-font `scale`: capital letters
+/// as tall as the pixel font's (7 * scale), a stronger weight for small text.
+fn smooth_metrics(scale: u32) -> (f32, smooth_font::Weight) {
+    let cap = (font::GLYPH_HEIGHT * scale.max(1)) as f32;
+    let weight = text_style().1.unwrap_or(if cap <= 21.0 {
+        smooth_font::Weight::Medium
+    } else if cap <= 70.0 {
+        smooth_font::Weight::Regular
+    } else {
+        smooth_font::Weight::Light
+    });
+    (smooth_font::px_for_cap(cap), weight)
 }
 
 impl Framebuffer {
@@ -624,6 +680,8 @@ impl Framebuffer {
             width: resolution.width,
             height: resolution.height,
             pixels: vec![0u8; (resolution.width * resolution.height * 3) as usize],
+            key: None,
+            edge: Vec::new(),
         }
     }
 
@@ -653,6 +711,8 @@ impl Framebuffer {
         if self.pixels.is_empty() {
             return;
         }
+        self.key = Some([r, g, b]);
+        self.edge.fill(0);
         self.pixels[0..3].copy_from_slice(&[r, g, b]);
         let mut filled = 3usize;
         let total = self.pixels.len();
@@ -711,6 +771,9 @@ impl Framebuffer {
     /// Returns the total text width in pixels (useful for
     /// centering/laying out other text).
     pub fn draw_text(&mut self, x: u32, y: u32, text: &str, r: u8, g: u8, b: u8, scale: u32) -> u32 {
+        if text_style().0 == TextFont::Smooth {
+            return self.draw_text_smooth(x, y, text, r, g, b, scale);
+        }
         let scale = scale.max(1);
         let advance = (font::GLYPH_WIDTH + 1) * scale;
         let mut cursor_x = x;
@@ -753,6 +816,9 @@ impl Framebuffer {
         clip_x0: u32,
         clip_x1: u32,
     ) {
+        if text_style().0 == TextFont::Smooth {
+            return self.draw_text_smooth_clipped(x, y, text, (r, g, b), scale, clip_x0, clip_x1);
+        }
         let scale = scale.max(1);
         let advance = (font::GLYPH_WIDTH + 1) * scale;
         let mut cursor_x = x;
@@ -777,8 +843,77 @@ impl Framebuffer {
         }
     }
 
+    /// `draw_text` in the smooth font: capital letters are as tall as the pixel font's at the
+    /// same `scale`, so a layout made for one fits the other. Mixed case, accents and the degree
+    /// sign are drawn as they are.
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_text_smooth(&mut self, x: u32, y: u32, text: &str, r: u8, g: u8, b: u8, scale: u32) -> u32 {
+        let (px, weight) = smooth_metrics(scale);
+        let baseline = (y + font::GLYPH_HEIGHT * scale.max(1)) as f32;
+        let w = smooth_font::draw_with(text, x as f32, baseline, px, weight, |gx, gy, a| self.plot_cov(gx, gy, [r, g, b], a));
+        w.ceil() as u32
+    }
+
+    /// The scrolling variant of `draw_text_smooth`: only pixels in `[clip_x0, clip_x1)` are drawn
+    /// (a letter can be cut in the middle).
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_text_smooth_clipped(&mut self, x: i64, y: u32, text: &str, rgb: (u8, u8, u8), scale: u32, clip_x0: u32, clip_x1: u32) {
+        let (px, weight) = smooth_metrics(scale);
+        let baseline = (y + font::GLYPH_HEIGHT * scale.max(1)) as f32;
+        let (x0, x1) = (clip_x0 as i32, clip_x1 as i32);
+        let c = [rgb.0, rgb.1, rgb.2];
+        // the glyph cache works on f32 positions: keep them small enough to stay exact
+        let start = x.clamp(-1_000_000, 1_000_000) as f32;
+        smooth_font::draw_with(text, start, baseline, px, weight, |gx, gy, a| {
+            if gx >= x0 && gx < x1 {
+                self.plot_cov(gx, gy, c, a);
+            }
+        });
+    }
+
+    /// One pixel of anti-aliased text: `cov` (0-255) of colour `c`. Over the colour the buffer was
+    /// cleared with (the "transparent" colour of the UI layer) the pixel gets the pure text colour
+    /// and a coverage kept in `edge`, so that it blends with the real background when the layer
+    /// is composed; anywhere else it is blended with what is there.
+    fn plot_cov(&mut self, x: i32, y: i32, c: [u8; 3], cov: u8) {
+        if x < 0 || y < 0 || x >= self.width as i32 || y >= self.height as i32 || cov == 0 {
+            return;
+        }
+        let i = y as usize * self.width as usize + x as usize;
+        let p = i * 3;
+        let dst = [self.pixels[p], self.pixels[p + 1], self.pixels[p + 2]];
+        if cov == 255 {
+            if self.key != Some(c) {
+                self.pixels[p..p + 3].copy_from_slice(&c);
+                if !self.edge.is_empty() {
+                    self.edge[i] = 0;
+                }
+            }
+            return;
+        }
+        let partial = !self.edge.is_empty() && self.edge[i] != 0;
+        if partial || self.key == Some(dst) {
+            if self.edge.is_empty() {
+                self.edge = vec![0u8; self.width as usize * self.height as usize];
+            }
+            let a0 = if partial { self.edge[i] as u32 } else { 0 };
+            let a = a0 + cov as u32 * (255 - a0) / 255;
+            self.pixels[p..p + 3].copy_from_slice(&c);
+            self.edge[i] = if a >= 250 { 0 } else { a.max(1) as u8 };
+        } else {
+            let a = cov as u32;
+            for k in 0..3 {
+                self.pixels[p + k] = ((dst[k] as u32 * (255 - a) + c[k] as u32 * a + 127) / 255) as u8;
+            }
+        }
+    }
+
     /// Total width (pixels) if `text` is drawn with `draw_text` at this `scale`.
     pub fn text_width(text: &str, scale: u32) -> u32 {
+        if text_style().0 == TextFont::Smooth {
+            let (px, w) = smooth_metrics(scale);
+            return smooth_font::text_width(text, px, w).ceil() as u32;
+        }
         let scale = scale.max(1);
         let advance = (font::GLYPH_WIDTH + 1) * scale;
         text.chars().count() as u32 * advance
@@ -813,6 +948,8 @@ impl Framebuffer {
             width: self.width,
             height: self.height,
             pixels: self.pixels.iter().map(|&p| lut[p as usize]).collect(),
+            key: None,
+            edge: Vec::new(),
         }
     }
 
@@ -844,11 +981,14 @@ impl Framebuffer {
             let d0 = ((y as usize + row) * self.width as usize + x as usize) * 3;
             let srow = &src.pixels[s0..s0 + w * 3];
             let drow = &mut self.pixels[d0..d0 + w * 3];
+            let erow = (!src.edge.is_empty()).then(|| &src.edge[row * src.width as usize..row * src.width as usize + w]);
             match key {
                 None => drow.copy_from_slice(srow),
                 Some((kr, kg, kb)) => {
-                    for (sp, dp) in srow.chunks_exact(3).zip(drow.chunks_exact_mut(3)) {
-                        if !(sp[0] == kr && sp[1] == kg && sp[2] == kb) {
+                    for (n, (sp, dp)) in srow.chunks_exact(3).zip(drow.chunks_exact_mut(3)).enumerate() {
+                        if let Some(a) = erow.map(|e| e[n]).filter(|&a| a != 0) {
+                            blend_over(dp, sp, a);
+                        } else if !(sp[0] == kr && sp[1] == kg && sp[2] == kb) {
                             dp.copy_from_slice(sp);
                         }
                     }
@@ -878,7 +1018,12 @@ impl Framebuffer {
             let d0 = ((y as usize + row) * self.width as usize + x as usize) * 3;
             let srow = &src.pixels[s0..s0 + w * 3];
             let drow = &mut self.pixels[d0..d0 + w * 3];
-            for (sp, dp) in srow.chunks_exact(3).zip(drow.chunks_exact_mut(3)) {
+            let erow = (!src.edge.is_empty()).then(|| &src.edge[row * src.width as usize..row * src.width as usize + w]);
+            for (n, (sp, dp)) in srow.chunks_exact(3).zip(drow.chunks_exact_mut(3)).enumerate() {
+                if let Some(a) = erow.map(|e| e[n]).filter(|&a| a != 0) {
+                    blend_over(dp, sp, a);
+                    continue;
+                }
                 let px = (sp[0], sp[1], sp[2]);
                 if px == key {
                     continue;
@@ -899,7 +1044,7 @@ impl Framebuffer {
     /// Build a framebuffer from already-prepared RGB888 pixels.
     pub fn from_rgb(width: u32, height: u32, pixels: Vec<u8>) -> Option<Self> {
         if pixels.len() == (width * height * 3) as usize {
-            Some(Self { width, height, pixels })
+            Some(Self { width, height, pixels, key: None, edge: Vec::new() })
         } else {
             None
         }
@@ -913,6 +1058,8 @@ impl Framebuffer {
                 width: self.width,
                 height: self.height,
                 pixels: self.pixels.clone(),
+                key: None,
+                edge: Vec::new(),
             },
             Rotation::R180 => self.rotated_180(),
             Rotation::R90 | Rotation::R270 => {
@@ -1095,5 +1242,77 @@ mod tests {
         assert_eq!(rotated.as_bytes()[0], 2); // (0,0) rotated <- (1,1) original
         let idx_11 = ((1 * 2 + 1) * 3) as usize;
         assert_eq!(rotated.as_bytes()[idx_11], 1); // (1,1) rotated <- (0,0) original
+    }
+
+    #[test]
+    fn smooth_text_has_the_height_of_the_pixel_font_and_a_width() {
+        set_text_style(TextFont::Smooth, None);
+        for scale in [1u32, 2, 3, 6, 20] {
+            let w = Framebuffer::text_width("20:51:49", scale);
+            // about 6 pixels per character per unit of scale, like the pixel font
+            let pixel = 8 * 6 * scale;
+            assert!(w * 10 > pixel * 6 && w * 10 < pixel * 14, "scale {scale}: {w} vs {pixel}");
+            assert_eq!(Framebuffer::text_height(scale), 7 * scale);
+        }
+        let mut fb = Framebuffer::new(Resolution::new(300, 60));
+        fb.clear(1, 0, 2);
+        let w = fb.draw_text(10, 10, "Thursday 15", 255, 255, 255, 3);
+        assert!(w > 100 && w < 250, "{w}");
+        assert!(fb.as_bytes().chunks_exact(3).any(|p| p == [255, 255, 255]));
+        set_text_style(TextFont::Pixel, None);
+        assert_eq!(Framebuffer::text_width("ABC", 2), 3 * 6 * 2);
+    }
+
+    #[test]
+    fn smooth_text_edges_blend_with_the_background_not_with_the_key_colour() {
+        set_text_style(TextFont::Smooth, None);
+        let key = (1u8, 0u8, 2u8);
+        let mut ui = Framebuffer::new(Resolution::new(200, 50));
+        ui.clear(key.0, key.1, key.2);
+        ui.draw_text(5, 5, "Wag", 255, 255, 255, 4);
+        set_text_style(TextFont::Pixel, None);
+        // composed over a mid-grey background: no pixel may be darker than the background
+        // (a halo would be), and the text colour is reached
+        let mut bg = Framebuffer::new(Resolution::new(200, 50));
+        bg.clear(120, 120, 120);
+        bg.blit_ui(&ui, 0, 0, key, None);
+        let b = bg.as_bytes();
+        assert!(b.chunks_exact(3).all(|p| p[0] >= 120 && p[0] == p[1] && p[1] == p[2]), "dark halo");
+        assert!(b.chunks_exact(3).any(|p| p[0] == 255), "full text colour");
+        assert!(b.chunks_exact(3).any(|p| p[0] > 130 && p[0] < 250), "anti-aliased edges");
+        // blit_keyed does the same
+        let mut bg2 = Framebuffer::new(Resolution::new(200, 50));
+        bg2.clear(120, 120, 120);
+        bg2.blit_keyed(&ui, 0, 0, key);
+        assert_eq!(bg.as_bytes(), bg2.as_bytes());
+        // a clear() forgets the edges
+        ui.clear(key.0, key.1, key.2);
+        let mut bg3 = Framebuffer::new(Resolution::new(200, 50));
+        bg3.clear(120, 120, 120);
+        bg3.blit_ui(&ui, 0, 0, key, None);
+        assert!(bg3.as_bytes().chunks_exact(3).all(|p| p == [120, 120, 120]));
+    }
+
+    #[test]
+    fn smooth_text_over_a_panel_blends_with_the_panel_and_scrolls_clipped() {
+        set_text_style(TextFont::Smooth, None);
+        let mut fb = Framebuffer::new(Resolution::new(120, 30));
+        fb.clear(40, 40, 90);
+        fb.draw_text(2, 2, "OK", 255, 255, 255, 2);
+        // nothing is darker than the panel, nothing outside the glyph area changed
+        assert!(fb.as_bytes().chunks_exact(3).all(|p| p[0] >= 40));
+        let mut s = Framebuffer::new(Resolution::new(120, 30));
+        s.clear(0, 0, 0);
+        s.draw_text_clipped(-20, 2, "Scrolling title", 255, 255, 255, 2, 10, 60);
+        let b = s.as_bytes();
+        for y in 0..30usize {
+            for x in 0..120usize {
+                if x < 10 || x >= 60 {
+                    assert_eq!(&b[(y * 120 + x) * 3..(y * 120 + x) * 3 + 3], &[0, 0, 0], "outside the window at {x},{y}");
+                }
+            }
+        }
+        assert!(b.iter().any(|&v| v > 100), "something is drawn inside the window");
+        set_text_style(TextFont::Pixel, None);
     }
 }

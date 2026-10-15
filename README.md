@@ -61,6 +61,8 @@ option, and a live preview of the display drawn by the real program.
   runs (see [Settings editor](#settings-editor-trofeo_config)).
 - **Music screen**: a Spotify-style now-playing card (album cover, artist/title,
   progress bar, spectrum, colors taken from the cover).
+- **Two fonts for every text**: the classic blocky pixel font, or smooth anti-aliased
+  **Poppins** in all screens (`font = smooth`) — see [Font](#font).
 - **Pixel game** under the clock: a self-playing pixel-art platformer (a knight
   or a cat) that reacts to CPU load, music, network/disk bursts, the hour, and
   the real weather and time of day.
@@ -69,9 +71,9 @@ option, and a live preview of the display drawn by the real program.
   background (see [Tiles layout](#tiles-layout-glass-dashboard)).
 - **Backgrounds**: an image, GIF or video; a **solid color** (any color name or hex code);
   or an **animated effect** with no file needed — plasma, aurora, lava lamp, silk waves, a
-  minimal **matrix / digital rain**, or an **aquarium** seen from the side with a moving water
-  surface, light rays, caustics and bubbles. The rain and the aquarium also come in a
-  **white (light) variant**. Colors from pastel to fluorescent, or your own; adjustable speed
+  minimal **matrix / digital rain**, an **aquarium** seen from the side with a moving water
+  surface, light rays, caustics and bubbles, a **network** of nodes and thin lines, or a turning
+  **globe**. Rain, aquarium, network and globe also come in a **white (light) variant**. Colors from pastel to fluorescent, or your own; adjustable speed
   and brightness, at almost no CPU cost (see
   [Backgrounds](#backgrounds-solid-color-and-animated-effects)).
 - Can also drive a **DeepCool** display (sends CPU data over HID).
@@ -240,7 +242,7 @@ Also settable in `trofeo.conf` (see `trofeo.conf.example`), in the [settings edi
 - `background_color = black | #0B1D3A | …`: a **solid color** instead of a picture — a name
   (`black`, `white`, `pink`, `navy`, `teal`, …) or a hex code. See
   [Backgrounds](#backgrounds-solid-color-and-animated-effects).
-- `background_effect = plasma | aurora | lava | waves | matrix | rain | aquarium`: an
+- `background_effect = plasma | aurora | lava | waves | matrix | rain | aquarium | network | globe`: an
   **animated background** with no file needed — see
   [Backgrounds](#backgrounds-solid-color-and-animated-effects).
   It replaces `background` while it is on.
@@ -277,6 +279,24 @@ Also settable in `trofeo.conf` (see `trofeo.conf.example`), in the [settings edi
   `background_offset_x/y`.
 
 Every key is also a CLI flag (`--hide spectrum`, `--clock-position top-right`).
+
+### Font
+
+![The pixel font and the smooth font](img/font-smooth.png)
+
+All the text of the program — status lines, big clock and date, every layout, the music screen,
+the ticker, the weather panel — can be drawn in two fonts: `font = pixel` (the default, the
+blocky 5x7 font) or `font = smooth`, anti-aliased **Poppins** with mixed case, accents and the
+degree sign. Capital letters keep the height of the pixel font, so every screen keeps its
+proportions, and the edges stay smooth over a picture, an effect or a semi-transparent panel.
+`font_weight = auto | light | regular | medium` chooses the weight (auto: stronger for small
+text, lighter for the clock). The `tiles` layout keeps its own `tiles_font`. The characters of
+the matrix background and the pixel game are always pixel art. See the
+**[Options guide](./OPTIONS_GUIDE.md#font)**.
+
+```ini
+font = smooth
+```
 
 ### Pixel game under the clock
 
@@ -342,9 +362,21 @@ its lightest color becoming the surface. It also works in portrait.
 
 ![Aquarium](img/background-aquarium.png)
 
-**Light (white) variants.** `effect_theme = light` gives `matrix`, `rain` and `aquarium` a
-**white background**: dark characters and streaks on white paper, or a white room with pale water
-that deepens in color toward the bottom. `effect_brightness` then sets how saturated the colors
+**Network and globe.** `background_effect = network` is a web of points drifting slowly,
+joined by thin lines while they are near each other, so the net keeps changing shape (a few nodes
+carry a ring). `globe` is the same on a sphere that turns and tilts slowly, the near side clearer
+than the far one. Only lines and dots, no text. `effect_level` sets how many nodes there are,
+`effect_scale` their spacing and size (and the size of the globe). They use the same palettes as
+the other effects — the default is `ice`; a one-colour palette such as `crimson` gives grey lines
+with red nodes, a several-colour one (`neon`, `rainbow`) nodes of different colors.
+
+![Network and globe](img/background-network.png)
+
+![Globe](img/background-globe.png)
+
+**Light (white) variants.** `effect_theme = light` gives `matrix`, `rain`, `aquarium`, `network`
+and `globe` a **white background**: dark characters and streaks on white paper, a white room with
+pale water that deepens in color toward the bottom, or grey-blue lines and nodes on white. `effect_brightness` then sets how saturated the colors
 are. Remember to give the text a dark color:
 
 ```ini
@@ -364,13 +396,17 @@ effect_palette = amber                # ...like an old terminal
 # background_effect = aquarium        # or an aquarium, water up to 60% of the height
 # effect_palette = deep
 # effect_level = 60
+
+# background_effect = network         # or nodes and thin lines (globe: a turning sphere)
+# effect_theme = light
+# effect_palette = crimson
 ```
 
 It is built to be light: the picture is only calculated on a coarse grid and
 stretched through a color table (about a millisecond per frame; the aquarium, a few
 milliseconds), and `effect_fps` (default 8) keeps the number of frames low — see
 [Performance](#performance). Details and every key in the
-**[Options guide](./OPTIONS_GUIDE.md#animated-background-effect-plasma-aurora-lava-waves-matrix-rain-aquarium)**.
+**[Options guide](./OPTIONS_GUIDE.md#animated-background-effect-plasma-aurora-lava-waves-matrix-rain-aquarium-network-globe)**.
 
 ### Brightness, DeepCool, FPS
 
@@ -490,7 +526,7 @@ tiles_bg_color = #1B2A4A, #4A1B3A
 Tiles: `clock cpu cpu_temp cpu_watt gpu gpu_temp gpu_watt ram net disk fps weather music`.
 Backgrounds: whatever the other screens use (`global`), a color, a gradient, the
 animated effects of [Backgrounds](#backgrounds-solid-color-and-animated-effects)
-(matrix, rain and the aquarium included),
+(matrix, rain, the aquarium, the network and the globe included),
 or an image just for this screen. Works on 1920×462, 1920×400 and in portrait; the
 tiles are redrawn only when something changes, so even an animated background costs
 little. All the keys are in the [options guide](./OPTIONS_GUIDE.md#tiles-layout). In the
@@ -558,8 +594,8 @@ Requires a *Virtual Display Driver* (VDD) at 1920×462 — see
 - `src/spectrum.rs` — spectrum styles and color palettes.
 - `src/media.rs` + `src/music_screen.rs` — now-playing info (Windows media controls / `playerctl`) and the Spotify-style music screen.
 - `src/pixel_game.rs` — the self-playing pixel-art platformer under the clock.
-- `src/effect.rs` — the animated backgrounds (plasma, aurora, lava, waves, matrix, rain, aquarium and their light variants).
-- `src/tiles.rs` + `src/smooth_font.rs` + `assets/` — the tiles layout and its anti-aliased text (embedded Poppins font, SIL OFL: see `assets/OFL.txt`).
+- `src/effect.rs` — the animated backgrounds (plasma, aurora, lava, waves, matrix, rain, aquarium, network, globe and their light variants).
+- `src/tiles.rs` — the tiles layout; `src/smooth_font.rs` + `assets/` — the anti-aliased text, used by the tiles and (`font = smooth`) by every other text (embedded Poppins font, SIL OFL: see `assets/OFL.txt`).
 - `src/bin/config_editor.rs` — the settings editor window (`trofeo_config`, built with egui).
 - `src/schema.rs` — the list of every setting the editor shows (names, ranges, defaults, texts in English and Italian); tests check it against the real parser, so the editor can only write what the program accepts.
 - `src/conf_edit.rs` — line-by-line editing of `trofeo.conf` that keeps comments and untouched lines.
@@ -587,7 +623,7 @@ to get the minimal-load behavior measured above. These figures have not been
 re-measured with the game on.
 
 An **animated background effect** works the same way: building the picture takes about a
-millisecond (matrix and rain a little less; the aquarium about 5 ms), and the cost that matters is
+millisecond (matrix and rain a little less; the aquarium about 5 ms, the network 1-2 ms and the globe about 3 ms), and the cost that matters is
 the extra frames. It uses its own, low `effect_fps` (default 8) while it moves instead of the
 idle 2 fps, so it sits between the idle screen and the game; lower `effect_fps` or set
 `effect_speed = 0` (a still picture, idle FPS unchanged) to make it lighter still. A **solid
@@ -605,7 +641,7 @@ display is running.
 - USB protocol reverse-engineering:
   [thermalright-trcc-linux](https://github.com/Lexonight1/thermalright-trcc-linux)
   by Lexonight1.
-- Smooth text in the tiles layout uses a subset of the [Poppins](https://github.com/itfoundry/Poppins) font
+- The smooth font (tiles layout and `font = smooth`) uses a subset of the [Poppins](https://github.com/itfoundry/Poppins) font
   (© The Poppins Project Authors, SIL Open Font License 1.1 — `assets/OFL.txt`).
 - The settings editor is built with [egui / eframe](https://github.com/emilk/egui)
   (MIT or Apache-2.0) and, on Windows, [rfd](https://github.com/PolyMeilex/rfd) (MIT) for the file dialogs.

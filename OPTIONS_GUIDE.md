@@ -159,7 +159,7 @@ Video backgrounds need ffmpeg; `background_dim` darkens the image so text
 stays readable over it. With an animated background (GIF or video) the idle
 FPS is automatically raised to the active FPS, so the animation stays smooth
 even while nothing else is happening. For a soft moving background that needs
-no file at all see [Animated background effect](#animated-background-effect-plasma-aurora-lava-waves-matrix-rain-aquarium).
+no file at all see [Animated background effect](#animated-background-effect-plasma-aurora-lava-waves-matrix-rain-aquarium-network-globe).
 
 ```ini
 background = C:\Pictures\space.mp4
@@ -172,26 +172,26 @@ ffmpeg = C:\ffmpeg\bin\ffmpeg.exe
 # background_color = #0B1D3A      # ... or a hex code
 ```
 
-## Animated background effect (plasma, aurora, lava, waves, matrix, rain, aquarium)
+## Animated background effect (plasma, aurora, lava, waves, matrix, rain, aquarium, network, globe)
 
 Instead of a picture, the background can be a slow, soft effect whose colors
 blend into each other and drift: a plasma, curtains of aurora, a lava lamp or
-silk-like waves — a minimal **digital rain** (`matrix`, `rain`) or an **aquarium** seen from the side. It is drawn behind everything (clock, status lines, spectrum,
+silk-like waves — a minimal **digital rain** (`matrix`, `rain`) an **aquarium** seen from the side, a **network** of nodes and lines or a turning **globe**. It is drawn behind everything (clock, status lines, spectrum,
 the pixel game, layouts), costs almost no CPU, and you choose the colors, the
 speed and the brightness.
 
 | Key | CLI | Values | Default |
 |---|---|---|---|
-| `background_effect` | `--background-effect` | `plasma` / `aurora` / `lava` / `waves` / `matrix` / `rain` / `aquarium` / `none` | `none` |
-| `effect_palette` | `--effect-palette` | `pastel` / `fluo` / `neon` / `candy` / `sunset` / `ocean` / `aurora` / `fire` / `forest` / `ice` / `mono` / `rainbow` / `custom`; for `matrix` / `rain` also `matrix` (green) / `amber` / `violet` / `crimson` / `snow` (white); for `aquarium` also `lagoon` / `deep` / `tropical`; several (comma-separated) or `all` rotate | `neon` |
+| `background_effect` | `--background-effect` | `plasma` / `aurora` / `lava` / `waves` / `matrix` / `rain` / `aquarium` / `network` / `globe` / `none` | `none` |
+| `effect_palette` | `--effect-palette` | `pastel` / `fluo` / `neon` / `candy` / `sunset` / `ocean` / `aurora` / `fire` / `forest` / `ice` / `mono` / `rainbow` / `custom`; for `matrix` / `rain` also `matrix` (green) / `amber` / `violet` / `crimson` / `snow` (white); for `aquarium` also `lagoon` / `deep` / `tropical`; `network` and `globe` use `ice` unless you choose; several (comma-separated) or `all` rotate | `neon` |
 | `effect_colors` | `--effect-colors` | 2 or more colors, e.g. `#FF0080, #00FFFF` | — |
 | `effect_palette_interval` | `--effect-palette-interval` | `5`-`3600` seconds (rotation period) | `60` |
 | `effect_speed` | `--effect-speed` | `0` (frozen) - `100` (fast) | `30` |
 | `effect_scale` | `--effect-scale` | `25`-`400` % (size of the features; bigger = larger, calmer shapes) | `100` |
 | `effect_brightness` | `--effect-brightness` | `0`-`100` | `40` |
 | `effect_fps` | `--effect-fps` | `1`-`30` | `8` |
-| `effect_theme` | `--effect-theme` | `dark` / `light` (`matrix`, `rain` and `aquarium`: a white background instead of a dark one; the other styles ignore it) | `dark` |
-| `effect_level` | `--effect-level` | `0`-`100` % (`aquarium` only: how high the water reaches; `0` empty, `100` full) | `50` |
+| `effect_theme` | `--effect-theme` | `dark` / `light` (`matrix`, `rain`, `aquarium`, `network` and `globe`: a white background instead of a dark one; the other styles ignore it) | `dark` |
+| `effect_level` | `--effect-level` | `0`-`100` % (`aquarium`: how high the water reaches, `0` empty, `100` full; `network` and `globe`: how many nodes, `0` few, `100` many) | `50` |
 
 - **Styles** (`background_effect`): `plasma` is the classic demoscene look (a
   sum of waves and a moving ring); `aurora` is undulating bands of light; `lava`
@@ -219,6 +219,20 @@ speed and the brightness.
   `effect_brightness`, the aquarium uses `65` instead of `40` (water needs more light to look
   like water). Cost: about 5 ms per frame, a bit more than the soft styles; lower
   `effect_fps` to 5 if you want it lighter.
+- **Network** (`background_effect = network`): points drifting slowly on small orbits, joined by
+  thin lines while they are near each other, so the net keeps changing shape; the lines fade as they
+  stretch. A few nodes have a ring around them. There is no text, only lines and dots.
+  `effect_level` is the number of nodes (`50` is about one every 120 pixels), `effect_scale` the
+  spacing and size of everything (bigger = fewer, larger nodes), `effect_speed` how fast they drift.
+- **Globe** (`background_effect = globe`): the same idea on a sphere that turns slowly and tilts a
+  little, with the near side clearer than the far one and a faint outline. It sits in the middle of
+  the panel; `effect_scale` makes it larger (above 100 it grows beyond the top and bottom edges)
+  or smaller, `effect_level` the number of nodes.
+- **Colors of network and globe**: lines take a grey tinted by the colors of the nodes they join,
+  and the nodes are drawn in the palette's colors. The default is `ice` (blue-grey, like a
+  blueprint); a one-colour palette such as `crimson` gives grey lines with red nodes, and a
+  several-colour one (`neon`, `rainbow`) gives nodes of different colors. If you set no
+  `effect_brightness` they use `70`. Cost: about 1.5 ms (network) and 3 ms (globe) per frame.
 - **Light (white) variants** (`effect_theme = light`): `matrix` and `rain` become dark
   characters / streaks on a white page (the tails fade into the white; a faint tint of the
   palette is added to it), and the `aquarium` becomes a white room with pale water that gets
@@ -288,6 +302,13 @@ normal 2 fps. A fast `effect_speed` needs a higher `effect_fps` to look smooth.
 background_effect = matrix
 effect_palette = amber
 
+# a network of nodes and lines (or: globe), on white, grey lines with red nodes
+# background_effect = network
+# effect_theme = light
+# effect_palette = crimson
+# clock_color = #202833
+# text_color = #202833
+
 # an aquarium, water up to 60% of the height
 # background_effect = aquarium
 # effect_palette = lagoon
@@ -347,6 +368,32 @@ yellow, cyan, magenta, white, orange, purple`.
 color = default          # gradient spectrum
 text_color = #E0E0E0
 clock_color = orange
+```
+
+## Font
+
+| Key | CLI | Values | Default |
+|---|---|---|---|
+| `font` | `--font` | `pixel` (the blocky 5x7 font) / `smooth` (anti-aliased Poppins) | `pixel` |
+| `font_weight` | `--font-weight` | `auto` / `light` / `regular` / `medium` (only for `smooth`) | `auto` |
+
+`font = smooth` changes the font of **every** text of the program: the status lines, the big
+clock and the date, all the preset layouts, the music screen, the ticker, the weather panel and
+the game's coin counter. Capital letters keep the same height as in the pixel font, so each
+screen keeps its proportions, but the text is mixed case ("Thursday, 15 October 2026"), has
+accents and the degree sign, and its edges are smooth also over a picture or an animated
+background. `font_weight = auto` uses a stronger weight (medium) for small text and a lighter
+one for big text such as the clock; the other values force one weight everywhere. With
+`smooth`, the lines of the status block are a little farther apart, to leave room for letters
+such as g, p and y.
+
+The `tiles` layout is not affected: it has its own `tiles_font` (`smooth` or `pixel`, smooth by
+default). The characters of the `matrix` background and the pixel game's drawings are always
+pixel art.
+
+```ini
+font = smooth
+# font_weight = medium
 ```
 
 ## Spectrum styles and colors
@@ -461,9 +508,9 @@ spectrum at the bottom. When the music stops the normal screen/layout comes back
   - `solid` — one flat color of your choice, `music_bg_color` (`#RRGGBB`, `R,G,B`
     or a name), the same for every track.
   - `none` — keep whatever is behind (solid color, your `background` image or the
-    [background effect](#animated-background-effect-plasma-aurora-lava-waves-matrix-rain-aquarium));
+    [background effect](#animated-background-effect-plasma-aurora-lava-waves-matrix-rain-aquarium-network-globe));
     the cover and text are drawn on top.
-  - `effect` — the animated background effect (plasma, aurora, lava, waves, matrix, rain or aquarium, with
+  - `effect` — the animated background effect (plasma, aurora, lava, waves, matrix, rain, aquarium, network or globe, with
     the style, palette, speed and size you set in its section; plasma if you set none),
     drawn just for this screen. `music_bg_brightness` is its brightness.
 

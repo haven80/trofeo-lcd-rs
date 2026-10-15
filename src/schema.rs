@@ -45,6 +45,8 @@ pub struct Field {
     pub kind: Kind,
     /// What applies when the key is not in the file ("" = nothing).
     pub default: String,
+    /// Defaults that differ by animated background (`background_effect` value -> default).
+    pub style_defaults: &'static [(&'static str, &'static str)],
     /// Shown only while `key` has one of these values (the effective one: the file's, or the default).
     pub when: Option<(&'static str, &'static [&'static str])>,
     /// Changing it needs a restart of `trofeo_lcd`.
@@ -63,9 +65,18 @@ impl Field {
             help_it: String::new(),
             kind,
             default: String::new(),
+            style_defaults: &[],
             when: None,
             restart: false,
         }
+    }
+    fn style_def(mut self, d: &'static [(&'static str, &'static str)]) -> Field {
+        self.style_defaults = d;
+        self
+    }
+    /// What applies when the key is not in the file, given the animated background in use.
+    pub fn default_for(&self, effect: &str) -> String {
+        self.style_defaults.iter().find(|(e, _)| *e == effect).map(|(_, d)| d.to_string()).unwrap_or_else(|| self.default.clone())
     }
     fn def(mut self, d: &str) -> Field {
         self.default = d.to_string();
@@ -110,7 +121,7 @@ pub const SECTIONS: &[(&str, &str, &str)] = &[
 pub const POSITIONS: &[&str] =
     &["top-left", "top", "top-right", "center-left", "center", "center-right", "bottom-left", "bottom", "bottom-right"];
 pub const LANGUAGES: &[&str] = &["en", "it", "de", "es", "fr", "pt"];
-pub const EFFECTS: &[&str] = &["none", "plasma", "aurora", "lava", "waves", "matrix", "rain", "aquarium"];
+pub const EFFECTS: &[&str] = &["none", "plasma", "aurora", "lava", "waves", "matrix", "rain", "aquarium", "network", "globe"];
 pub const EFFECT_PALETTES: &[&str] = &[
     "pastel", "fluo", "neon", "candy", "sunset", "ocean", "aurora", "fire", "forest", "ice", "mono", "rainbow", "matrix", "amber",
     "violet", "crimson", "snow", "lagoon", "deep", "tropical", "custom", "all",
@@ -265,8 +276,8 @@ fn int(min: i64, max: i64) -> Kind {
 /// Every setting of the editor, in the order they are shown.
 pub fn fields() -> Vec<Field> {
     use Kind::*;
-    let on_effect: &[&str] = &["plasma", "aurora", "lava", "waves", "matrix", "rain", "aquarium"];
-    let themed: &[&str] = &["matrix", "rain", "aquarium"];
+    let on_effect: &[&str] = &["plasma", "aurora", "lava", "waves", "matrix", "rain", "aquarium", "network", "globe"];
+    let themed: &[&str] = &["matrix", "rain", "aquarium", "network", "globe"];
     let music_on: &[&str] = &["true"];
     let mut v: Vec<Field> = Vec::new();
     let mut add = |f: Field| v.push(f);
@@ -315,15 +326,16 @@ pub fn fields() -> Vec<Field> {
     add(Field::new("effect_theme", "effect", "Dark or light", "Scuro o chiaro", Choice(&["dark", "light"]))
         .def("dark")
         .when("background_effect", themed)
-        .help("light = a white background (matrix, rain, aquarium)", "light = sfondo bianco (matrix, rain, acquario)"));
-    add(Field::new("effect_level", "effect", "Water level", "Livello dell'acqua", int(0, 100))
+        .help("light = a white background (matrix, rain, aquarium, network, globe)", "light = sfondo bianco (matrix, rain, acquario, network, globe)"));
+    add(Field::new("effect_level", "effect", "Water level / number of nodes", "Livello dell'acqua / numero di nodi", int(0, 100))
         .def("50")
-        .when("background_effect", &["aquarium"])
-        .help("How much of the panel is water", "Quanta parte del pannello è acqua"));
+        .when("background_effect", &["aquarium", "network", "globe"])
+        .help("Aquarium: how much of the panel is water. Network and globe: how many nodes", "Acquario: quanta parte del pannello è acqua. Network e globe: quanti nodi"));
     add(Field::new("effect_palette", "effect", "Colors", "Colori", Multi(EFFECT_PALETTES))
         .def("neon")
+        .style_def(&[("matrix", "matrix"), ("rain", "matrix"), ("aquarium", "lagoon"), ("network", "ice"), ("globe", "ice")])
         .when("background_effect", on_effect)
-        .help("Several = they rotate. matrix/amber/violet/crimson/snow are for matrix and rain; lagoon/deep/tropical for the aquarium", "Più di uno = ruotano. matrix/amber/violet/crimson/snow per matrix e rain; lagoon/deep/tropical per l'acquario"));
+        .help("Several = they rotate. matrix/amber/violet/crimson/snow are for matrix and rain; lagoon/deep/tropical for the aquarium; network and globe use ice unless you choose", "Più di uno = ruotano. matrix/amber/violet/crimson/snow per matrix e rain; lagoon/deep/tropical per l'acquario; network e globe usano ice se non scegli"));
     add(Field::new("effect_colors", "effect", "Own colors", "Colori personalizzati", ColorList)
         .when("background_effect", on_effect)
         .help("2 or more colors; used when no palette is chosen, or add \"custom\" to the palettes", "2 o più colori; usati se non scegli una palette, oppure aggiungi \"custom\" alle palette"));
@@ -331,8 +343,9 @@ pub fn fields() -> Vec<Field> {
     add(Field::new("effect_scale", "effect", "Size of the shapes (%)", "Dimensione delle forme (%)", int(25, 400)).def("100").when("background_effect", on_effect));
     add(Field::new("effect_brightness", "effect", "Brightness", "Luminosità", int(0, 100))
         .def("40")
+        .style_def(&[("aquarium", "65"), ("network", "70"), ("globe", "70")])
         .when("background_effect", on_effect)
-        .help("Lower = text easier to read. Unset: 65 for the aquarium and the light variants", "Più basso = testo più leggibile. Non impostato: 65 per l'acquario e le varianti chiare"));
+        .help("Lower = text easier to read. Unset: 65 for the aquarium and the light variants, 70 for network and globe", "Più basso = testo più leggibile. Non impostato: 65 per l'acquario e le varianti chiare, 70 per network e globe"));
     add(Field::new("effect_fps", "effect", "Frames per second", "Fotogrammi al secondo", int(1, 30))
         .def("8")
         .when("background_effect", on_effect)
@@ -399,6 +412,13 @@ pub fn fields() -> Vec<Field> {
     add(Field::new("color", "look", "Spectrum bars", "Barre dello spettro", Color)
         .def("default")
         .help("default = green to red by level", "default = dal verde al rosso in base al livello"));
+    add(Field::new("font", "look", "Font of all the text", "Font di tutti i testi", Choice(&["pixel", "smooth"]))
+        .def("pixel")
+        .help("pixel = the blocky 5x7 font; smooth = anti-aliased Poppins, in every screen", "pixel = il font a blocchi 5x7; smooth = Poppins morbido, in ogni schermata"));
+    add(Field::new("font_weight", "look", "Weight of the smooth font", "Spessore del font morbido", Choice(&["auto", "light", "regular", "medium"]))
+        .def("auto")
+        .when("font", &["smooth"])
+        .help("auto = bolder for small text, lighter for big text", "auto = più marcato per il testo piccolo, più leggero per quello grande"));
     add(Field::new("text_color", "look", "Info text", "Testo informativo", Color));
     add(Field::new("clock_color", "look", "Big clock", "Orologio grande", Color));
     add(Field::new("text_backdrop", "look", "Panel behind the text", "Pannello dietro il testo", Bool).def("false"));
@@ -524,6 +544,11 @@ mod tests {
                 Kind::Int { min, max } if !x.default.is_empty() => {
                     let d: i64 = x.default.parse().unwrap_or_else(|_| panic!("{}: default {}", x.key, x.default));
                     assert!((*min..=*max).contains(&d), "{}: default {} out of range", x.key, d);
+                }
+                Kind::Multi(o) if !x.style_defaults.is_empty() => {
+                    for (_, d) in x.style_defaults {
+                        assert!(o.contains(d), "{}: style default {d}", x.key);
+                    }
                 }
                 Kind::Bool if !x.default.is_empty() => assert!(x.default == "true" || x.default == "false", "{}", x.key),
                 _ => {}

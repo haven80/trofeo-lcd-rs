@@ -32,7 +32,6 @@ mod openrgb_sync;
 mod pawnio;
 mod effect;
 mod pixel_game;
-mod smooth_font;
 mod spectrum;
 mod tiles;
 mod ticker;
@@ -52,7 +51,7 @@ use trofeo_lcd::i18n::Lang;
 use trofeo_lcd::layout::{Anchor, BgLayout, Fit, Show};
 use trofeo_lcd::i18n;
 use trofeo_lcd::{Framebuffer, LyLcd, Orientation};
-use trofeo_lcd::{hotkey, png_save};
+use trofeo_lcd::{hotkey, png_save, smooth_font};
 
 /// Number of EQ bars drawn.
 const NUM_BARS: usize = 48;
@@ -349,13 +348,15 @@ fn print_help() {
          \x20\x20--music-screen <true|false>  While music plays, show a now-playing card (cover, title, progress, spectrum)\n\
          \x20\x20--music-progress <true|false>  Music screen: progress bar and times (default: true)\n\
          \x20\x20--music-spectrum-color <cover|main|COLOR|PRESET>  Music screen spectrum color (default: cover)\n\
+         \x20\x20--font <pixel|smooth>  Font of all the text: the 5x7 pixel font (default) or smooth anti-aliased Poppins\n\
+         \x20\x20--font-weight <auto|light|regular|medium>  Weight of the smooth font (default: by text size)\n\
          \x20\x20--pixel-game <true|false>  Pixel-art mini game under the clock on the default screen (default: true)\n\
          \x20\x20--pixel-game-hero <knight|cat|both>, --pixel-game-height <20-70>, --pixel-game-hud <true|false>\n\
-         \x20\x20--background-effect <plasma|aurora|lava|waves|matrix|rain|aquarium|none>  Animated background instead of an image (default: none)\n\
+         \x20\x20--background-effect <plasma|aurora|lava|waves|matrix|rain|aquarium|network|globe|none>  Animated background instead of an image (default: none)\n\
          \x20\x20--effect-palette <P>    pastel | fluo | neon | candy | sunset | ocean | aurora | fire | forest | ice | mono | rainbow |\n         \x20\x20                          matrix | amber | violet | crimson | snow (one-colour, for matrix/rain) |\n         \x20\x20                          lagoon | deep | tropical (for aquarium) | all\n\
          \x20\x20--effect-colors <C>     Own colors: 2+ colors, e.g. #FF0080,#00FFFF (used when --effect-palette is not set)\n\
-         \x20\x20--effect-speed <0-100>, --effect-scale <25-400>, --effect-brightness <0-100>, --effect-fps <1-30>, --effect-level <0-100> (aquarium: how high the water is)\n\
-         \x20\x20--effect-theme <dark|light>  matrix / rain / aquarium on a dark (default) or a white background\n\
+         \x20\x20--effect-speed <0-100>, --effect-scale <25-400>, --effect-brightness <0-100>, --effect-fps <1-30>, --effect-level <0-100> (aquarium: how high the water is; network / globe: how many nodes)\n\
+         \x20\x20--effect-theme <dark|light>  matrix / rain / aquarium / network / globe on a dark (default) or a white background\n\
          \x20\x20                          (defaults: 30, 100, 40, 8); --effect-palette-interval <SEC> rotates several palettes\n\
          \x20\x20--music-stats <list>      Music screen footer: cpu, gpu, ram, net, disk, time, uptime, all or none (default: cpu,gpu,ram)\n\
          \x20\x20--music-bg <gradient|blur|color|solid|none>  Music screen background (default: gradient)\n\
@@ -780,7 +781,7 @@ const OVERRIDE_KEYS: &[&str] = &[
     "pixel_game", "pixel_game_hero", "pixel_game_height", "pixel_game_hud",
     "background_effect", "effect_palette", "effect_colors", "effect_palette_interval",
     "effect_speed", "effect_scale", "effect_brightness", "effect_fps", "effect_level", "effect_theme",
-    "panel", "panel_size",
+    "panel", "panel_size", "font", "font_weight",
 ];
 
 /// Network (`net_unit`) and RAM (`mem_unit`) units.
@@ -834,7 +835,7 @@ fn item_key(key: &str) -> Option<(usize, &str)> {
 }
 
 fn is_override_key(key: &str) -> bool {
-    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "clock_backdrop" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "tiles" || key.starts_with("tiles_") || (key.starts_with("tile_") && key.ends_with("_color"))
+    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "clock_backdrop" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || (key.starts_with("tile_") && key.ends_with("_color"))
 }
 
 /// Style for a single item of the info block.
@@ -1023,6 +1024,18 @@ fn parse_ui_options(file: &ConfigFile) -> anyhow::Result<UiOptions> {
             Some("f") | Some("fahrenheit") => true,
             Some(v) => anyhow::bail!("weather_unit: '{v}' not valid (c | f)"),
         },
+        font: match file.get("font").map(|v| v.trim().to_ascii_lowercase()).as_deref() {
+            None | Some("pixel") | Some("") => trofeo_lcd::TextFont::Pixel,
+            Some("smooth") | Some("poppins") | Some("morbido") => trofeo_lcd::TextFont::Smooth,
+            Some(v) => anyhow::bail!("font: '{v}' not valid (pixel | smooth)"),
+        },
+        font_weight: match file.get("font_weight").map(|v| v.trim().to_ascii_lowercase()).as_deref() {
+            None | Some("auto") | Some("") => None,
+            Some("light") | Some("leggero") => Some(smooth_font::Weight::Light),
+            Some("regular") | Some("normal") | Some("normale") => Some(smooth_font::Weight::Regular),
+            Some("medium") | Some("medio") => Some(smooth_font::Weight::Medium),
+            Some(v) => anyhow::bail!("font_weight: '{v}' not valid (auto | light | regular | medium)"),
+        },
         percent_decimals: match file.get_u32("percent_decimals").map_err(|e| anyhow::anyhow!(e))? {
             None => 0,
             Some(0) => 0,
@@ -1158,6 +1171,9 @@ fn parse_effect(file: &ConfigFile) -> anyhow::Result<effect::Settings> {
             Some(effect::Style::Aquarium) => {
                 e.palettes = vec![effect::Palette::parse("lagoon").expect("preset")];
             }
+            Some(effect::Style::Network | effect::Style::Globe) => {
+                e.palettes = vec![effect::Palette::parse("ice").expect("preset")];
+            }
             _ => {}
         }
     }
@@ -1183,6 +1199,7 @@ fn parse_effect(file: &ConfigFile) -> anyhow::Result<effect::Settings> {
     let default_brightness = match e.style {
         Some(effect::Style::Aquarium) => 65,
         Some(effect::Style::Matrix | effect::Style::Rain) if e.light => 65,
+        Some(effect::Style::Network | effect::Style::Globe) => 70,
         _ => e.brightness,
     };
     e.brightness = ranged("effect_brightness", default_brightness, 0, 100)?;
@@ -2487,6 +2504,10 @@ struct UiOptions {
     /// a second decimal digit (`37.42%`) reads as noise rather than useful
     /// precision at this size.
     percent_decimals: u8,
+    /// The font of every text of the program: the 5x7 pixel font (default) or anti-aliased Poppins.
+    font: trofeo_lcd::TextFont,
+    /// Weight of the smooth font (`None` = by text size).
+    font_weight: Option<smooth_font::Weight>,
     /// While music is playing, freeze the layout rotation on the FIRST layout
     /// of the list (the one that normally carries the spectrum) instead of
     /// letting the rotation walk through panels the spectrum would cover.
@@ -2561,6 +2582,8 @@ impl Default for UiOptions {
             ticker_backdrop: None,
             ticker_width: 100,
             percent_decimals: 0,
+            font: trofeo_lcd::TextFont::Pixel,
+            font_weight: None,
             layout_hold_on_music: false,
             spectrum_styles: Vec::new(),
             spectrum_style_interval: 30,
@@ -2586,6 +2609,7 @@ impl Default for UiOptions {
 static UI_OPTS: std::sync::RwLock<Option<UiOptions>> = std::sync::RwLock::new(None);
 
 fn set_ui_options(o: UiOptions) {
+    trofeo_lcd::set_text_style(o.font, o.font_weight);
     if let Ok(mut g) = UI_OPTS.write() {
         *g = Some(o);
     }
@@ -2679,7 +2703,14 @@ fn draw_backdrop_if(fb: &mut Framebuffer, on: bool, pad: u32, x: u32, y: u32, w:
     fb.fill_rect(x.saturating_sub(pad), y.saturating_sub(pad), w + 2 * pad, h + 2 * pad, fill.0, fill.1, fill.2);
 }
 
-const STATUS_LINE_H: u32 = STATUS_TEXT_SCALE * 7 + 6;
+/// Extra space between status lines in the smooth font: the tails of g, p, y and the comma.
+fn smooth_extra(scale: u32) -> u32 {
+    if trofeo_lcd::text_style().0 == trofeo_lcd::TextFont::Smooth { scale } else { 0 }
+}
+
+fn status_line_h() -> u32 {
+    STATUS_TEXT_SCALE * 7 + 6 + smooth_extra(STATUS_TEXT_SCALE)
+}
 
 fn status_style(fb: &Framebuffer) -> StatusStyle {
     match opts().status_style {
@@ -2712,7 +2743,7 @@ fn item_scale(o: &UiOptions, i: usize) -> u32 {
     o.items[i].size.unwrap_or(STATUS_TEXT_SCALE)
 }
 fn item_line_h(scale: u32) -> u32 {
-    scale * 7 + 6
+    scale * 7 + 6 + smooth_extra(scale)
 }
 
 /// Height (px) of the item groups anchored at the top / bottom.
@@ -2764,7 +2795,7 @@ fn content_rect(fb: &Framebuffer) -> (u32, u32, u32, u32) {
         return (0, t, fb.width(), fb.height().saturating_sub(t + b));
     }
     let n = status_line_count(fb);
-    let band = if n > 0 { 8 + n * STATUS_LINE_H + 11 } else { 10 };
+    let band = if n > 0 { 8 + n * status_line_h() + 11 } else { 10 };
     let (top, bottom) = match opts().status_pos.ay {
         0 => (band, 10),
         2 => (10, band),
@@ -3088,7 +3119,7 @@ fn draw_ticker_bar(fb: &mut Framebuffer, items: &[String], marquee: &mut Marquee
     let color = o.ticker_color.unwrap_or(o.text_color.unwrap_or((0xE0, 0xE0, 0xE0)));
     let canvas_w = fb.width();
     let max_w = canvas_w.saturating_sub(40).min(canvas_w * o.ticker_width / 100).max(1);
-    let line_h = Framebuffer::text_height(scale);
+    let line_h = Framebuffer::text_height(scale) + smooth_extra(scale);
     marquee.scale = scale;
     let (x0, y) = o.ticker_pos.place((0, 0, canvas_w, fb.height()), (max_w, line_h), (20, 8));
     draw_backdrop_if(fb, o.ticker_backdrop.unwrap_or(o.text_backdrop), 10, x0, y, max_w, line_h);
@@ -3332,7 +3363,7 @@ fn draw_status_lines(
     let block_w = block_w.min(max_w.max(1));
     let total_lines = rows.len() as u32 + np_prefix.is_some() as u32 + 2 * np_label.is_some() as u32;
     debug_assert_eq!(total_lines, n_lines);
-    let block_h = total_lines * STATUS_LINE_H - 6;
+    let block_h = total_lines * status_line_h() - 6;
     let (bx, by) = o.status_pos.place((0, 0, canvas_w, fb.height()), (block_w, block_h), (20, 8));
     draw_backdrop(fb, bx, by, block_w, block_h);
 
@@ -3340,7 +3371,7 @@ fn draw_status_lines(
     let mut y = by;
     for row in &rows {
         fb.draw_text(bx, y, row, color.0, color.1, color.2, scale);
-        y += STATUS_LINE_H;
+        y += status_line_h();
     }
     let draw_title = |fb: &mut Framebuffer, marquee: &Marquee, x0: u32, y: u32, window: u32| {
         if window == 0 {
@@ -3363,7 +3394,7 @@ fn draw_status_lines(
         draw_title(fb, marquee, bx + prefix_w, y, title_window);
     } else if let Some(label) = &np_label {
         fb.draw_text(bx, y, label, color.0, color.1, color.2, scale);
-        y += STATUS_LINE_H;
+        y += status_line_h();
         draw_title(fb, marquee, bx, y, title_window);
     }
 }
@@ -4065,6 +4096,33 @@ mod layout_tests {
         assert!(e("effect_theme = pink\n").is_err());
         assert!(is_override_key("effect_theme"));
         assert!(is_override_key("effect_level"));
+    }
+
+    #[test]
+    fn font_options() {
+        let o = |t: &str| parse_ui_options(&ConfigFile::parse(t).unwrap());
+        let d = o("").unwrap();
+        assert_eq!((d.font, d.font_weight), (trofeo_lcd::TextFont::Pixel, None));
+        let s = o("font = smooth\nfont_weight = light\n").unwrap();
+        assert_eq!((s.font, s.font_weight), (trofeo_lcd::TextFont::Smooth, Some(smooth_font::Weight::Light)));
+        assert_eq!(o("font = Poppins\nfont_weight = auto\n").unwrap().font, trofeo_lcd::TextFont::Smooth);
+        assert!(o("font = comic\n").is_err());
+        assert!(o("font_weight = bold\n").is_err());
+        assert!(is_override_key("font") && is_override_key("font_weight"));
+    }
+
+    #[test]
+    fn network_and_globe_options() {
+        let e = |t: &str| parse_effect(&ConfigFile::parse(t).unwrap());
+        for (name, style) in [("network", effect::Style::Network), ("rete", effect::Style::Network), ("globe", effect::Style::Globe), ("sfera", effect::Style::Globe)] {
+            let a = e(&format!("background_effect = {name}\n")).unwrap();
+            assert_eq!(a.style, Some(style));
+            assert_eq!(a.palettes, vec![effect::Palette::parse("ice").unwrap()]);
+            assert_eq!((a.brightness, a.level, a.light), (70, 50, false));
+            let l = e(&format!("background_effect = {name}\neffect_theme = light\neffect_palette = crimson\neffect_level = 80\n")).unwrap();
+            assert!(l.light);
+            assert_eq!((l.palettes, l.level), (vec![effect::Palette::parse("crimson").unwrap()], 80));
+        }
     }
 
     /// Whether the program accepts `text` as a configuration (every parser that reads the file).
