@@ -333,7 +333,8 @@ Element names: `cpu, gpu, uptime, time, date, mem` (or `ram`)`, net, disk,
 volume, nowplaying, weather, spectrum, ticker, clock, clock_date, dashboard`.
 
 Detail fields inside the CPU/GPU lines can also be individually hidden:
-`cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_power, gpu_fan, gpu_clock, gpu_fps`.
+`cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_power, gpu_fan, gpu_clock, gpu_fps`, and the fan speeds
+of [LibreHardwareMonitor](#fans-and-sensors-librehardwaremonitor) in the CPU line: `cpu_fan, case_fan, pump`.
 
 `show` and `hide` can combine: `show` first restricts to a subset, `hide` then
 removes from what's left.
@@ -670,6 +671,26 @@ there's no matching config-file key for it.
 deepcool = false          # never touch a DeepCool display
 ```
 
+### What the case display shows (CH170 / CH270 / CH690 DIGITAL) — applies live
+
+| Key | Values | Default |
+|---|---|---|
+| `deepcool_mode` | `freq` (the CPU frequency) \| `fan` (the fan speed, RPM) \| `alternate` (the two in turn) | `freq` |
+| `deepcool_fan` | the fan for the RPM: `cpu` \| `case` \| `pump` \| `gpu` \| `both` (CPU fan and case fans in turn) | `cpu` |
+| `deepcool_alternate` | seconds before it switches, `2`-`120` | `6` |
+
+The RPM comes from [LibreHardwareMonitor](#fans-and-sensors-librehardwaremonitor); with no reading the
+display shows `0`. With `deepcool_mode = alternate` and `deepcool_fan = both` the display cycles
+frequency, CPU fan, case fans. The display protocol for the fan is not documented by DeepCool: the
+number is sent in the place of the frequency and in the two bytes after it; if it does not appear on
+your model, please report it. Other DeepCool models (coolers, CH360/CH560, CH510) have no RPM field.
+
+```ini
+deepcool_mode = alternate
+deepcool_fan = case
+deepcool_alternate = 8
+```
+
 ## In-game FPS dashboard *(restart required)*
 
 | Key | CLI | Values | Default |
@@ -902,11 +923,13 @@ background = C:\Pictures\bg.jpg
 
 Names (`trofeo_lcd.exe --layout list` prints these with descriptions):
 `default, default2, cpu-gpu, temps, overview, grid6, clock-center, io, music,
-gaming, cpu, gpu, weather, news`.
+gaming, cpu, gpu, tiles, frame, weather, news`.
 
 - `default` = the standard screen (status lines, spectrum, big clock).
 - `default2` = the standard screen with [per-item](#per-item-control) styling.
 - `news` = the [ticker](#ticker)'s headlines, big and scrolling, full screen.
+- `tiles` = the [glass tiles](#tiles-layout) dashboard.
+- `frame` = the [digital picture frame](#digital-frame): a collage of the pictures of a folder.
 - Everything else replaces the clock with big panel(s); the top status block
   and spectrum turn off (use `show = nowplaying, time` etc. to add lines back
   on top of a panel layout; the game dashboard stays on regardless — turn it
@@ -941,6 +964,181 @@ layout_interval = 40
 # Rotate the classic screen with the custom per-item one:
 layout = default, default2
 layout_interval = 20
+```
+
+## Tiles layout
+
+`layout = tiles` shows rounded, semi-transparent tiles. Every key can also be a command-line flag
+(`tiles_font` → `--tiles-font`), and all of them are applied live.
+
+| Key | Values | Default |
+|---|---|---|
+| `tiles` | the tiles: `clock cpu cpu_temp cpu_watt gpu gpu_temp gpu_watt ram net disk fps weather music`, and with LibreHardwareMonitor `cpu_fan case_fan pump gpu_fan fans mb_temp disk_temp`, `,` between tiles, `\|` between rows, `:ring` for a ring, `clock:tall` (first tile only) as tall as all the rows; at most 16 | `clock:tall, cpu_temp, gpu_temp \| ram:ring, cpu:ring, gpu:ring` |
+| `tiles_rpm` | a `CPU 1240 / CASE 780 RPM` line on the CPU tiles (needs LibreHardwareMonitor) | `true` |
+| `tiles_fan_max` | the RPM that fills the bar of a fan tile, `500`-`10000` | `2500` |
+| `tiles_font` | `smooth` \| `pixel` | `smooth` |
+| `tiles_theme` | `dark` \| `light` | `dark` |
+| `tiles_color` | the fill of the tiles | by theme |
+| `tiles_text_color` | the text | by theme |
+| `tiles_opacity` | `0`-`100` | by theme (66 / 52) |
+| `tiles_radius` | corner radius, `0`-`80` | automatic |
+| `tiles_gap` | space between tiles, `0`-`60` | `14` |
+| `tiles_clock_seconds` | `true`/`false` | `false` |
+| `tiles_cpu_watt_max`, `tiles_gpu_watt_max` | what 100% of the watt bar is, `10`-`2000` | `200`, `400` |
+| `tiles_fps_max` | what 100% of the FPS bar is, `30`-`1000` | `240` |
+| `tiles_bar_color` | `auto` (green-yellow-red by level), a color, or several (a gradient) | `auto` |
+| `tile_<name>_color` | the same, for one tile (`tile_gpu_color`, `tile_cpu_temp_color`, ...) | `auto` |
+| `tiles_bg` | `global` \| `color` \| `gradient` \| `effect` \| `image` | `global` |
+| `tiles_bg_color` | one color, or several for a gradient | |
+| `tiles_bg_image` | a picture, for `tiles_bg = image` | |
+| `tiles_bg_dim` | darkens the picture / effect, `0`-`100` | `0` |
+| `tiles_palette` | **a color of its own for every tile**, from the color presets: names separated by commas (`pastel fluo neon candy sunset ocean aurora fire forest ice mono rainbow` plus the one-color and water presets), `all`, `custom`; `off`/empty = one color for all | off |
+| `tiles_colors` | your own colors (two or more), for `custom` | |
+| `tiles_palette_interval` | seconds a preset stays before the next fades in, `5`-`3600` | `20` |
+| `tiles_palette_stagger` | `0` = every tile changes preset at the same moment ... `100` = spread over the whole interval | `50` |
+
+With `tiles_palette` the colors of the tiles drift slowly along the preset (a lap in 90 s) and,
+with several presets, fade from one to the next. They are blended into the tile fill and kept dark
+enough for the text (pale enough in the light theme). The screen asks for 5 frames a second.
+
+```ini
+layout = tiles
+tiles_palette = pastel, ocean, sunset
+tiles_palette_interval = 30
+tiles_palette_stagger = 70
+# one single preset: only the slow drift
+# tiles_palette = aurora
+# your own colors
+# tiles_palette = custom
+# tiles_colors = #FF0080, #00C8FF, #FFC800
+```
+
+## Fans and sensors (LibreHardwareMonitor)
+
+Fan speeds come from [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor)'s
+web server: start it **as administrator**, then *Options → Remote Web Server → Run* (port 8085) and
+leave it open. Nothing happens when it is not running. All of these apply live (a new address or
+interval is picked up within a few seconds); every key can also be a command-line flag
+(`lhm_cpu_fan` → `--lhm-cpu-fan`).
+
+| Key | Values | Default |
+|---|---|---|
+| `lhm` | `true` \| `false` | `true` |
+| `lhm_url` | the address of the web server | `http://127.0.0.1:8085` |
+| `lhm_interval` | seconds between readings, `1`-`60` | `2` |
+| `lhm_cpu_fan` | a part of the name of the CPU fan sensor (empty = automatic) | automatic |
+| `lhm_case_fan` | the same, for the case fans (the average of the ones that spin) | automatic |
+| `lhm_pump` | the same, for the pump / AIO | automatic |
+| `lhm_mb_temp` | the same, for the motherboard temperature | automatic |
+
+The automatic choice: the CPU fan is a fan whose name contains "cpu" (and is not a pump); the pump
+one whose name contains "pump"; the case fans are the other fans of the board (the average of the ones
+that spin; fans at 0 RPM are not plugged in); the GPU fan the one of the graphics card; the motherboard
+temperature the one called motherboard / system / board; the disk temperature the hottest drive. Names are
+matched on a part of "device / sensor", any case. `trofeo_lcd --lhm-list` prints what LibreHardwareMonitor
+reports and what each role picked, so you can see which name to write. A value with a `#` in it goes in
+quotes: `lhm_cpu_fan = "Fan #2"`.
+
+Where the readings show up: the `cpu_fan`, `case_fan`, `pump`, `gpu_fan`, `fans`, `mb_temp` and
+`disk_temp` [tiles](#tiles-layout), the `tiles_rpm` line on the CPU tiles, the CPU line of the status
+screens (`hide = cpu_fan, case_fan, pump`), [Deck, Cards and Orbit](#deck-cards-and-orbit), and the
+[DeepCool display](#deepcool-integration-restart-required). The GPU fan fills in when the driver does
+not report one, and the CPU temperature and power when the built-in sensor does not know the CPU.
+
+```ini
+lhm_cpu_fan = "Fan #2"
+lhm_pump = AIO
+tiles = clock:tall, cpu_temp, fans | ram:ring, cpu:ring, cpu_fan:ring, mb_temp
+```
+
+## Deck, Cards and Orbit
+
+Three more full screens (`layout = deck`, `cards`, `orbit`). Every key can also be a command-line
+flag and all of them apply live. Panels: `cpu gpu ram fans net disk clock weather music` (`clock` also shows
+the weather and the playing track). `fans` needs [LibreHardwareMonitor](#fans-and-sensors-librehardwaremonitor).
+
+| Key | Values | Default |
+|---|---|---|
+| `deck` | 2 to 5 panels, one per column | `cpu, gpu, ram, clock` |
+| `deck_gauge` | the gauge line on top of each column | `true` |
+| `cards` | `\|` between columns, `,` stacks cards in a column; up to 6 columns of 3 cards | `clock \| cpu \| gpu \| ram, disk \| music, net` |
+| `cards_radius` | corner radius, `0`-`60` | by size |
+| `cards_gap` | pixels between cards, `0`-`40` | `12` |
+| `orbit` | 1 to 4 devices, one cluster of rings each | `cpu, gpu, ram` |
+| `orbit_clock` | the clock block on the right | `true` |
+| `orbit_legend` | the names of the rings under each cluster | `true` |
+| `dash_palette` | `default` or a preset of the animated backgrounds (`pastel`, `ocean`, `sunset`, ...) | `default` |
+| `dash_colors` | your own accent colors (used instead of the preset) | |
+| `dash_font` | `smooth` \| `pixel` | `smooth` |
+| `dash_text_color` | the text | white |
+| `dash_plate` | darkness of the plate behind `deck` and `orbit`, `0`-`100` | `50` |
+| `dash_graph` | the graphs of the last minutes | `true` |
+| `dash_history` | seconds of history, `20`-`600` | `90` |
+| `dash_net_max` | network MB/s that fills a ring or gauge, `1`-`1000` | `25` |
+| `dash_bg` | `global` \| `color` \| `gradient` \| `effect` \| `image` | `global` |
+| `dash_bg_color` / `dash_bg_image` / `dash_bg_dim` | for `color`/`gradient`, for `image`, darkening `0`-`100` | |
+
+The maxima of watts and fan speed are the ones of the tiles (`tiles_cpu_watt_max`, `tiles_gpu_watt_max`,
+`tiles_fan_max`) and the seconds on the clock `tiles_clock_seconds`. The rings of `orbit` are: CPU load /
+temperature / power, GPU load / temperature / power, RAM / disk / network, one per fan for `fans`. Each cluster
+takes its own run of colors from the palette. A reading that does not exist (no temperature sensor, no
+LibreHardwareMonitor) is left out and the rest rearranges itself. The screen is redrawn about once a second and
+only when something changed; `dash_bg = effect` or `image` asks for the frame rate of that background.
+
+```ini
+layout = cards
+cards = clock | cpu, ram | gpu, fans | net, disk, music
+dash_palette = ocean
+cards_gap = 16
+```
+
+## Digital frame
+
+`layout = frame`: a collage of the pictures of a folder, with the glass tiles of the
+[tiles layout](#tiles-layout) at the sides. Every key can also be a command-line flag
+(`frame_folder` → `--frame-folder`), and all of them are applied live.
+
+| Key | Values | Default |
+|---|---|---|
+| `frame_folder` | the folder with the pictures (JPG, PNG, WebP, BMP, GIF; not HEIC) | none: the screen asks for it |
+| `frame_style` | `mosaic` (a tidy collage) \| `polaroid` (scattered prints with a white border) | `mosaic` |
+| `frame_photos` | pictures on screen at once, `1`-`9` (never more than the folder has) | `5` |
+| `frame_interval` | seconds between changes: each time ONE picture is replaced, `2`-`3600` | `8` |
+| `frame_order` | `shuffle` (every picture comes up before any repeats) \| `name` (alphabetical, round and round) | `shuffle` |
+| `frame_transition` | `fade` \| `slide` (a wipe in the mosaic, a print dropping in with polaroid) | `fade` |
+| `frame_recursive` | include the subfolders | `false` |
+| `frame_refresh` | seconds between two looks at the folder, `5`-`3600` | `60` |
+| `frame_bg` | `blur` (the current picture, blurred and dark) \| `dark` \| `global` (the program's normal background, image or effect) | `blur` |
+| `frame_dim` | how dark the blurred background is, `0`-`100` | `60` |
+| `frame_gap` | mosaic: pixels between the pictures, `0`-`40` | `10` |
+| `frame_radius` | mosaic: corner radius, `0`-`60` | `14` |
+| `frame_left`, `frame_right` | the tiles of the side columns (names as in `tiles`, `:ring` allowed, `none` = no tiles: that side goes to the pictures) | `clock, ram:ring` / `cpu:ring, gpu:ring` |
+| `frame_side_width` | width of a side in % of the long side of the screen, `8`-`35` | `17` |
+
+- On a **portrait** screen the sides become a strip at the top (`frame_left`) and one at the
+  bottom (`frame_right`).
+- The look of the sides (theme, font, colors, `tiles_palette`, ...) is the one of the
+  [tiles layout](#tiles-layout).
+- Phone photos are shown upright (the EXIF rotation is applied). With fewer pictures than
+  `frame_photos` the collage has as many places as pictures and nothing changes.
+- A folder that is missing or has no pictures shows a message; files that cannot be read are
+  skipped. In the settings editor, the *Digital frame* section has a folder picker and a preview
+  with your own pictures.
+- Cost: the pictures are decoded and scaled on a background thread, once per change; while nothing
+  moves the screen idles at 2 frames a second, and a change runs at 20 for about a second and a
+  half.
+
+```ini
+layout = frame
+frame_folder = C:\Users\Me\Pictures\Holidays
+frame_style = polaroid
+frame_photos = 4
+frame_interval = 12
+frame_transition = slide
+frame_left = clock
+frame_right = cpu:ring, gpu:ring, ram:ring
+tiles_theme = dark
+tiles_palette = ocean, sunset      # the side tiles in changing colors
 ```
 
 ## Screenshot hotkey — command-line only *(restart required)*

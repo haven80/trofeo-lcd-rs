@@ -70,6 +70,19 @@ Starting from the `sukualam/trofeo-lcd` codebase, this fork has:
 - Added **network** and **globe** backgrounds (`background_effect = network | globe`): nodes joined
   by thin lines, drifting on a plane or turning on a sphere, in dark and light variants, with the
   same color palettes as the other effects.
+- Added a **digital picture frame** layout (`layout = frame`): a collage of the pictures of a
+  folder, as a tidy mosaic or as scattered polaroid prints, one picture changing at a time over a
+  blurred copy of the photo, with glass tiles at the sides. Pictures are decoded with the
+  [image](https://github.com/image-rs/image) crate (MIT or Apache-2.0; JPEG, PNG, WebP, BMP, GIF)
+  on a background thread.
+- Added **per-tile colors from the color presets** to the tiles layout (`tiles_palette`): every tile
+  has a color of its own, drifting along the preset and fading from preset to preset.
+- Added **fan speeds** from [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor)
+  (MPL-2.0; only its web server is used, nothing of its code): CPU, case, pump and GPU RPM on the tiles, the
+  status line, the new screens and the DeepCool case display (`deepcool_mode`), with a small JSON reader of
+  our own.
+- Added three more screens, **deck**, **cards** and **orbit** (`layout = deck | cards | orbit`), with
+  graphs of the last minutes, drawn with the same pieces as the tiles.
 - Added a **graphical settings editor** (`trofeo_config`, built with egui): a separate
   small program that only creates and edits `trofeo.conf` (comments preserved), with a live
   preview drawn by `trofeo_lcd` itself (`--preview-png`). It uses the

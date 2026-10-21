@@ -68,7 +68,21 @@ option, and a live preview of the display drawn by the real program.
   the real weather and time of day.
 - **Tiles layout**: a modern glass dashboard (rounded tiles with big numbers, bars and
   rings) where you pick the tiles, the font (smooth or pixel), the bar colors and the
-  background (see [Tiles layout](#tiles-layout-glass-dashboard)).
+  background — and, if you like, a **color of its own for every tile, taken from the color
+  presets**, drifting and fading from preset to preset (see
+  [Tiles layout](#tiles-layout-glass-dashboard)).
+- **Fan speeds** from [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor):
+  RPM of the CPU fan, the case fans, the pump and the GPU on the tiles, in the status line and on
+  the **DeepCool case display** (frequency and RPM in turn, `deepcool_mode = alternate`) — see
+  [Fans and sensors](#fans-and-sensors-librehardwaremonitor).
+- **Deck, Cards and Orbit**: three more full screens with graphs of the last minutes —
+  instrument columns, colourful cards and concentric rings (see
+  [Deck, Cards and Orbit](#deck-cards-and-orbit)).
+- **Digital picture frame**: `layout = frame` turns the LCD into a photo frame — a collage of
+  the pictures of a folder, either a tidy **mosaic** or scattered **polaroid** prints, one
+  picture changing at a time over a blurred copy of the photo, with slim glass tiles (clock,
+  CPU, GPU, RAM, ...) at the sides, at almost no CPU cost (see
+  [Digital frame](#digital-frame-picture-collage)).
 - **Backgrounds**: an image, GIF or video; a **solid color** (any color name or hex code);
   or an **animated effect** with no file needed — plasma, aurora, lava lamp, silk waves, a
   minimal **matrix / digital rain**, an **aquarium** seen from the side with a moving water
@@ -111,7 +125,7 @@ Don't want to edit `trofeo.conf` by hand? Start `trofeo_config` (Windows: `trofe
 in the same folder as `trofeo_lcd.exe`). It opens the `trofeo.conf` next to it — or the file you
 pass as its first argument (`trofeo_config my.conf`), or any file with *Open...* — and shows
 every setting, in sections: screen, background, animated background, screens (layouts), tiles,
-what to show, colors and text, spectrum, single items, music card, pixel game, weather and news,
+digital frame, what to show, colors and text, spectrum, single items, music card, pixel game, weather and news,
 system, plus a *Raw file* view for anything else.
 
 - **Live preview, drawn by the real program.** The picture at the top is made by
@@ -412,6 +426,11 @@ milliseconds), and `effect_fps` (default 8) keeps the number of frames low — s
 
 - `brightness = 0-100`: software dimming (no LY brightness command is known).
 - `deepcool = false` (or `--no-deepcool`): never touch the DeepCool display.
+- The **CH170 / CH270 / CH690 DIGITAL** case display can show the CPU frequency, the fan speed in RPM
+  (from [LibreHardwareMonitor](#fans-and-sensors-librehardwaremonitor)) or both in turn:
+  `deepcool_mode = freq | fan | alternate`, `deepcool_fan = cpu | case | pump | gpu | both`,
+  `deepcool_alternate = 6` (seconds). They apply live. The way the display takes the RPM is not
+  documented by DeepCool: if the number does not show up on your model, tell us which one it is.
 - Game dashboard FPS works on any GPU via ETW (DirectX 9–12 games; run as
   Administrator; Vulkan/OpenGL-native games are not covered). NVIDIA GPU
   temperature/power/clock come from NVML (`nvml.dll`, shipped with the
@@ -471,7 +490,7 @@ and more examples (combining feeds and files, styling the chyron, etc.).
 
 ### Preset layouts
 
-`layout = default | cpu-gpu | temps | overview | grid6 | clock-center | io | music | gaming | cpu | gpu | weather | news | tiles`
+`layout = default | cpu-gpu | temps | overview | grid6 | clock-center | io | music | gaming | cpu | gpu | weather | news | tiles | deck | cards | orbit | frame`
 (`--layout list` prints them). All of them, shown here over a sample background
 (`background = img/sample_background.jpg`, `panel_opacity = 60`):
 
@@ -523,7 +542,8 @@ tiles_bg_color = #1B2A4A, #4A1B3A
 
 ![tiles looks](img/tiles-looks.png)
 
-Tiles: `clock cpu cpu_temp cpu_watt gpu gpu_temp gpu_watt ram net disk fps weather music`.
+Tiles: `clock cpu cpu_temp cpu_watt gpu gpu_temp gpu_watt ram net disk fps weather music`, and, with
+[LibreHardwareMonitor](#fans-and-sensors-librehardwaremonitor), `cpu_fan case_fan pump gpu_fan fans mb_temp disk_temp`.
 Backgrounds: whatever the other screens use (`global`), a color, a gradient, the
 animated effects of [Backgrounds](#backgrounds-solid-color-and-animated-effects)
 (matrix, rain, the aquarium, the network and the globe included),
@@ -532,6 +552,162 @@ tiles are redrawn only when something changes, so even an animated background co
 little. All the keys are in the [options guide](./OPTIONS_GUIDE.md#tiles-layout). In the
 [settings editor](#settings-editor-trofeo_config) the *Tiles* section lets you build the rows
 by picking each tile from a list and toggling *ring* / *tall*.
+
+#### Tile colors from the color presets
+
+![tiles with colors from the presets](img/tiles-palette.png)
+
+By default all the tiles share one fill color. With `tiles_palette` **every tile gets a color of
+its own** from the same color presets as the animated backgrounds (`pastel fluo neon candy sunset
+ocean aurora fire forest ice mono rainbow`, one-color and water presets, `custom` with your own
+`tiles_colors`, or `all`). The colors drift slowly along the preset, and when you list **several
+presets they fade from one to the next, tile by tile**: with `tiles_palette_stagger` the tiles
+change preset at different moments, so at any time the dashboard is a quilt of colors in the
+middle of different fades. The colors are kept dark enough for the white text (or pale enough
+for the dark text of `tiles_theme = light`), whatever the preset.
+
+```ini
+layout = tiles
+tiles_palette = pastel, ocean, sunset       # or: all | fire | custom ... (empty = one color for all)
+tiles_palette_interval = 20                 # seconds each preset stays before the next fades in
+tiles_palette_stagger = 50                  # 0 = all tiles change together ... 100 = spread over the interval
+# tiles_colors = #FF0080, #00C8FF           # your own colors, used by "custom"
+```
+
+It is cheap: the colors are quantized, so the tiles are redrawn only when a color really
+changes, and the screen asks for 5 frames a second.
+
+### Fans and sensors (LibreHardwareMonitor)
+
+![the fan tiles](img/tiles-fans.png)
+
+Fan speeds are not something Windows exposes, so they come from
+[LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (free, open
+source). Start it **as administrator**, open *Options → Remote Web Server → Run* (port 8085) and
+leave it open (it can sit in the tray). trofeo_lcd reads its web server every 2 seconds; when it is
+not running nothing happens and the fan items simply stay empty.
+
+What you get:
+
+- a **`CPU 1240 / CASE 780 RPM` line on the CPU tiles** (`tiles_rpm = true`);
+- tiles `cpu_fan`, `case_fan`, `pump`, `gpu_fan`, a **`fans`** tile listing all of them with a bar
+  each, and `mb_temp` (motherboard) and `disk_temp`;
+- `fan 1240rpm case 780rpm pump 2650rpm` in the CPU line of the status screens (`hide = cpu_fan,
+  case_fan, pump` removes them);
+- the fans in the [Deck, Cards and Orbit](#deck-cards-and-orbit) screens;
+- the **DeepCool case display** (see [Brightness, DeepCool, FPS](#brightness-deepcool-fps));
+- the GPU fan on cards that the driver reports no fan for, and the CPU temperature and power on
+  CPUs the built-in sensor does not know.
+
+The program picks the sensors by their names (a fan called "CPU Fan" is the CPU fan, "Pump" the
+pump, the other fans are averaged as the case fans). If your board names them differently,
+`trofeo_lcd --lhm-list` prints everything LibreHardwareMonitor reports and which sensor each role
+uses, and `lhm_cpu_fan = "Fan #2"`, `lhm_case_fan`, `lhm_pump`, `lhm_mb_temp` point a role at a part
+of a sensor's name.
+
+```ini
+lhm = true                       # false = do not look for LibreHardwareMonitor
+lhm_url = http://127.0.0.1:8085
+lhm_interval = 2                 # seconds between readings
+tiles = clock:tall, cpu_temp, fans | ram:ring, cpu:ring, cpu_fan:ring, mb_temp
+tiles_rpm = true
+tiles_fan_max = 2500             # the RPM that fills a bar
+```
+
+### Deck, Cards and Orbit
+
+Three more full screens from the same readings as the tiles, each with its own character and all
+of them chosen from the config (and from the *Deck, Cards and Orbit* section of the settings editor).
+They draw a **graph of the last minutes** for the main reading, and take their accent colors from the
+presets of the animated backgrounds (`dash_palette`) or from your own list (`dash_colors`).
+
+**`layout = deck`**: instrument columns. A gauge line on top of every column, a big light value, a
+sparkline and four small readings in a grid — and, with LibreHardwareMonitor, the fan speeds.
+
+![deck](img/layout-deck.png)
+
+**`layout = cards`**: flat colourful cards in a mosaic. Each card melts into the colour of its
+neighbour and carries a ghost silhouette of its own history along the bottom. A column can hold
+several stacked cards.
+
+![cards](img/layout-cards.png)
+
+**`layout = orbit`**: a cluster of concentric rings per device (load, temperature, power; RAM,
+disk and network; every fan), with the readings beside it and a legend under it, and the clock,
+weather and track on the right.
+
+![orbit](img/layout-orbit.png)
+
+```ini
+layout = deck
+deck = cpu, gpu, ram, clock          # 2-5 of: cpu gpu ram fans net disk clock weather music
+# layout = cards
+cards = clock | cpu | gpu | ram, disk | music, net    # "|" = next column, "," = stacked
+# layout = orbit
+orbit = cpu, gpu, ram                # 1-4 devices
+orbit_clock = true
+dash_palette = sunset                # default | any preset of the animated backgrounds
+# dash_colors = #A76BFF, #38C6F4, #FF6FB1
+dash_graph = true
+dash_history = 90                    # seconds of history in the graphs
+dash_bg = gradient                   # global | color | gradient | effect | image
+dash_bg_color = #10142A, #241030
+```
+
+The screens are redrawn about once a second (the graphs move that often) and only when something
+changed. All the keys are in the [options guide](./OPTIONS_GUIDE.md#deck-cards-and-orbit).
+
+### Digital frame (picture collage)
+
+![digital frame, mosaic](img/layout-frame-mosaic.png)
+
+![digital frame, polaroid](img/layout-frame-polaroid.png)
+
+`layout = frame` shows the pictures of a folder as a collage in the middle of the screen, with
+two slim columns of the glass tiles of the Tiles layout at the sides (by default the clock and
+RAM on the left, CPU and GPU on the right). Behind the collage is the current photo, blurred
+and darkened.
+
+```ini
+layout = frame
+frame_folder = C:\Users\Me\Pictures\Holidays
+frame_style = mosaic                # mosaic = a tidy collage | polaroid = scattered prints with a white border
+frame_photos = 5                    # pictures on screen at once (1-9)
+frame_interval = 8                  # seconds between changes; each time ONE picture is replaced
+frame_order = shuffle               # shuffle | name
+frame_transition = fade             # fade | slide (a wipe in the mosaic, a print dropping in with polaroid)
+frame_left = clock, ram:ring        # the tiles at the sides: any of the Tiles list, or "none"
+frame_right = cpu:ring, gpu:ring
+```
+
+- **Two styles.** `mosaic` cuts the pictures to fit the places of a tidy collage (rounded corners,
+  a small gap: `frame_gap`, `frame_radius`; the places have different sizes and shapes, and
+  portrait photos are put in the tall ones). `polaroid` lays white-bordered prints with a wider
+  strip at the bottom, each tilted a little, with a soft shadow and a piece of tape on some; a
+  new print lands on top of the others.
+- **One at a time.** Every `frame_interval` seconds one picture is replaced and the rest stands
+  still; with `shuffle` every picture is shown before any comes back, and the new one is chosen
+  to fit the shape of the place it goes to.
+- **Your folder.** JPG, PNG, WebP, BMP and GIF (the first frame) — not HEIC (convert those
+  from your phone). The EXIF rotation of phone photos is respected. `frame_recursive = true`
+  includes the subfolders. The folder is read again every `frame_refresh` seconds (60), so new
+  pictures show up and removed ones go away without restarting. Unreadable files are skipped.
+  A missing or empty folder shows a message instead.
+- **Background.** `frame_bg = blur` (default; `frame_dim` darkens it), `dark`, or `global` — the
+  normal background of the program (an image, or one of the animated effects).
+- **The sides** take their look from the Tiles options (`tiles_theme`, `tiles_font`,
+  `tiles_color`, `tiles_palette` ...), so the frame and the dashboard always match. They are
+  columns on a landscape screen and strips at the top and bottom on a portrait one;
+  `frame_side_width` (% of the long side) sets their size, `frame_left = none` leaves a side
+  to the pictures.
+- **Light on the CPU.** Pictures are decoded and scaled once, on a background thread, straight
+  to the size of their place; the finished collage is kept as it is, so while nothing moves the
+  program idles at 2 frames a second. A change takes about a second and a half at 20 frames a
+  second (about 5-8 ms of drawing per frame), then it goes back to idle.
+
+In the [settings editor](#settings-editor-trofeo_config) the *Digital frame* section has a
+folder picker, the choices above and a **real preview** with your own pictures (the editor adds
+the screen to your list with one click).
 
 ### Live reload
 
@@ -544,7 +720,7 @@ turned on/off with `show`/`hide` and styled on its own with `<item>_size` (1-30)
 (3x3 grid), `<item>_color` and `<item>_backdrop`. Setting any of them switches the info block to
 per-item mode (items on the same position stack, and the track scrolls without overlapping its
 neighbors). Details inside the CPU/GPU lines can be hidden with
-`hide = cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_power, gpu_fan, gpu_clock, gpu_fps`.
+`hide = cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_power, gpu_fan, gpu_clock, gpu_fps, cpu_fan, case_fan, pump`.
 `clock_time_size` / `clock_date_size` set the big clock's sizes, and `net_unit` (`kb|mb|auto`) /
 `mem_unit` (`mb|gb`) set the network and RAM units. `percent_decimals = 1` adds a decimal place to
 every CPU/GPU/RAM usage percentage shown anywhere (`37%` → `37.4%`); default `0` keeps the original
@@ -595,6 +771,7 @@ Requires a *Virtual Display Driver* (VDD) at 1920×462 — see
 - `src/media.rs` + `src/music_screen.rs` — now-playing info (Windows media controls / `playerctl`) and the Spotify-style music screen.
 - `src/pixel_game.rs` — the self-playing pixel-art platformer under the clock.
 - `src/effect.rs` — the animated backgrounds (plasma, aurora, lava, waves, matrix, rain, aquarium, network, globe and their light variants).
+- `src/frame.rs` — the digital picture frame (folder scan, picture loader thread, mosaic and polaroid collages, transitions).
 - `src/tiles.rs` — the tiles layout; `src/smooth_font.rs` + `assets/` — the anti-aliased text, used by the tiles and (`font = smooth`) by every other text (embedded Poppins font, SIL OFL: see `assets/OFL.txt`).
 - `src/bin/config_editor.rs` — the settings editor window (`trofeo_config`, built with egui).
 - `src/schema.rs` — the list of every setting the editor shows (names, ranges, defaults, texts in English and Italian); tests check it against the real parser, so the editor can only write what the program accepts.
@@ -628,6 +805,11 @@ the extra frames. It uses its own, low `effect_fps` (default 8) while it moves i
 idle 2 fps, so it sits between the idle screen and the game; lower `effect_fps` or set
 `effect_speed = 0` (a still picture, idle FPS unchanged) to make it lighter still. A **solid
 color** background costs nothing extra.
+
+The **digital frame** idles at 2 frames a second (the collage is kept as a finished picture and
+copied to the screen) and asks for 20 only while a picture is changing, for about a second and a
+half every `frame_interval` seconds. Decoding and scaling a photo happens on a background thread,
+once per change. The **tile colors from the presets** need 5 frames a second.
 
 The **settings editor** is not part of this: it is a separate program, and it only needs to be
 open while you change settings. Its preview starts `trofeo_lcd` for a moment to draw each frame

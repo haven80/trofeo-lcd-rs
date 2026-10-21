@@ -117,6 +117,11 @@ language = en
 # --- DeepCool ----------------------------------------------------------------
 # false = the program does NOT touch the case's DeepCool display (stays off).
 # deepcool = false
+# CH170 / CH270 / CH690 DIGITAL case display: what the big field shows (changes live).
+# fan = the fan speed in RPM, read from LibreHardwareMonitor (see "Fans" below).
+# deepcool_mode = alternate      # freq (default) | fan | alternate = frequency and RPM in turn
+# deepcool_fan = cpu             # cpu | case | pump | gpu | both (= CPU fan and case fans in turn)
+# deepcool_alternate = 6         # seconds before it switches (2-120)
 
 # --- In-game FPS -------------------------------------------------------------
 # Measures the FPS of any DirectX 9-12 game (NVIDIA/AMD/Intel) via ETW.
@@ -135,6 +140,11 @@ language = en
 #   gaming        FPS, GPU, GPU and CPU temperature
 #   cpu           CPU only, big
 #   gpu           GPU only, big
+#   tiles         rounded glass tiles (see the "Tiles" block below)
+#   deck          instrument columns: a gauge, a big value, a graph, four readings (see "Deck, Cards and Orbit")
+#   cards         colourful cards in a mosaic, each with a ghost graph (see "Deck, Cards and Orbit")
+#   orbit         concentric rings per device with the readings beside them (see "Deck, Cards and Orbit")
+#   frame         digital picture frame: a collage of a folder's pictures (see below)
 #   weather       Current weather, big: temperature, condition icon and city
 #   news          Latest headlines from ticker_source, scrolling
 # With a layout, the top info block and the spectrum are off (the panels already
@@ -159,6 +169,92 @@ language = en
 # layout_spectrum = false    # true = show the spectrum while music is playing
 # layout_hold_on_music = false  # true = while music plays, stay on the FIRST layout of the
 #                               # list (no rotation); rotation restarts when the music stops
+
+# --- Tiles (layout = tiles) -----------------------------------------------------
+# Which tiles: clock cpu cpu_temp cpu_watt gpu gpu_temp gpu_watt ram net disk fps weather music
+#   and, with LibreHardwareMonitor (see "Fans" below): cpu_fan case_fan pump gpu_fan fans mb_temp disk_temp
+# ("," between tiles, "|" between rows, ":ring" = a ring, "clock:tall" = as tall as all rows).
+# layout = tiles
+# tiles = clock:tall, cpu_temp, gpu_temp | ram:ring, cpu:ring, gpu:ring
+# tiles_font = smooth                 # smooth | pixel
+# tiles_theme = dark                  # dark | light
+# tiles_bar_color = #00C8FF, #FF0080  # bars and rings: auto | a color | a gradient
+# tiles_bg = gradient                 # global | color | gradient | effect | image
+# tiles_bg_color = #1B2A4A, #4A1B3A
+# A color of its own for every tile, from the color presets of the animated background;
+# several presets fade into each other, tile by tile (empty = one color for all):
+# tiles_palette = pastel, ocean, sunset   # also: all, custom (with tiles_colors)
+# tiles_palette_interval = 20             # seconds per preset (5-3600)
+# tiles_palette_stagger = 50              # 0 = tiles change together ... 100 = spread out
+# tiles_colors = #FF0080, #00C8FF         # your own colors, for "custom"
+# tiles_rpm = true                        # a "CPU 1240 / CASE 780 RPM" line on the CPU tiles
+# tiles_fan_max = 2500                    # RPM that fills the bar of a fan tile
+
+# --- Fans and sensors: LibreHardwareMonitor ------------------------------------------
+# Fan speeds (and the motherboard / disk temperature) come from LibreHardwareMonitor:
+# start it AS ADMINISTRATOR, then Options > Remote Web Server > Run (port 8085) and leave it open.
+# Nothing happens when it is not running. "trofeo_lcd --lhm-list" shows what it reports and which
+# sensor is used for what. Fans show up in the tiles (cpu_fan, case_fan, pump, gpu_fan, fans,
+# mb_temp, disk_temp), in the CPU tiles (tiles_rpm), in the status line (below), in the
+# deck / cards / orbit screens and on the DeepCool case display (deepcool_mode = fan).
+# lhm = true                     # false = do not look for LibreHardwareMonitor
+# lhm_url = http://127.0.0.1:8085
+# lhm_interval = 2               # seconds between readings (1-60)
+# The automatic choice picks the sensors by their names; to point a role at another sensor write
+# a part of its name (in quotes, a # is allowed inside quotes):
+# lhm_cpu_fan = "Fan #2"
+# lhm_case_fan = chassis
+# lhm_pump = AIO
+# lhm_mb_temp = VRM
+# In the status line: hide = cpu_fan, case_fan, pump removes the fan speeds from the CPU line.
+
+# --- Deck, Cards and Orbit (layout = deck | cards | orbit) ------------------------------
+# Three more full screens, from the same readings as the tiles. Panels: cpu gpu ram fans net disk
+# clock weather music (the clock panel also shows the weather and the track).
+# layout = deck
+# deck = cpu, gpu, ram, clock           # instrument columns (2-5)
+# deck_gauge = true                     # the gauge line on top of each column
+# layout = cards
+# cards = clock | cpu | gpu | ram, disk | music, net   # "|" = next column, "," = stacked in the column
+# cards_radius = 26                     # corner radius (0-60), default by size
+# cards_gap = 12                        # pixels between the cards (0-40)
+# layout = orbit
+# orbit = cpu, gpu, ram                 # a cluster of concentric rings per device (1-4)
+# orbit_clock = true                    # the clock block on the right
+# orbit_legend = true                   # the names of the rings under each cluster
+# For all three:
+# dash_palette = default                # accent colours: default or a preset of the animated backgrounds
+# dash_colors = #A76BFF, #38C6F4, #FF6FB1   # or your own colours (used instead of the preset)
+# dash_font = smooth                    # smooth | pixel
+# dash_text_color = #FFFFFF
+# dash_plate = 50                       # darkness behind deck and orbit (0-100)
+# dash_graph = true                     # the graph of the last minutes
+# dash_history = 90                     # seconds of history in the graphs (20-600)
+# dash_net_max = 25                     # network MB/s that fills a ring / gauge
+# dash_bg = gradient                    # global | color | gradient | effect | image
+# dash_bg_color = #10142A, #241030
+# dash_bg_image = C:\Users\Me\Pictures\back.jpg
+# dash_bg_dim = 30
+# The maxima of watts, FPS and fan speed come from the Tiles block (tiles_cpu_watt_max, ...).
+
+# --- Digital frame (layout = frame) ------------------------------------------------
+# A collage of the pictures of a folder, with glass tiles (the look of "tiles") at the sides.
+# layout = frame
+# frame_folder = C:\Users\Me\Pictures\Holidays   # JPG, PNG, WebP, BMP, GIF (not HEIC)
+# frame_style = mosaic          # mosaic = tidy collage | polaroid = scattered prints with a white border
+# frame_photos = 5              # pictures on screen at once (1-9)
+# frame_interval = 8            # seconds between changes: ONE picture is replaced each time (2-3600)
+# frame_order = shuffle         # shuffle | name
+# frame_transition = fade       # fade | slide (a wipe in the mosaic, a print dropping in with polaroid)
+# frame_recursive = false       # true = include the subfolders
+# frame_refresh = 60            # look at the folder again every N seconds (5-3600)
+# frame_bg = blur               # blur (the current picture, blurred) | dark | global (the normal background)
+# frame_dim = 60                # how dark the blurred background is (0-100)
+# frame_gap = 10                # mosaic: pixels between the pictures (0-40)
+# frame_radius = 14             # mosaic: corner radius (0-60)
+# frame_left = clock, ram:ring  # tiles of the left column (top strip when portrait); "none" = no tiles
+# frame_right = cpu:ring, gpu:ring
+# frame_side_width = 17         # width of a side in % of the long side (8-35)
 
 # --- Music screen ----------------------------------------------------------------
 # true = while a track plays, show a now-playing card: album cover on the left (with a
@@ -291,7 +387,7 @@ language = en
 # nowplaying_width = 40      # % of the screen taken up by the track (avoids covering other items)
 # Turning individual items on/off: show = ... / hide = ... (see above). You can
 # also hide the details inside the CPU and GPU lines:
-#   hide = cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_power, gpu_fan, gpu_clock, gpu_fps
+#   hide = cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_power, gpu_fan, gpu_clock, gpu_fps, cpu_fan, case_fan, pump
 # Units: network in KB/S (default), MB/S, or auto (KB below 1 MB/S, then MB); RAM in MB or GB
 # net_unit = mb
 # mem_unit = gb

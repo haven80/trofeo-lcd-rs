@@ -25,10 +25,16 @@ pub enum Kind {
     Text,
     /// A file.
     Path,
+    /// A folder.
+    Folder,
+    /// A single column of tiles (`frame_left` / `frame_right`).
+    TileColumn,
     /// The `layout` list (name and optionally `:seconds`).
     Layout,
     /// The `tiles` arrangement.
     Tiles,
+    /// A list of panels for `deck`, `orbit` (one line) or `cards` (`|` between columns, `,` stacks).
+    Panels { columns: bool },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -108,6 +114,9 @@ pub const SECTIONS: &[(&str, &str, &str)] = &[
     ("effect", "Animated background", "Sfondo animato"),
     ("layouts", "Screens (layouts)", "Schermate (layout)"),
     ("tiles", "Tiles", "Tiles"),
+    ("dash", "Deck, Cards and Orbit", "Deck, Cards e Orbit"),
+    ("frame", "Digital frame", "Cornice digitale"),
+    ("lhm", "Fans and sensors (LibreHardwareMonitor)", "Ventole e sensori (LibreHardwareMonitor)"),
     ("show", "What to show", "Cosa mostrare"),
     ("look", "Colors and text", "Colori e testo"),
     ("spectrum", "Spectrum", "Spettro audio"),
@@ -133,12 +142,19 @@ pub const SHOW_ITEMS: &[&str] = &[
 pub const HIDE_ITEMS: &[&str] = &[
     "cpu", "gpu", "uptime", "time", "date", "mem", "net", "disk", "volume", "nowplaying", "weather", "spectrum", "ticker", "clock",
     "clock_date", "dashboard", "cpu_freq", "cpu_temp", "cpu_power", "gpu_temp", "gpu_power", "gpu_fan", "gpu_clock", "gpu_fps",
+    "cpu_fan", "case_fan", "pump",
 ];
 pub const SPECTRUM_STYLES: &[&str] = &["bars", "led", "peaks", "area", "mirror", "all"];
 pub const SPECTRUM_PALETTES: &[&str] =
     &["default", "rainbow", "fire", "ocean", "sunset", "neon", "ice", "matrix", "purple", "custom", "all"];
 pub const MUSIC_BG: &[&str] = &["gradient", "blur", "color", "solid", "none", "effect"];
 pub const MUSIC_STATS: &[&str] = &["cpu", "gpu", "ram", "net", "disk", "time", "uptime", "all", "none"];
+pub const FRAME_STYLES: &[&str] = &["mosaic", "polaroid"];
+pub const FRAME_BG: &[&str] = &["blur", "dark", "global"];
+pub const DASH_PALETTES: &[&str] = &[
+    "default", "pastel", "fluo", "neon", "candy", "sunset", "ocean", "aurora", "fire", "forest", "ice", "mono", "rainbow", "matrix", "amber",
+    "violet", "crimson", "snow", "lagoon", "deep", "tropical",
+];
 pub const TILES_BG: &[&str] = &["global", "color", "gradient", "effect", "image"];
 
 /// The items of the info block with per-item options (`<item>_size`, ...): (key, English, Italian).
@@ -171,6 +187,10 @@ pub const LAYOUT_NAMES: &[(&str, &str, &str)] = &[
     ("cpu", "CPU only, big", "Solo CPU, grande"),
     ("gpu", "GPU only, big", "Solo GPU, grande"),
     ("tiles", "Glass tiles (choose them in the Tiles section)", "Tiles di vetro (si scelgono nella sezione Tiles)"),
+    ("deck", "Instrument columns with graphs (choose them in the Deck, Cards and Orbit section)", "Colonne strumento con grafici (si scelgono nella sezione Deck, Cards e Orbit)"),
+    ("cards", "Colourful cards in a mosaic (see the Deck, Cards and Orbit section)", "Card colorate a mosaico (vedi la sezione Deck, Cards e Orbit)"),
+    ("orbit", "Concentric rings per device (see the Deck, Cards and Orbit section)", "Anelli concentrici per dispositivo (vedi la sezione Deck, Cards e Orbit)"),
+    ("frame", "Digital picture frame (the folder is set in the Digital frame section)", "Cornice digitale (la cartella si sceglie nella sezione Cornice digitale)"),
     ("weather", "Weather, big", "Meteo, grande"),
     ("news", "News headlines, scrolling", "Notizie scorrevoli"),
 ];
@@ -188,6 +208,26 @@ pub const TILE_KINDS: &[(&str, &str, &str)] = &[
     ("net", "Network", "Rete"),
     ("disk", "Disk", "Disco"),
     ("fps", "FPS", "FPS"),
+    ("weather", "Weather", "Meteo"),
+    ("music", "Now playing", "Brano in ascolto"),
+    ("cpu_fan", "CPU fan (LibreHardwareMonitor)", "Ventola CPU (LibreHardwareMonitor)"),
+    ("case_fan", "Case fans (LibreHardwareMonitor)", "Ventole del case (LibreHardwareMonitor)"),
+    ("pump", "Pump / AIO (LibreHardwareMonitor)", "Pompa / AIO (LibreHardwareMonitor)"),
+    ("gpu_fan", "GPU fan", "Ventola GPU"),
+    ("fans", "All the fans in one tile", "Tutte le ventole in un tile"),
+    ("mb_temp", "Motherboard temperature", "Temperatura scheda madre"),
+    ("disk_temp", "Disk temperature", "Temperatura disco"),
+];
+
+/// What a deck column / card / orbit cluster can show: (name, English, Italian).
+pub const PANEL_KINDS: &[(&str, &str, &str)] = &[
+    ("cpu", "CPU", "CPU"),
+    ("gpu", "GPU", "GPU"),
+    ("ram", "RAM", "RAM"),
+    ("fans", "Fans (LibreHardwareMonitor)", "Ventole (LibreHardwareMonitor)"),
+    ("net", "Network", "Rete"),
+    ("disk", "Disk", "Disco"),
+    ("clock", "Clock, weather and music", "Orologio, meteo e musica"),
     ("weather", "Weather", "Meteo"),
     ("music", "Now playing", "Brano in ascolto"),
 ];
@@ -380,6 +420,10 @@ pub fn fields() -> Vec<Field> {
     add(Field::new("tiles_cpu_watt_max", "tiles", "CPU power at 100% (W)", "Consumo CPU al 100% (W)", int(10, 2000)).def("200"));
     add(Field::new("tiles_gpu_watt_max", "tiles", "GPU power at 100% (W)", "Consumo GPU al 100% (W)", int(10, 2000)).def("400"));
     add(Field::new("tiles_fps_max", "tiles", "FPS at 100%", "FPS al 100%", int(30, 1000)).def("240"));
+    add(Field::new("tiles_rpm", "tiles", "Fan speeds on the CPU tiles", "Giri delle ventole sui tile CPU", Bool)
+        .def("true")
+        .help("Adds a line like \"CPU 1240 / CASE 780 RPM\" to the CPU tiles (needs LibreHardwareMonitor)", "Aggiunge ai tile CPU una riga tipo \"CPU 1240 / CASE 780 RPM\" (serve LibreHardwareMonitor)"));
+    add(Field::new("tiles_fan_max", "tiles", "Fan speed at 100% (RPM)", "Giri della ventola al 100% (RPM)", int(500, 10000)).def("2500"));
     add(Field::new("tiles_bg", "tiles", "Background behind the tiles", "Sfondo dietro i tile", Choice(TILES_BG))
         .def("global")
         .group("background")
@@ -387,6 +431,23 @@ pub fn fields() -> Vec<Field> {
     add(Field::new("tiles_bg_color", "tiles", "Color(s)", "Colore/i", ColorList).group("background").when("tiles_bg", &["color", "gradient"]));
     add(Field::new("tiles_bg_image", "tiles", "Picture", "Immagine", Path).group("background").when("tiles_bg", &["image"]));
     add(Field::new("tiles_bg_dim", "tiles", "Darken", "Scurisci", int(0, 100)).def("0").group("background").when("tiles_bg", &["image"]));
+    add(Field::new("tiles_palette", "tiles", "Tile colors from the color presets", "Colori dei tile dai preset", Multi(EFFECT_PALETTES))
+        .group("palette")
+        .help(
+            "Every tile gets its own color from these presets, and the colors drift and fade from preset to preset (pick several, or \"all\"). Empty = every tile has the same color",
+            "Ogni tile prende un suo colore da questi preset, e i colori scorrono e sfumano da un preset all'altro (scegline più di uno, o \"all\"). Vuoto = tutti i tile dello stesso colore",
+        ));
+    add(Field::new("tiles_colors", "tiles", "Own colors (for \"custom\")", "Colori propri (per \"custom\")", ColorList)
+        .group("palette")
+        .help("Two or more colors, used when \"custom\" is chosen above", "Due o più colori, usati quando sopra si sceglie \"custom\""));
+    add(Field::new("tiles_palette_interval", "tiles", "Seconds per preset", "Secondi per preset", int(5, 3600))
+        .def("20")
+        .group("palette")
+        .help("How long a preset stays before the next one fades in", "Quanto resta un preset prima che sfumi il successivo"));
+    add(Field::new("tiles_palette_stagger", "tiles", "Tiles change at different times (%)", "I tile cambiano in momenti diversi (%)", int(0, 100))
+        .def("50")
+        .group("palette")
+        .help("0 = all tiles change preset together; 100 = spread over the whole interval", "0 = tutti i tile cambiano preset insieme; 100 = distribuiti su tutto l'intervallo"));
     add(Field::new("tiles_bar_color", "tiles", "All bars", "Tutte le barre", BarColor)
         .def("auto")
         .group("bars")
@@ -394,6 +455,98 @@ pub fn fields() -> Vec<Field> {
     for (k, en, it) in TILE_KINDS {
         add(Field::new(&format!("tile_{k}_color"), "tiles", en, it, BarColor).def("auto").group("bars"));
     }
+
+    // ---- deck, cards, orbit
+    add(Field::new("deck", "dash", "Columns", "Colonne", Panels { columns: false })
+        .def("cpu, gpu, ram, clock")
+        .group("deck")
+        .help("Layout \"deck\": instrument columns with a live gauge, a big value, a graph and four readings", "Layout \"deck\": colonne strumento con un indicatore, un valore grande, un grafico e quattro letture"));
+    add(Field::new("deck_gauge", "dash", "Gauge line on top of each column", "Linea indicatore sopra ogni colonna", Bool).def("true").group("deck"));
+    add(Field::new("cards", "dash", "Cards", "Card", Panels { columns: true })
+        .def("clock | cpu | gpu | ram, disk | music, net")
+        .group("cards")
+        .help("Layout \"cards\": every group is a column, cards in the same group are stacked", "Layout \"cards\": ogni gruppo è una colonna, le card dello stesso gruppo sono impilate"));
+    add(Field::new("cards_radius", "dash", "Corner radius", "Raggio degli angoli", int(0, 60)).group("cards"));
+    add(Field::new("cards_gap", "dash", "Gap between cards", "Spazio tra le card", int(0, 40)).def("12").group("cards"));
+    add(Field::new("orbit", "dash", "Devices", "Dispositivi", Panels { columns: false })
+        .def("cpu, gpu, ram")
+        .group("orbit")
+        .help("Layout \"orbit\": a cluster of concentric rings for each (up to 4)", "Layout \"orbit\": un gruppo di anelli concentrici per ognuno (fino a 4)"));
+    add(Field::new("orbit_clock", "dash", "Clock block on the right", "Blocco orologio a destra", Bool).def("true").group("orbit"));
+    add(Field::new("orbit_legend", "dash", "Legend under the rings", "Legenda sotto gli anelli", Bool).def("true").group("orbit"));
+    add(Field::new("dash_palette", "dash", "Colors from a preset", "Colori da un preset", Choice(DASH_PALETTES))
+        .def("default")
+        .group("look")
+        .help("The accent colors of the rings, cards and graphs (the same presets as the animated backgrounds)", "I colori di anelli, card e grafici (gli stessi preset degli sfondi animati)"));
+    add(Field::new("dash_colors", "dash", "Own colors", "Colori propri", ColorList)
+        .group("look")
+        .help("One or more colors, used instead of the preset", "Uno o più colori, usati al posto del preset"));
+    add(Field::new("dash_font", "dash", "Font", "Font", Choice(&["smooth", "pixel"])).def("smooth").group("look"));
+    add(Field::new("dash_text_color", "dash", "Text color", "Colore del testo", Color).group("look"));
+    add(Field::new("dash_plate", "dash", "Dark plate behind deck and orbit (%)", "Fondo scuro dietro deck e orbit (%)", int(0, 100)).def("50").group("look"));
+    add(Field::new("dash_graph", "dash", "Graphs of the last minutes", "Grafici degli ultimi minuti", Bool).def("true").group("graphs"));
+    add(Field::new("dash_history", "dash", "Seconds of history", "Secondi di storico", int(20, 600)).def("90").group("graphs").when("dash_graph", &["true"]));
+    add(Field::new("dash_net_max", "dash", "Network speed at 100% (MB/s)", "Velocità di rete al 100% (MB/s)", int(1, 1000)).def("25").group("graphs"));
+    add(Field::new("dash_bg", "dash", "Background", "Sfondo", Choice(TILES_BG))
+        .def("global")
+        .group("background")
+        .help("global = the normal background of the program", "global = lo sfondo normale del programma"));
+    add(Field::new("dash_bg_color", "dash", "Color(s)", "Colore/i", ColorList).group("background").when("dash_bg", &["color", "gradient"]));
+    add(Field::new("dash_bg_image", "dash", "Picture", "Immagine", Path).group("background").when("dash_bg", &["image"]));
+    add(Field::new("dash_bg_dim", "dash", "Darken", "Scurisci", int(0, 100)).def("0").group("background").when("dash_bg", &["image"]));
+
+    // ---- LibreHardwareMonitor
+    add(Field::new("lhm", "lhm", "Read fans and sensors from LibreHardwareMonitor", "Leggi ventole e sensori da LibreHardwareMonitor", Bool)
+        .def("true")
+        .help(
+            "Start LibreHardwareMonitor (as administrator), then Options > Remote Web Server > Run. Nothing happens if it is not running",
+            "Avvia LibreHardwareMonitor (come amministratore), poi Options > Remote Web Server > Run. Se non è in esecuzione non succede nulla",
+        ));
+    add(Field::new("lhm_url", "lhm", "Address", "Indirizzo", Text).def("http://127.0.0.1:8085").when("lhm", &["true"]));
+    add(Field::new("lhm_interval", "lhm", "Seconds between readings", "Secondi tra una lettura e l'altra", int(1, 60)).def("2").when("lhm", &["true"]));
+    add(Field::new("lhm_cpu_fan", "lhm", "CPU fan: part of its name", "Ventola CPU: parte del nome", Text)
+        .group("names")
+        .when("lhm", &["true"])
+        .help("Empty = automatic. Run trofeo_lcd --lhm-list to see the names", "Vuoto = automatico. Esegui trofeo_lcd --lhm-list per vedere i nomi"));
+    add(Field::new("lhm_case_fan", "lhm", "Case fans: part of their name", "Ventole del case: parte del nome", Text).group("names").when("lhm", &["true"]));
+    add(Field::new("lhm_pump", "lhm", "Pump: part of its name", "Pompa: parte del nome", Text).group("names").when("lhm", &["true"]));
+    add(Field::new("lhm_mb_temp", "lhm", "Motherboard temperature: part of its name", "Temperatura scheda madre: parte del nome", Text).group("names").when("lhm", &["true"]));
+
+    // ---- digital frame
+    add(Field::new("frame_folder", "frame", "Folder with the pictures", "Cartella con le immagini", Folder)
+        .help("JPG, PNG, WebP, BMP, GIF. Used by the \"frame\" screen", "JPG, PNG, WebP, BMP, GIF. Usata dalla schermata \"frame\""));
+    add(Field::new("frame_style", "frame", "Style", "Stile", Choice(FRAME_STYLES))
+        .def("mosaic")
+        .help("mosaic = a tidy collage; polaroid = scattered prints with a white border", "mosaic = un collage ordinato; polaroid = stampe sparse con il bordo bianco"));
+    add(Field::new("frame_photos", "frame", "Pictures on screen", "Immagini sullo schermo", int(1, 9)).def("5"));
+    add(Field::new("frame_interval", "frame", "Seconds between changes", "Secondi tra un cambio e l'altro", int(2, 3600))
+        .def("8")
+        .help("Every time ONE picture is replaced", "Ogni volta viene sostituita UNA sola immagine"));
+    add(Field::new("frame_order", "frame", "Order", "Ordine", Choice(&["shuffle", "name"])).def("shuffle"));
+    add(Field::new("frame_transition", "frame", "Transition", "Transizione", Choice(&["fade", "slide"]))
+        .def("fade")
+        .help("slide = a wipe (mosaic) or a print dropping in (polaroid)", "slide = una tendina (mosaico) o una stampa che cade (polaroid)"));
+    add(Field::new("frame_recursive", "frame", "Include subfolders", "Includi le sottocartelle", Bool).def("false"));
+    add(Field::new("frame_refresh", "frame", "Look for new pictures every (s)", "Cerca nuove immagini ogni (s)", int(5, 3600)).def("60"));
+    add(Field::new("frame_bg", "frame", "Background", "Sfondo", Choice(FRAME_BG))
+        .def("blur")
+        .group("look")
+        .help("blur = the current picture, blurred and dark; global = the normal background of the program", "blur = l'immagine corrente, sfocata e scura; global = lo sfondo normale del programma"));
+    add(Field::new("frame_dim", "frame", "Darken the blurred background (%)", "Scurisci lo sfondo sfocato (%)", int(0, 100)).def("60").group("look").when("frame_bg", &["blur"]));
+    add(Field::new("frame_gap", "frame", "Gap between pictures", "Spazio tra le immagini", int(0, 40)).def("10").group("look").when("frame_style", &["mosaic"]));
+    add(Field::new("frame_radius", "frame", "Corner radius", "Raggio degli angoli", int(0, 60)).def("14").group("look").when("frame_style", &["mosaic"]));
+    add(Field::new("frame_left", "frame", "Left side", "Lato sinistro", TileColumn)
+        .group("sides")
+        .def("clock, ram:ring")
+        .help("The tiles in the left column (top strip on a portrait screen)", "I tile nella colonna di sinistra (striscia in alto con lo schermo verticale)"));
+    add(Field::new("frame_right", "frame", "Right side", "Lato destro", TileColumn)
+        .group("sides")
+        .def("cpu:ring, gpu:ring")
+        .help("The tiles in the right column (bottom strip on a portrait screen)", "I tile nella colonna di destra (striscia in basso con lo schermo verticale)"));
+    add(Field::new("frame_side_width", "frame", "Width of the sides (%)", "Larghezza dei lati (%)", int(8, 35))
+        .def("17")
+        .group("sides")
+        .help("Their look comes from the Tiles section (theme, colors, font)", "L'aspetto viene dalla sezione Tiles (tema, colori, font)"));
 
     // ---- what to show
     add(Field::new("show", "show", "Show only these", "Mostra solo queste", Multi(SHOW_ITEMS))
@@ -496,6 +649,20 @@ pub fn fields() -> Vec<Field> {
         .help("Lower = the spectrum reacts to quieter sound", "Più basso = lo spettro reagisce a suoni più bassi"));
     add(Field::new("silence_timeout_ms", "system", "Quiet time before idle (ms)", "Silenzio prima dello stato di riposo (ms)", int(0, 60000)).def("800"));
     add(Field::new("deepcool", "system", "Drive the DeepCool display", "Pilota il display DeepCool", Bool).def("true").restart());
+    add(Field::new("deepcool_mode", "system", "DeepCool case display shows", "Il display DeepCool del case mostra", Choice(&["freq", "fan", "alternate"]))
+        .def("freq")
+        .when("deepcool", &["true"])
+        .help(
+            "CH170 / CH270 / CH690 DIGITAL: the CPU frequency, the fan speed in RPM (needs LibreHardwareMonitor), or both in turn",
+            "CH170 / CH270 / CH690 DIGITAL: la frequenza della CPU, i giri della ventola in RPM (serve LibreHardwareMonitor), o le due cose a turno",
+        ));
+    add(Field::new("deepcool_fan", "system", "Fan for the RPM", "Ventola per gli RPM", Choice(&["cpu", "case", "pump", "gpu", "both"]))
+        .def("cpu")
+        .when("deepcool_mode", &["fan", "alternate"])
+        .help("both = the CPU fan and the case fans in turn", "both = ventola CPU e ventole del case a turno"));
+    add(Field::new("deepcool_alternate", "system", "Seconds before switching", "Secondi prima di cambiare", int(2, 120))
+        .def("6")
+        .when("deepcool_mode", &["alternate"]));
     add(Field::new("fps_monitor", "system", "Measure the FPS of games", "Misura gli FPS dei giochi", Bool)
         .def("true")
         .restart()
@@ -511,6 +678,9 @@ pub fn group_title(group: &str) -> (&str, &str) {
         "bars" => ("Bar colors", "Colori delle barre"),
         "weather" => ("Weather", "Meteo"),
         "news" => ("News ticker", "Notizie scorrevoli"),
+        "palette" => ("Colors from the presets", "Colori dai preset"),
+        "look" => ("Look", "Aspetto"),
+        "sides" => ("Side columns", "Colonne laterali"),
         other => (other, other),
     }
 }

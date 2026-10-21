@@ -259,7 +259,7 @@ impl Palette {
     }
 
     /// Colour at `u` (0-1) of the closed loop.
-    fn at(&self, u: f32) -> Rgb {
+    pub(crate) fn at(&self, u: f32) -> Rgb {
         match self.stops.len() {
             0 => (0, 0, 0),
             1 => {

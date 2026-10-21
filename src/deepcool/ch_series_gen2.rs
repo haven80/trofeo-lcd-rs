@@ -1,6 +1,6 @@
 //! Display driver for CH Series Gen 2: CH170/CH270/CH690 DIGITAL.
 
-use super::{DeepCpu, Gpu, Mode, AUTO_MODE_INTERVAL};
+use super::{DeepCpu, FanSource, Gpu, Mode, AUTO_MODE_INTERVAL};
 use hidapi::HidApi;
 use std::{thread::sleep, time::{Duration, Instant}};
 
@@ -12,10 +12,13 @@ pub struct Display {
     pub mode: Mode,
     update: Duration,
     fahrenheit: bool,
+    /// `Mode::Default` was asked for: follow `deepcool_mode` (frequency / fan / both in turn).
+    follow_settings: bool,
 }
 
 impl Display {
     pub fn new(cpu: DeepCpu, gpu: Gpu, mode: &Mode, update: Duration, fahrenheit: bool) -> Self {
+        let follow_settings = matches!(mode, Mode::Default);
         // Verify the display mode
         let mode = match mode {
             Mode::Default => DEFAULT_MODE,
@@ -33,6 +36,7 @@ impl Display {
             mode,
             update,
             fahrenheit,
+            follow_settings,
         }
     }
 
@@ -45,7 +49,6 @@ impl Display {
 
         // Display warning to address limitated display modes
         match self.mode {
-            Mode::CpuFan => eprintln!("DeepCool: CPU fan speed monitoring is not yet supported"),
             Mode::Psu => eprintln!("DeepCool: PSU monitoring is not yet supported"),
             Mode::Auto => {
                 eprintln!("DeepCool: display mode \"auto\" only cycles between fully supported modes")
@@ -54,7 +57,7 @@ impl Display {
         }
 
         // Display warning if a required module is missing
-        if matches!(self.mode, Mode::CpuFrequency | Mode::CpuFan | Mode::Auto) {
+        if self.follow_settings || matches!(self.mode, Mode::CpuFrequency | Mode::CpuFan | Mode::Auto) {
             self.cpu.warn_temp();
             self.cpu.warn_rapl();
         }
@@ -79,12 +82,12 @@ impl Display {
                 let mut mode = Mode::CpuFrequency;
                 loop {
                     // Initial update
-                    device.write(&self.status_message(&data, &mode, initial_update)).unwrap();
+                    device.write(&self.status_message(&data, &mode, FanSource::Cpu, initial_update)).unwrap();
 
                     // Update until timeout
                     let timeout = Instant::now() + AUTO_MODE_INTERVAL;
                     while Instant::now() + self.update < timeout {
-                        device.write(&self.status_message(&data, &mode, self.update)).unwrap();
+                        device.write(&self.status_message(&data, &mode, FanSource::Cpu, self.update)).unwrap();
                     }
 
                     // Make the next initial update faster to fit the timeframe
@@ -98,14 +101,23 @@ impl Display {
                     }
                 }
             }
+            _ if self.follow_settings => {
+                // frequency, fan speed (LibreHardwareMonitor) or both in turn: `deepcool_mode`,
+                // re-read every time so a change in the settings applies at once
+                let start = Instant::now();
+                loop {
+                    let (mode, fan) = crate::opts().deepcool.pick(start.elapsed());
+                    device.write(&self.status_message(&data, &mode, fan, self.update)).unwrap();
+                }
+            }
             _ => loop {
-                device.write(&self.status_message(&data, &self.mode, self.update)).unwrap();
+                device.write(&self.status_message(&data, &self.mode, crate::opts().deepcool.fan, self.update)).unwrap();
             }
         }
     }
 
     /// Reads the system status information and returns the data packet.
-    fn status_message(&self, inital_data: &[u8; 64], mode: &Mode, update: Duration) -> [u8; 64] {
+    fn status_message(&self, inital_data: &[u8; 64], mode: &Mode, fan: FanSource, update: Duration) -> [u8; 64] {
         // Clone the data packet
         let mut data = inital_data.clone();
 
@@ -148,6 +160,14 @@ impl Display {
                     let frequency = (self.cpu.get_frequency()).to_be_bytes();
                     data[15] = frequency[0];
                     data[16] = frequency[1];
+                } else {
+                    // Fan speed (RPM), big-endian. The protocol of this mode is not documented:
+                    // the number goes where the frequency goes and in the two free bytes after it.
+                    let rpm = crate::opts().deepcool.rpm(&crate::lhm::shared(), fan).to_be_bytes();
+                    data[15] = rpm[0];
+                    data[16] = rpm[1];
+                    data[17] = rpm[0];
+                    data[18] = rpm[1];
                 }
             }
             Mode::Gpu => {

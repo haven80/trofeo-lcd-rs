@@ -579,6 +579,132 @@ fn tiles_inner(ui: &mut egui::Ui, ed: &mut Ed, key: &str, l: Lang) {
     ui.label(RichText::new(format!("{total} / 16 tiles")).weak().small());
 }
 
+/// One column of tiles (`frame_left` / `frame_right`): a row of choices, possibly none.
+fn tile_column_widget(ui: &mut egui::Ui, ed: &mut Ed, f: &Field, l: Lang) {
+    let text = ed.effective(f);
+    let tiles: Vec<Tile> = if text.trim().eq_ignore_ascii_case("none") { Vec::new() } else { parse_tiles(&text).map(|r| r.into_iter().flatten().collect()).unwrap_or_default() };
+    let mut tiles: Vec<Tile> = tiles.into_iter().map(|t| Tile { tall: false, ..t }).collect();
+    let mut changed = false;
+    ui.vertical(|ui| {
+        ui.horizontal_wrapped(|ui| {
+            let mut remove = None;
+            for (ti, t) in tiles.iter_mut().enumerate() {
+                let name = schema::TILE_KINDS.iter().find(|(k, _, _)| *k == t.kind).map(|(_, en, it)| tr(l, en, it)).unwrap_or(&t.kind).to_string();
+                egui::ComboBox::from_id_salt(format!("{}_{ti}", f.key)).selected_text(name).width(120.0).show_ui(ui, |ui| {
+                    for (k, en, it) in schema::TILE_KINDS {
+                        if ui.selectable_label(t.kind == *k, tr(l, en, it)).clicked() {
+                            t.kind = k.to_string();
+                            changed = true;
+                        }
+                    }
+                });
+                if ui.selectable_label(t.ring, tr(l, "ring", "anello")).on_hover_text(tr(l, "A ring instead of a bar", "Un anello invece di una barra")).clicked() {
+                    t.ring = !t.ring;
+                    changed = true;
+                }
+                if ui.small_button("x").on_hover_text(tr(l, "Remove this tile", "Togli questo tile")).clicked() {
+                    remove = Some(ti);
+                }
+                ui.label(RichText::new("|").weak());
+            }
+            if let Some(ti) = remove {
+                tiles.remove(ti);
+                changed = true;
+            }
+            if tiles.len() < 4 && ui.button("+ tile").clicked() {
+                tiles.push(Tile { kind: "cpu".into(), ring: true, tall: false });
+                changed = true;
+            }
+            if tiles.is_empty() {
+                ui.label(RichText::new(tr(l, "no tiles: this side is left to the pictures", "nessun tile: questo lato è lasciato alle immagini")).weak());
+            }
+        });
+    });
+    if changed {
+        if tiles.is_empty() {
+            ed.set(&f.key, "none");
+        } else {
+            ed.set(&f.key, &tiles_to_string(&[tiles]));
+        }
+    }
+}
+
+/// `deck`, `orbit` (one list) and `cards` (columns separated by `|`, cards of a column stacked).
+fn panels_widget(ui: &mut egui::Ui, ed: &mut Ed, f: &Field, columns: bool, l: Lang) {
+    let text = ed.effective(f);
+    let mut cols: Vec<Vec<String>> = text
+        .split('|')
+        .map(|c| c.split(',').map(|k| k.trim().to_ascii_lowercase()).filter(|k| !k.is_empty()).collect::<Vec<_>>())
+        .filter(|c| !c.is_empty())
+        .collect();
+    if !columns && cols.len() > 1 {
+        cols = vec![cols.into_iter().flatten().collect()];
+    }
+    let max_items = if columns { 3 } else if f.key == "orbit" { 4 } else { 5 };
+    let mut changed = false;
+    let mut remove_col = None;
+    ui.vertical(|ui| {
+        for (ci, col) in cols.iter_mut().enumerate() {
+            ui.horizontal_wrapped(|ui| {
+                if columns {
+                    ui.label(RichText::new(format!("{}.", ci + 1)).weak());
+                }
+                let mut remove = None;
+                for (ki, kind) in col.iter_mut().enumerate() {
+                    let name = schema::PANEL_KINDS.iter().find(|(k, _, _)| *k == kind.as_str()).map(|(_, en, it)| tr(l, en, it)).unwrap_or(kind.as_str()).to_string();
+                    egui::ComboBox::from_id_salt(format!("{}_{ci}_{ki}", f.key)).selected_text(name).width(130.0).show_ui(ui, |ui| {
+                        for (k, en, it) in schema::PANEL_KINDS {
+                            if ui.selectable_label(kind == k, tr(l, en, it)).clicked() {
+                                *kind = k.to_string();
+                                changed = true;
+                            }
+                        }
+                    });
+                    if ui.small_button("x").on_hover_text(tr(l, "Remove", "Togli")).clicked() {
+                        remove = Some(ki);
+                    }
+                }
+                if let Some(ki) = remove {
+                    col.remove(ki);
+                    changed = true;
+                }
+                if col.len() < max_items && ui.button(if columns { tr(l, "+ stacked", "+ sotto") } else { "+" }).clicked() {
+                    col.push("cpu".into());
+                    changed = true;
+                }
+                if columns && ui.small_button(tr(l, "remove column", "togli colonna")).clicked() {
+                    remove_col = Some(ci);
+                }
+            });
+        }
+        if columns && cols.len() < 6 && ui.button(tr(l, "+ column", "+ colonna")).clicked() {
+            cols.push(vec!["cpu".into()]);
+            changed = true;
+        }
+    });
+    if let Some(ci) = remove_col {
+        cols.remove(ci);
+        changed = true;
+    }
+    cols.retain(|c| !c.is_empty());
+    if changed && !cols.is_empty() {
+        let joined = cols.iter().map(|c| c.join(", ")).collect::<Vec<_>>().join(" | ");
+        ed.set(&f.key, &joined);
+    }
+}
+
+fn pick_folder(title: &str) -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        rfd::FileDialog::new().set_title(title).pick_folder()
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = title;
+        None
+    }
+}
+
 fn pick_file(title: &str, start: Option<&Path>) -> Option<PathBuf> {
     #[cfg(windows)]
     {
@@ -614,7 +740,7 @@ fn save_file_dialog(start: &Path) -> Option<PathBuf> {
 /// Draws one setting. Returns nothing: it changes `ed`.
 fn field_row(ui: &mut egui::Ui, ed: &mut Ed, f: &Field, l: Lang) {
     let is_set = ed.get(&f.key).is_some();
-    let wide = matches!(f.kind, Kind::Multi(_) | Kind::Layout | Kind::Tiles | Kind::ColorList | Kind::BarColor);
+    let wide = matches!(f.kind, Kind::Multi(_) | Kind::Layout | Kind::Tiles | Kind::TileColumn | Kind::Panels { .. } | Kind::ColorList | Kind::BarColor);
     let mut text = RichText::new(label(f, l));
     if is_set {
         text = text.strong();
@@ -725,8 +851,25 @@ fn field_widget(ui: &mut egui::Ui, ed: &mut Ed, f: &Field, l: Lang) {
                 ui.colored_label(Color32::from_rgb(255, 120, 120), tr(l, "the character # is not allowed in a path", "il carattere # non è ammesso in un percorso"));
             }
         }
+        Kind::Folder => {
+            let out = text_box(ui, ed, &f.key, 320.0, |t| !t.contains('#'), "");
+            apply(ed, &f.key, out);
+            if ui.button(tr(l, "Browse...", "Sfoglia...")).clicked() {
+                if let Some(p) = pick_folder(label(f, l)) {
+                    ed.bufs.remove(&f.key);
+                    ed.set(&f.key, &p.display().to_string());
+                }
+            }
+            #[cfg(not(windows))]
+            ui.label(RichText::new(tr(l, "type the path of the folder", "scrivi il percorso della cartella")).weak());
+            if ed.bufs.get(&f.key).is_some_and(|t| t.contains('#')) {
+                ui.colored_label(Color32::from_rgb(255, 120, 120), tr(l, "the character # is not allowed in a path", "il carattere # non è ammesso in un percorso"));
+            }
+        }
         Kind::Layout => layout_widget(ui, ed, &f.key, l),
         Kind::Tiles => tiles_widget(ui, ed, &f.key, l),
+        Kind::TileColumn => tile_column_widget(ui, ed, f, l),
+        Kind::Panels { columns } => panels_widget(ui, ed, f, *columns, l),
     }
 }
 
@@ -751,6 +894,8 @@ struct App {
     preview: Preview,
     state: PreviewState,
     layout_idx: usize,
+    /// The section the preview's screen was last matched to.
+    pv_section: String,
     animate: bool,
     anim_start: Instant,
     raw_text: Option<String>,
@@ -783,6 +928,7 @@ impl App {
             preview: Preview::new(),
             state: PreviewState::Idle,
             layout_idx: 0,
+            pv_section: String::new(),
             animate: false,
             anim_start: Instant::now(),
             raw_text: None,
@@ -1093,6 +1239,35 @@ impl App {
         let sec = schema::SECTIONS.iter().find(|(id, _, _)| *id == self.section).map(|(_, en, it)| tr(l, en, it)).unwrap_or("");
         ui.heading(sec);
         ui.add_space(4.0);
+        // The preview shows the screens of the `layout` list: jump to the one this section is about.
+        if self.section == "frame" || self.section == "tiles" {
+            let name = self.section.clone();
+            let names = self.layout_names();
+            match names.iter().position(|n| *n == name) {
+                Some(i) => {
+                    if self.pv_section != self.section {
+                        self.layout_idx = i;
+                    }
+                }
+                None => {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.colored_label(
+                            Color32::from_rgb(255, 190, 90),
+                            tr(l, "This screen is not in your list of screens, so the program does not show it yet.", "Questa schermata non è nella tua lista di schermate, quindi il programma non la mostra ancora."),
+                        );
+                        if ui.button(tr(l, "Add it to the screens", "Aggiungila alle schermate")).clicked() {
+                            let mut entries = parse_layouts(&self.ed.get("layout").unwrap_or_default());
+                            entries.push(LayoutEntry { name: name.clone(), secs: None });
+                            let n = entries.len();
+                            self.ed.set("layout", &layouts_to_string(&entries));
+                            self.layout_idx = n - 1;
+                        }
+                    });
+                    ui.add_space(4.0);
+                }
+            }
+        }
+        self.pv_section = self.section.clone();
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             let mut last_group = "";
             for f in &fields {

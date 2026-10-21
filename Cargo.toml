@@ -1,6 +1,6 @@
 [package]
 name = "trofeo_lcd"
-version = "1.2.1"
+version = "1.4.0"
 edition = "2021"
 description = "A lightweight open-source driver/monitor for the Thermalright Trofeo Vision 9.16 LCD (LY protocol, USB 0416:5408), based on reverse-engineering from thermalright-trcc-linux"
 license = "GPL-3.0-or-later"
@@ -15,9 +15,10 @@ flate2 = "1"
 # TrueType rasterizer; the embedded font is Poppins (SIL OFL, see assets/OFL.txt).
 fontdue = { version = "0.9", default-features = false }
 jpeg-encoder = "0.5"
-# Background decoding (JPEG/PNG/BMP/GIF) for the `background` option; videos
+# Background decoding (JPEG/PNG/BMP/GIF) for the `background` option, and the pictures of
+# the `frame` layout (JPEG/PNG/WebP/BMP/GIF); videos
 # go through external ffmpeg instead (see src/background.rs).
-image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "bmp"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "bmp", "webp"] }
 # Used ONLY to run the minimal async runtime needed for the OpenRGB client
 # (openrgb2), not for the program as a whole (the main loop stays sync).
 # "rt", "net", "time" are enough — no need for "full".

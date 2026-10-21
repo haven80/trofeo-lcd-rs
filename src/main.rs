@@ -23,6 +23,7 @@ mod foreground;
 mod fps_etw;
 mod gpu_nvml;
 mod layouts;
+mod lhm;
 mod gpu;
 mod gpu_amd;
 mod media;
@@ -33,6 +34,7 @@ mod pawnio;
 mod effect;
 mod pixel_game;
 mod spectrum;
+mod frame;
 mod tiles;
 mod ticker;
 mod weather;
@@ -309,6 +311,15 @@ fn print_help() {
          \x20\x20--background-color <C>   Solid background color (name or #RRGGBB), when there is no image/effect\n\
          \x20\x20--background-dim <0-100> Darkens the background (default: 40)\n\
          \x20\x20--ffmpeg <PATH>      Path to ffmpeg (default: next to the exe/PATH)\n\
+         \x20\x20--lhm-list              Lists what LibreHardwareMonitor reports (fans, temperatures)\n\
+         \x20\x20                          and which sensor is used for each role, then exits.\n\
+         \x20\x20--lhm <true|false>      Read fan speeds etc. from LibreHardwareMonitor's web\n\
+         \x20\x20                          server (Options > Remote Web Server > Run). Also\n\
+         \x20\x20                          --lhm-url, --lhm-interval, --lhm-cpu-fan, --lhm-case-fan,\n\
+         \x20\x20                          --lhm-pump, --lhm-mb-temp (part of a sensor's name).\n\
+         \x20\x20--deepcool-mode <M>      DeepCool CH170/CH270/CH690 case display: freq | fan |\n\
+         \x20\x20                          alternate (fan = RPM from LibreHardwareMonitor);\n\
+         \x20\x20                          --deepcool-fan cpu|case|pump|gpu, --deepcool-alternate <s>.\n\
          \x20\x20--weather-city <NAME>    City for the weather module (default: auto-detect\n\
          \x20\x20                          from the machine's public IP address)\n\
          \x20\x20ticker_source <URL/FILE> (config-file only) News ticker source(s), comma-\n\
@@ -584,6 +595,9 @@ fn parse_args() -> anyhow::Result<Config> {
                     _ => anyhow::bail!("--preview-state: '{raw}' not valid (idle | playing | music)"),
                 };
             }
+            "--lhm-list" => {
+                // Handled in `main()` after parsing (needs the lhm_* settings).
+            }
             "--diag" => {
                 // Handled in `main()` after parsing, so it can see `weather_city`;
                 // here it just needs to not be rejected as an unrecognized argument.
@@ -835,7 +849,7 @@ fn item_key(key: &str) -> Option<(usize, &str)> {
 }
 
 fn is_override_key(key: &str) -> bool {
-    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "clock_backdrop" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || (key.starts_with("tile_") && key.ends_with("_color"))
+    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "clock_backdrop" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
 }
 
 /// Style for a single item of the info block.
@@ -1093,6 +1107,10 @@ fn parse_ui_options(file: &ConfigFile) -> anyhow::Result<UiOptions> {
         music_progress: file.get_bool("music_progress").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(true),
         effect: parse_effect(file)?,
         tiles: tiles::parse(file)?,
+        frame: frame::parse(file)?,
+        lhm: lhm::parse(file)?,
+        deepcool: deepcool::parse(file)?,
+        dash: tiles::dash::parse(file)?,
     })
 }
 
@@ -1535,7 +1553,12 @@ fn config_stamp(explicit: Option<&std::path::Path>) -> Option<(std::path::PathBu
 
 fn main() -> anyhow::Result<()> {
     let diag_mode = std::env::args().any(|a| a == "--diag");
+    let lhm_list = std::env::args().any(|a| a == "--lhm-list");
     let mut config = parse_args()?;
+    if lhm_list {
+        let ok = lhm::diag(&config.ui.lhm.url, &config.ui.lhm.filters);
+        std::process::exit(if ok { 0 } else { 1 });
+    }
     if diag_mode {
         println!("=== NVIDIA GPU Diagnostics ===");
         print!("{}", gpu_nvml::diag());
@@ -1736,6 +1759,8 @@ fn main() -> anyhow::Result<()> {
     let mut latest_cpu_temp: Option<f32> = None; // °C
     let mut latest_cpu_power: Option<f32> = None; // Watts
     let mut latest_cpu_mhz: Option<u32> = None; // real-time frequency
+    // LibreHardwareMonitor: fan speeds etc. The client is restarted if its URL / interval change.
+    let mut lhm_link = lhm::Link::new();
 
     i18n::set_language(config.language);
     set_ui_options(config.ui.clone());
@@ -1744,6 +1769,8 @@ fn main() -> anyhow::Result<()> {
     let mut layout_index = usize::MAX;
     let mut layout_marquee = Marquee::new();
     let mut tiles_screen = tiles::TilesScreen::new();
+    let mut frame_screen = frame::FrameScreen::new();
+    let mut dash_screen = tiles::dash::DashScreen::new();
     let Display { mut resolution, mut background, mut idle_fps_effective, mut composite, mut fb, mut ui } =
         build_display(&config)?;
     let _ = resolution;
@@ -1906,9 +1933,23 @@ fn main() -> anyhow::Result<()> {
         let tiles_wanted = is_idle
             && active_def.is_some_and(|d| d.name == "tiles")
             && !(gaming_now && ui_show.dashboard);
+        // The digital frame (see `frame.rs`): a few frames a second while nothing moves, a
+        // smooth rate while a photo is changing.
+        let frame_wanted = is_idle
+            && active_def.is_some_and(|d| d.name == "frame")
+            && !(gaming_now && ui_show.dashboard);
+        // `deck`, `cards`, `orbit` (see `tiles/dash.rs`): the graphs move once a second.
+        let dash_style = active_def.and_then(|d| tiles::dash::Style::from_layout(d.name)).filter(|_| is_idle && !(gaming_now && ui_show.dashboard));
+        let target_fps = match dash_style {
+            Some(_) => target_fps.max(tiles::dash::DashScreen::wanted_fps(&opts().dash, config.ui.effect.fps as f32, config.active_fps)),
+            None => target_fps,
+        };
+        let target_fps = if frame_wanted { target_fps.max(frame_screen.wanted_fps()) } else { target_fps };
         let target_fps = match (tiles_wanted, opts().tiles.bg) {
             (true, tiles::BgMode::Effect) => target_fps.max(config.ui.effect.fps as f32),
             (true, tiles::BgMode::Image) => target_fps.max(config.active_fps),
+            // colour presets drifting through the tiles: a few frames a second are plenty
+            (true, _) if !opts().tiles.fill_palettes.is_empty() => target_fps.max(5.0),
             _ => target_fps,
         };
         let target_frame_time = Duration::from_secs_f32(1.0 / target_fps);
@@ -1958,6 +1999,16 @@ fn main() -> anyhow::Result<()> {
             // Real-time CPU frequency (see cpu_freq.rs).
             latest_cpu_mhz = cpu_freq.sample_mhz();
 
+            // LibreHardwareMonitor (fans, board / disk temperature; fills CPU temp / power
+            // that the built-in sensor cannot read).
+            let mut lhm_now = lhm_link.update(&opts().lhm);
+            if latest_cpu_temp.is_none() {
+                latest_cpu_temp = lhm_now.cpu_temp;
+            }
+            if latest_cpu_power.is_none() {
+                latest_cpu_power = lhm_now.cpu_power;
+            }
+
             // Weather: just reads whatever the background thread last fetched
             // (non-blocking); stays `None` until the first fetch succeeds.
             latest_weather = weather_monitor.sample();
@@ -1975,6 +2026,12 @@ fn main() -> anyhow::Result<()> {
                     latest_gpu_data.clock_mhz = c;
                 }
             }
+            // The GPU fan: the driver's own reading first, LibreHardwareMonitor's otherwise.
+            match latest_gpu_data.fan_rpm {
+                Some(r) => lhm_now.gpu_fan = Some(r.max(0) as u32),
+                None => latest_gpu_data.fan_rpm = lhm_now.gpu_fan.map(|r| r as i32),
+            }
+            lhm::set_current(lhm_now);
             if latest_gpu_data.fps.is_none() {
                 #[cfg(windows)]
                 if let Some(pid) = foreground::foreground_pid() {
@@ -2034,6 +2091,8 @@ fn main() -> anyhow::Result<()> {
             ticker: latest_ticker.clone(),
         });
         let tiles_now = tiles_wanted && widget_data.is_some();
+        let frame_now = frame_wanted && widget_data.is_some();
+        let dash_now = dash_style.filter(|_| widget_data.is_some());
         // Base: a background (image/gif/video) or a solid color; the interface goes
         // on the `ui` buffer (transparent) when there are margins or a background.
         if composite {
@@ -2057,8 +2116,27 @@ fn main() -> anyhow::Result<()> {
             } else {
                 (0, 0, fb.width(), fb.height())
             };
-            let tiles_env = tiles::Env { fps: config.active_fps, ffmpeg: config.ffmpeg.as_deref(), effect: &config.ui.effect };
+            let tiles_env = tiles::Env { fps: config.active_fps, ffmpeg: config.ffmpeg.as_deref(), effect: &config.ui.effect, secs: None };
             tiles_screen.draw(&mut fb, area, wd, color_mode, &opts().tiles, &tiles_env);
+        }
+        if let (Some(style), Some(wd)) = (dash_now, widget_data.as_ref()) {
+            let area = if composite {
+                (config.margins.left, config.margins.top, ui.width(), ui.height())
+            } else {
+                (0, 0, fb.width(), fb.height())
+            };
+            let env = tiles::Env { fps: config.active_fps, ffmpeg: config.ffmpeg.as_deref(), effect: &config.ui.effect, secs: None };
+            let o = opts();
+            dash_screen.draw(&mut fb, area, style, wd, color_mode, &o.dash, &o.tiles, &env);
+        }
+        if let (true, Some(wd)) = (frame_now, widget_data.as_ref()) {
+            let area = if composite {
+                (config.margins.left, config.margins.top, ui.width(), ui.height())
+            } else {
+                (0, 0, fb.width(), fb.height())
+            };
+            let env = tiles::Env { fps: config.active_fps, ffmpeg: config.ffmpeg.as_deref(), effect: &config.ui.effect, secs: None };
+            frame_screen.draw(&mut fb, area, wd, color_mode, &opts().frame, &opts().tiles, &env);
         }
         let target: &mut Framebuffer = if composite { &mut ui } else { &mut fb };
         if gaming_mode && ui_show.dashboard {
@@ -2214,6 +2292,7 @@ fn render_preview(config: &Config, req: &PreviewReq) -> anyhow::Result<Framebuff
     let Display { background, composite, mut fb, mut ui, .. } = build_display(config)?;
     let mut background = background;
     let (wd, gpu_data, weather) = preview_data();
+    lhm::set_current(lhm::Readings::sample());
     let o = opts();
     let ui_show = o.show;
 
@@ -2229,6 +2308,8 @@ fn render_preview(config: &Config, req: &PreviewReq) -> anyhow::Result<Framebuff
     GAME_STRIP.store(game_wanted, Relaxed);
     let game_on = game_wanted && default_areas(&fb).1.is_some();
     let tiles_now = is_idle && active_def.is_some_and(|d| d.name == "tiles");
+    let frame_now = is_idle && active_def.is_some_and(|d| d.name == "frame");
+    let dash_now = active_def.and_then(|d| tiles::dash::Style::from_layout(d.name)).filter(|_| is_idle);
     let color_mode = config.color_mode;
 
     let mut sys = System::new_all();
@@ -2259,8 +2340,28 @@ fn render_preview(config: &Config, req: &PreviewReq) -> anyhow::Result<Framebuff
         } else {
             (0, 0, fb.width(), fb.height())
         };
-        let env = tiles::Env { fps: config.active_fps, ffmpeg: config.ffmpeg.as_deref(), effect: &config.ui.effect };
+        let env = tiles::Env { fps: config.active_fps, ffmpeg: config.ffmpeg.as_deref(), effect: &config.ui.effect, secs: Some(req.secs) };
         tiles::TilesScreen::new().draw(&mut fb, area, &wd, color_mode, &o.tiles, &env);
+    }
+    if let Some(style) = dash_now {
+        let area = if composite {
+            (config.margins.left, config.margins.top, ui.width(), ui.height())
+        } else {
+            (0, 0, fb.width(), fb.height())
+        };
+        let env = tiles::Env { fps: config.active_fps, ffmpeg: config.ffmpeg.as_deref(), effect: &config.ui.effect, secs: Some(req.secs) };
+        tiles::dash::DashScreen::new().draw(&mut fb, area, style, &wd, color_mode, &o.dash, &o.tiles, &env);
+    }
+    if frame_now {
+        let area = if composite {
+            (config.margins.left, config.margins.top, ui.width(), ui.height())
+        } else {
+            (0, 0, fb.width(), fb.height())
+        };
+        let env = tiles::Env { fps: config.active_fps, ffmpeg: config.ffmpeg.as_deref(), effect: &config.ui.effect, secs: Some(req.secs) };
+        let mut screen = frame::FrameScreen::with_seed(7);
+        screen.still = true;
+        screen.draw_settled(&mut fb, area, &wd, color_mode, &o.frame, &o.tiles, &env);
     }
     let target: &mut Framebuffer = if composite { &mut ui } else { &mut fb };
 
@@ -2549,6 +2650,14 @@ struct UiOptions {
     effect: effect::Settings,
     /// The `tiles` layout: which tiles, font, colors and background (see `tiles.rs`).
     tiles: tiles::Settings,
+    /// The `frame` layout: the digital picture frame (see `frame.rs`).
+    frame: frame::Settings,
+    /// LibreHardwareMonitor (fan speeds and other sensors, see `lhm.rs`).
+    lhm: lhm::Settings,
+    /// What the DeepCool case display shows (frequency / fan RPM), see `deepcool/mod.rs`.
+    deepcool: deepcool::Settings,
+    /// The `deck`, `cards` and `orbit` screens (see `tiles/dash.rs`).
+    dash: tiles::dash::Settings,
 }
 
 impl Default for UiOptions {
@@ -2602,6 +2711,10 @@ impl Default for UiOptions {
             music_progress: true,
             effect: effect::Settings::default(),
             tiles: tiles::Settings::default(),
+            frame: frame::Settings::default(),
+            lhm: lhm::Settings::default(),
+            deepcool: deepcool::Settings::default(),
+            dash: tiles::dash::Settings::default(),
         }
     }
 }
@@ -3196,9 +3309,17 @@ fn draw_status_lines(
         let mut parts: Vec<String> = Vec::new();
         if let Some(t) = cpu_temp.filter(|_| sh.cpu_temp) { parts.push(format!("{t:.0}C")); }
         if let Some(w) = cpu_power.filter(|_| sh.cpu_power) { parts.push(format!("{w:.0}W")); }
-        if parts.is_empty() && (sh.cpu_temp || sh.cpu_power) {
+        let lhm = lhm::current();
+        let na = parts.is_empty() && (sh.cpu_temp || sh.cpu_power);
+        // fan speeds (LibreHardwareMonitor): only the ones that exist
+        let mut fans: Vec<String> = Vec::new();
+        if let Some(r) = lhm.cpu_fan.filter(|_| sh.cpu_fan) { fans.push(format!("fan {r}rpm")); }
+        if let Some(r) = lhm.case_fan.filter(|_| sh.case_fan) { fans.push(format!("case {r}rpm")); }
+        if let Some(r) = lhm.pump.filter(|_| sh.pump) { fans.push(format!("pump {r}rpm")); }
+        if na && fans.is_empty() {
             "N/A".to_string()
         } else {
+            parts.extend(fans);
             parts.join(" ")
         }
     };
@@ -4162,16 +4283,25 @@ mod layout_tests {
                 Kind::Int { min, max } => values.extend([min.to_string(), ((min + max) / 2).to_string(), max.to_string()]),
                 Kind::Float { min, max } => values.extend([format!("{min}"), format!("{max}")]),
                 Kind::Color => values.extend(["#112233".into(), "red".into(), "10,20,30".into()]),
-                Kind::ColorList if matches!(key, "effect_colors" | "spectrum_gradient") => values.push("#112233, #445566".into()),
+                Kind::ColorList if matches!(key, "effect_colors" | "spectrum_gradient" | "tiles_colors") => values.push("#112233, #445566".into()),
                 Kind::ColorList => values.extend(["#112233".into(), "#112233, #445566".into()]),
                 Kind::BarColor => values.extend(["auto".into(), "#112233".into(), "#112233, #445566".into()]),
-                Kind::Text | Kind::Path | Kind::Layout | Kind::Tiles => {}
+                Kind::Text | Kind::Path | Kind::Folder | Kind::Layout | Kind::Tiles | Kind::TileColumn => {}
+                Kind::Panels { columns } => {
+                    if *columns {
+                        values.extend(["cpu".into(), "clock | cpu, gpu | music, net, disk".into()]);
+                    } else {
+                        values.extend(["cpu".into(), "cpu, gpu, ram, fans".into()]);
+                    }
+                }
             }
             for v in values {
                 // the settings some values need next to them
                 let extra = match (key, v.as_str()) {
                     ("tiles_bg", "image") => "tiles_bg_image = picture.png\n",
+                    ("dash_bg", "image") => "dash_bg_image = picture.png\n",
                     ("effect_palette", "custom") => "effect_colors = #112233, #445566\n",
+                    ("tiles_palette", "custom") => "tiles_colors = #112233, #445566\n",
                     ("spectrum_palette", "custom") => "spectrum_gradient = #112233, #445566\n",
                     _ => "",
                 };
@@ -4224,6 +4354,10 @@ mod layout_tests {
             "layout = default",
             "layout = default:30, weather:5",
             "layout = tiles:20, cpu-gpu, news",
+            "layout = frame:60, tiles:20",
+            "frame_left = clock, ram:ring",
+            "frame_right = none",
+            "frame_folder = C:\\Users\\Me\\Pictures\\Family trip",
             "tiles = clock:tall, cpu_temp, gpu_temp | ram:ring, cpu:ring, gpu:ring",
             "tiles = clock",
             "tiles = cpu:ring | gpu:ring | ram | net",

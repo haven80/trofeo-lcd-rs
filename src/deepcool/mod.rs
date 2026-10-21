@@ -57,7 +57,7 @@ pub const CH510_PRODUCT_ID: u16 = 4352;
 /// shown at this interval.
 pub const AUTO_MODE_INTERVAL: Duration = Duration::from_millis(5000);
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum Mode {
     Default,
     Auto,
@@ -266,6 +266,109 @@ impl Gpu {
     }
 }
 
+/// What the case display (CH170 / CH270 / CH690 DIGITAL) shows in its big field.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ShowMode {
+    /// The CPU frequency (the device's default).
+    Frequency,
+    /// The fan speed in RPM, read from LibreHardwareMonitor.
+    Fan,
+    /// Frequency and fan speed in turn, every `alternate_s` seconds.
+    Alternate,
+}
+
+/// Which fan feeds the RPM field.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum FanSource {
+    Cpu,
+    Case,
+    Pump,
+    Gpu,
+    /// CPU fan and case fans in turn.
+    Both,
+}
+
+/// `deepcool_mode`, `deepcool_fan`, `deepcool_alternate`: live (no restart).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Settings {
+    pub mode: ShowMode,
+    pub fan: FanSource,
+    pub alternate_s: u32,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings { mode: ShowMode::Frequency, fan: FanSource::Cpu, alternate_s: 6 }
+    }
+}
+
+impl Settings {
+    /// The fan speed to send (0 when LibreHardwareMonitor does not know it).
+    pub fn rpm(&self, r: &crate::lhm::Readings, src: FanSource) -> u16 {
+        let v = match src {
+            FanSource::Cpu | FanSource::Both => r.cpu_fan,
+            FanSource::Case => r.case_fan,
+            FanSource::Pump => r.pump,
+            FanSource::Gpu => r.gpu_fan,
+        };
+        v.unwrap_or(0).min(u16::MAX as u32) as u16
+    }
+
+    /// What to show `elapsed` after the start: the device mode and, for the fan, which fan.
+    /// With `fan = both` the CPU fan and the case fans take turns (and the frequency too in
+    /// `alternate` mode).
+    pub fn pick(&self, elapsed: Duration) -> (Mode, FanSource) {
+        let step = elapsed.as_secs() / self.alternate_s.max(1) as u64;
+        let both = self.fan == FanSource::Both;
+        match self.mode {
+            ShowMode::Frequency => (Mode::CpuFrequency, self.fan),
+            ShowMode::Fan => (Mode::CpuFan, if both { if step % 2 == 0 { FanSource::Cpu } else { FanSource::Case } } else { self.fan }),
+            ShowMode::Alternate => {
+                if both {
+                    match step % 3 {
+                        0 => (Mode::CpuFrequency, FanSource::Cpu),
+                        1 => (Mode::CpuFan, FanSource::Cpu),
+                        _ => (Mode::CpuFan, FanSource::Case),
+                    }
+                } else if step % 2 == 0 {
+                    (Mode::CpuFrequency, self.fan)
+                } else {
+                    (Mode::CpuFan, self.fan)
+                }
+            }
+        }
+    }
+}
+
+pub fn parse(file: &trofeo_lcd::config::ConfigFile) -> anyhow::Result<Settings> {
+    let mut s = Settings::default();
+    if let Some(v) = file.get("deepcool_mode") {
+        s.mode = match v.trim().to_ascii_lowercase().as_str() {
+            "freq" | "frequency" | "frequenza" | "default" => ShowMode::Frequency,
+            "fan" | "rpm" | "ventola" => ShowMode::Fan,
+            "alternate" | "both" | "alterna" | "auto" => ShowMode::Alternate,
+            _ => anyhow::bail!("deepcool_mode: '{v}' not valid (freq | fan | alternate)"),
+        };
+    }
+    if let Some(v) = file.get("deepcool_fan") {
+        s.fan = match v.trim().to_ascii_lowercase().as_str() {
+            "cpu" => FanSource::Cpu,
+            "case" | "chassis" | "mb" => FanSource::Case,
+            "pump" | "aio" | "pompa" => FanSource::Pump,
+            "gpu" => FanSource::Gpu,
+            "both" | "cpu+case" | "entrambe" | "alterna" => FanSource::Both,
+            _ => anyhow::bail!("deepcool_fan: '{v}' not valid (cpu | case | pump | gpu | both)"),
+        };
+    }
+    if let Some(v) = file.get_u32("deepcool_alternate").map_err(|e| anyhow::anyhow!(e))? {
+        if !(2..=120).contains(&v) {
+            anyhow::bail!("deepcool_alternate: must be between 2 and 120 seconds (got {v})");
+        }
+        s.alternate_s = v;
+    }
+    Ok(s)
+}
+
 /// Options for the DeepCool integration thread (see `spawn`).
 pub struct Options {
     /// Interval for sending data to the DeepCool display, ms (clamped to 100-2000).
@@ -395,4 +498,53 @@ pub fn spawn(sensor: Arc<Mutex<CpuSensor>>, opts: Options) {
             }
         })
         .ok();
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn p(t: &str) -> anyhow::Result<Settings> {
+        parse(&trofeo_lcd::config::ConfigFile::parse(t).unwrap())
+    }
+
+    #[test]
+    fn settings_parse() {
+        assert_eq!(p("").unwrap(), Settings::default());
+        let s = p("deepcool_mode = alternate\ndeepcool_fan = case\ndeepcool_alternate = 10\n").unwrap();
+        assert_eq!((s.mode, s.fan, s.alternate_s), (ShowMode::Alternate, FanSource::Case, 10));
+        assert_eq!(p("deepcool_mode = rpm\n").unwrap().mode, ShowMode::Fan);
+        assert_eq!(p("deepcool_fan = both\n").unwrap().fan, FanSource::Both);
+        assert!(p("deepcool_mode = loud\n").is_err());
+        assert!(p("deepcool_fan = side\n").is_err());
+        assert!(p("deepcool_alternate = 1\n").is_err());
+    }
+
+    #[test]
+    fn the_display_alternates_between_frequency_and_the_chosen_fan() {
+        let s = p("deepcool_mode = alternate\ndeepcool_fan = case\ndeepcool_alternate = 5\n").unwrap();
+        let at = |secs| s.pick(Duration::from_secs(secs));
+        assert_eq!(at(0), (Mode::CpuFrequency, FanSource::Case));
+        assert_eq!(at(4), (Mode::CpuFrequency, FanSource::Case));
+        assert_eq!(at(5), (Mode::CpuFan, FanSource::Case));
+        assert_eq!(at(10), (Mode::CpuFrequency, FanSource::Case));
+        // CPU fan and case fans in turn, with the frequency
+        let b = p("deepcool_mode = alternate\ndeepcool_fan = both\ndeepcool_alternate = 5\n").unwrap();
+        let seq: Vec<_> = (0..3).map(|i| b.pick(Duration::from_secs(i * 5))).collect();
+        assert_eq!(seq, vec![(Mode::CpuFrequency, FanSource::Cpu), (Mode::CpuFan, FanSource::Cpu), (Mode::CpuFan, FanSource::Case)]);
+        // only the fan
+        let f = p("deepcool_mode = fan\n").unwrap();
+        assert_eq!(f.pick(Duration::from_secs(99)), (Mode::CpuFan, FanSource::Cpu));
+        assert_eq!(Settings::default().pick(Duration::from_secs(99)).0, Mode::CpuFrequency);
+    }
+
+    #[test]
+    fn the_rpm_follows_the_chosen_fan() {
+        let r = crate::lhm::Readings::sample();
+        let s = Settings::default();
+        assert_eq!(s.rpm(&r, FanSource::Cpu), 1240);
+        assert_eq!(s.rpm(&r, FanSource::Case), 780);
+        assert_eq!(s.rpm(&r, FanSource::Pump), 2650);
+        assert_eq!(s.rpm(&r, FanSource::Gpu), 1480);
+        assert_eq!(s.rpm(&crate::lhm::Readings::default(), FanSource::Cpu), 0);
+    }
 }

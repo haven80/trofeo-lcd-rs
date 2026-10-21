@@ -33,6 +33,12 @@ pub struct ConfigFile {
 /// a comma (so lists like `spectrum_gradient = #FF0080, #00FFFF` survive);
 /// any other `#` starts a comment.
 fn strip_value_comment(v: &str) -> String {
+    // a quoted value ("Fan #2") is taken whole: a `#` inside the quotes is not a comment
+    if let Some(q) = v.chars().next().filter(|c| matches!(c, '"' | '\'')) {
+        if let Some(end) = v[1..].find(q) {
+            return v[1..1 + end].to_string();
+        }
+    }
     let mut out = String::new();
     let mut prev_sig: Option<char> = None; // last non-whitespace char kept so far
     let mut chars = v.chars().peekable();

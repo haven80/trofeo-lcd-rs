@@ -20,6 +20,8 @@ use std::path::PathBuf;
 
 type Rgb = (u8, u8, u8);
 
+pub mod dash;
+
 // ------------------------------------------------------------------ settings
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -37,15 +39,25 @@ pub enum Kind {
     Fps,
     Weather,
     Music,
+    /// Fan speeds etc. from LibreHardwareMonitor (see `lhm.rs`).
+    CpuFan,
+    CaseFan,
+    Pump,
+    GpuFan,
+    /// All the fans in one tile.
+    Fans,
+    MbTemp,
+    DiskTemp,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 13] = [
+    pub const ALL: [Kind; 20] = [
         Kind::Clock, Kind::Cpu, Kind::CpuTemp, Kind::CpuWatt, Kind::Gpu, Kind::GpuTemp, Kind::GpuWatt,
         Kind::Ram, Kind::Net, Kind::Disk, Kind::Fps, Kind::Weather, Kind::Music,
+        Kind::CpuFan, Kind::CaseFan, Kind::Pump, Kind::GpuFan, Kind::Fans, Kind::MbTemp, Kind::DiskTemp,
     ];
     pub const NAMES: &'static str =
-        "clock, cpu, cpu_temp, cpu_watt, gpu, gpu_temp, gpu_watt, ram, net, disk, fps, weather, music";
+        "clock, cpu, cpu_temp, cpu_watt, gpu, gpu_temp, gpu_watt, ram, net, disk, fps, weather, music, cpu_fan, case_fan, pump, gpu_fan, fans, mb_temp, disk_temp";
 
     pub fn key(self) -> &'static str {
         match self {
@@ -62,6 +74,13 @@ impl Kind {
             Kind::Fps => "fps",
             Kind::Weather => "weather",
             Kind::Music => "music",
+            Kind::CpuFan => "cpu_fan",
+            Kind::CaseFan => "case_fan",
+            Kind::Pump => "pump",
+            Kind::GpuFan => "gpu_fan",
+            Kind::Fans => "fans",
+            Kind::MbTemp => "mb_temp",
+            Kind::DiskTemp => "disk_temp",
         }
     }
 
@@ -85,6 +104,13 @@ impl Kind {
             "fps" => Kind::Fps,
             "weather" | "meteo" => Kind::Weather,
             "music" | "nowplaying" | "now_playing" | "musica" => Kind::Music,
+            "cpu_fan" | "cpufan" | "fan" | "ventola" => Kind::CpuFan,
+            "case_fan" | "casefan" | "case" | "mb_fan" | "ventole_case" => Kind::CaseFan,
+            "pump" | "pompa" | "aio" => Kind::Pump,
+            "gpu_fan" | "gpufan" => Kind::GpuFan,
+            "fans" | "ventole" => Kind::Fans,
+            "mb_temp" | "mbtemp" | "board_temp" | "motherboard" | "scheda_madre" => Kind::MbTemp,
+            "disk_temp" | "disktemp" | "ssd_temp" | "nvme_temp" => Kind::DiskTemp,
             _ => return None,
         })
     }
@@ -165,12 +191,23 @@ pub struct Settings {
     pub cpu_watt_max: u32,
     pub gpu_watt_max: u32,
     pub fps_max: u32,
+    /// Fan speed (RPM) that fills the bar of the fan tiles.
+    pub fan_max: u32,
+    /// Show the fan speeds (LibreHardwareMonitor) on the CPU tiles.
+    pub rpm: bool,
     pub clock_seconds: bool,
     pub bg: BgMode,
     pub bg_colors: Vec<Rgb>,
     pub bg_image: Option<PathBuf>,
     /// 0-100: darkens the background image / effect.
     pub bg_dim: u32,
+    /// `tiles_palette`: every tile gets a fill colour of its own, taken from these colour
+    /// presets (several rotate with a cross-fade). Empty = off, all tiles use the same fill.
+    pub fill_palettes: Vec<effect::Palette>,
+    /// Seconds a preset stays before the next one fades in.
+    pub palette_interval: u32,
+    /// 0-100: how far apart in time the tiles change preset (0 = all together).
+    pub palette_stagger: u32,
 }
 
 impl Default for Settings {
@@ -193,11 +230,16 @@ impl Default for Settings {
             cpu_watt_max: 200,
             gpu_watt_max: 400,
             fps_max: 240,
+            fan_max: 2500,
+            rpm: true,
             clock_seconds: false,
             bg: BgMode::Global,
             bg_colors: vec![(0x1b, 0x2a, 0x4a), (0x4a, 0x1b, 0x3a)],
             bg_image: None,
             bg_dim: 0,
+            fill_palettes: Vec::new(),
+            palette_interval: 20,
+            palette_stagger: 50,
         }
     }
 }
@@ -336,6 +378,12 @@ pub fn parse(file: &ConfigFile) -> anyhow::Result<Settings> {
     if let Some(v) = num("tiles_fps_max", 30, 1000)? {
         s.fps_max = v;
     }
+    if let Some(v) = num("tiles_fan_max", 500, 10000)? {
+        s.fan_max = v;
+    }
+    if let Some(v) = file.get_bool("tiles_rpm").map_err(|e| anyhow::anyhow!(e))? {
+        s.rpm = v;
+    }
     if let Some(v) = file.get_bool("tiles_clock_seconds").map_err(|e| anyhow::anyhow!(e))? {
         s.clock_seconds = v;
     }
@@ -365,7 +413,100 @@ pub fn parse(file: &ConfigFile) -> anyhow::Result<Settings> {
         anyhow::bail!("tiles_bg = image needs tiles_bg_image = <file>");
     }
     s.bg_dim = num("tiles_bg_dim", 0, 100)?.unwrap_or(0);
+    s.fill_palettes = parse_fill_palettes(file)?;
+    if let Some(v) = num("tiles_palette_interval", 5, 3600)? {
+        s.palette_interval = v;
+    }
+    if let Some(v) = num("tiles_palette_stagger", 0, 100)? {
+        s.palette_stagger = v;
+    }
     Ok(s)
+}
+
+/// `tiles_palette = off | pastel | ocean, fire | all | custom` (+ `tiles_colors = #RRGGBB, ...`).
+fn parse_fill_palettes(file: &ConfigFile) -> anyhow::Result<Vec<effect::Palette>> {
+    let custom = match file.get("tiles_colors") {
+        None => None,
+        Some(list) => {
+            let stops = parse_rgb_list("tiles_colors", list)?;
+            if stops.len() < 2 {
+                anyhow::bail!("tiles_colors: needs at least 2 colors, e.g. #FF0080, #00FFFF");
+            }
+            Some(effect::Palette::custom(stops))
+        }
+    };
+    let Some(list) = file.get("tiles_palette") else {
+        return Ok(custom.into_iter().collect());
+    };
+    let mut out: Vec<effect::Palette> = Vec::new();
+    for raw in list.split(',') {
+        let name = raw.trim();
+        if name.is_empty() {
+            continue;
+        }
+        let lower = name.to_ascii_lowercase();
+        match lower.as_str() {
+            "off" | "none" | "no" | "false" | "spento" => return Ok(Vec::new()),
+            "all" | "rotate" | "tutte" => out.extend(effect::Palette::presets()),
+            "custom" => out.push(custom.clone().ok_or_else(|| {
+                anyhow::anyhow!("tiles_palette: 'custom' needs tiles_colors = #RRGGBB, #RRGGBB")
+            })?),
+            _ => out.push(effect::Palette::parse(name).ok_or_else(|| {
+                anyhow::anyhow!("tiles_palette: '{name}' not valid (off | {} | custom | all)", effect::Palette::NAMES)
+            })?),
+        }
+    }
+    out.dedup();
+    Ok(out)
+}
+
+/// The fill colour of tile `idx` of `count` at time `secs` when `tiles_palette` is on:
+/// every tile sits at its own spot of the palette (which drifts slowly), and the presets
+/// cross-fade tile by tile (`palette_stagger`). The result is made dark enough for white
+/// text (or pale enough for dark text in the light theme) and blended into the base fill.
+fn palette_fill(s: &Settings, base: Rgb, light: bool, idx: usize, count: usize, secs: f64) -> Rgb {
+    let n = s.fill_palettes.len();
+    if n == 0 {
+        return base;
+    }
+    let interval = s.palette_interval.max(5) as f64;
+    let offset = idx as f64 * interval * (s.palette_stagger as f64 / 100.0) / count.max(1) as f64;
+    let local = secs + offset;
+    let fade_secs = (interval * 0.5).min(6.0);
+    let (a, b, f) = if n == 1 {
+        (0, 0, 0.0)
+    } else {
+        let cur = (local / interval).floor() as usize % n;
+        let phase = local % interval;
+        if phase < fade_secs {
+            ((cur + n - 1) % n, cur, (phase / fade_secs) as f32)
+        } else {
+            (cur, cur, 0.0)
+        }
+    };
+    // spot on the palette: tiles spread over most of the loop, all drifting (one lap / 90 s)
+    let u = idx as f32 / count.max(1) as f32 * 0.8 + (secs / 90.0) as f32;
+    let ca = s.fill_palettes[a].at(u);
+    let c = if a == b { ca } else { lerp_rgb(ca, s.fill_palettes[b].at(u), smooth_step(f)) };
+    let luma = (c.0 as f32 * 0.299 + c.1 as f32 * 0.587 + c.2 as f32 * 0.114).max(1.0);
+    let c = if light {
+        // pale enough for dark text
+        let t = ((200.0 - luma) / (255.0 - luma)).clamp(0.0, 1.0);
+        lerp_rgb(c, (255, 255, 255), t)
+    } else if luma > 120.0 {
+        // dark enough for white text
+        let k = 120.0 / luma;
+        ((c.0 as f32 * k) as u8, (c.1 as f32 * k) as u8, (c.2 as f32 * k) as u8)
+    } else {
+        c
+    };
+    let c = lerp_rgb(base, c, if light { 0.8 } else { 0.78 });
+    // 4 levels per channel is invisible, and it keeps the layer from being redrawn for nothing
+    (c.0 & !3, c.1 & !3, c.2 & !3)
+}
+
+fn smooth_step(t: f32) -> f32 {
+    t * t * (3.0 - 2.0 * t)
 }
 
 // -------------------------------------------------------------------- layout
@@ -831,6 +972,10 @@ struct TileView {
     /// Second line of the clock (the date) / icon of the weather tile.
     extra: String,
     icon: Option<(weather_icon::WeatherIcon, Rgb)>,
+    /// A small line of fan speeds under the value, longest wording first (the first that fits is drawn).
+    foot: Vec<String>,
+    /// The fans of the `fans` tile: (name, rpm).
+    fans: Vec<(String, u32)>,
 }
 
 fn rate(kb: f64) -> (String, &'static str) {
@@ -839,6 +984,15 @@ fn rate(kb: f64) -> (String, &'static str) {
     } else {
         (format!("{kb:.0}"), "KB/s")
     }
+}
+
+/// "CPU 1240 / CASE 780 / PUMP 2650 RPM" and its shorter forms (empty without fan readings).
+fn rpm_foot(hw: &lhm::Readings) -> Vec<String> {
+    let parts: Vec<String> = [("CPU", hw.cpu_fan), ("CASE", hw.case_fan), ("PUMP", hw.pump)]
+        .into_iter()
+        .filter_map(|(l, r)| r.map(|r| format!("{l} {r}")))
+        .collect();
+    (1..=parts.len()).rev().map(|n| format!("{} RPM", parts[..n].join(" / "))).collect()
 }
 
 fn view(spec: TileSpec, d: &WidgetData, s: &Settings, now: &chrono::DateTime<Local>) -> TileView {
@@ -858,7 +1012,10 @@ fn view(spec: TileSpec, d: &WidgetData, s: &Settings, now: &chrono::DateTime<Loc
         frac: None,
         extra: String::new(),
         icon: None,
+        foot: Vec::new(),
+        fans: Vec::new(),
     };
+    let hw = lhm::current();
     match spec.kind {
         Kind::Clock => {
             v.label = case(i18n::weekday(now));
@@ -874,6 +1031,9 @@ fn view(spec: TileSpec, d: &WidgetData, s: &Settings, now: &chrono::DateTime<Loc
             if let Some(m) = d.cpu_mhz {
                 v.detail = format_freq_mhz(m);
             }
+            if s.rpm {
+                v.foot = rpm_foot(&hw);
+            }
         }
         Kind::CpuTemp => {
             v.label = "CPU TEMP".into();
@@ -885,6 +1045,9 @@ fn view(spec: TileSpec, d: &WidgetData, s: &Settings, now: &chrono::DateTime<Loc
                 None => v.value = "--".into(),
             }
             v.detail = pct(d.cpu_pct) + "%";
+            if s.rpm {
+                v.foot = rpm_foot(&hw);
+            }
         }
         Kind::CpuWatt => {
             v.label = "CPU WATT".into();
@@ -990,6 +1153,52 @@ fn view(spec: TileSpec, d: &WidgetData, s: &Settings, now: &chrono::DateTime<Loc
             v.label = tr.now_playing.to_string();
             v.value = d.now_playing.clone().unwrap_or_else(|| "-".into());
         }
+        Kind::CpuFan | Kind::CaseFan | Kind::Pump | Kind::GpuFan => {
+            let (label, rpm) = match spec.kind {
+                Kind::CpuFan => ("CPU FAN", hw.cpu_fan),
+                Kind::CaseFan => ("CASE FAN", hw.case_fan),
+                Kind::Pump => ("PUMP", hw.pump),
+                _ => ("GPU FAN", hw.gpu_fan),
+            };
+            v.label = label.into();
+            match rpm {
+                Some(r) => {
+                    v.value = r.to_string();
+                    v.unit = "RPM".into();
+                    v.frac = Some(r as f32 / s.fan_max as f32);
+                }
+                None => v.value = "--".into(),
+            }
+            match spec.kind {
+                Kind::CpuFan => {
+                    if let Some(t) = d.cpu_temp {
+                        v.detail = format!("{t:.0}{deg}");
+                    }
+                }
+                Kind::GpuFan => {
+                    if let Some(t) = d.gpu_temp {
+                        v.detail = format!("{t}{deg}");
+                    }
+                }
+                _ => {}
+            }
+        }
+        Kind::Fans => {
+            v.label = "FANS".into();
+            v.fans = hw.fan_rows().into_iter().map(|(n, r)| (n.to_ascii_uppercase(), r)).collect();
+            v.look = Look::Bar;
+        }
+        Kind::MbTemp | Kind::DiskTemp => {
+            let (label, t) = if spec.kind == Kind::MbTemp { ("BOARD TEMP", hw.mb_temp) } else { ("DISK TEMP", hw.disk_temp) };
+            v.label = label.into();
+            match t {
+                Some(t) => {
+                    v.value = format!("{t:.0}{deg}");
+                    v.frac = Some(t / 100.0);
+                }
+                None => v.value = "--".into(),
+            }
+        }
     }
     v.frac = v.frac.map(|f| f.clamp(0.0, 1.0));
     v
@@ -1000,7 +1209,9 @@ fn view(spec: TileSpec, d: &WidgetData, s: &Settings, now: &chrono::DateTime<Loc
 fn bar_rgb(s: &Settings, kind: Kind, frac: f32, color_mode: ColorMode) -> Box<dyn Fn(f32) -> Rgb> {
     match s.bar_color(kind) {
         BarColor::Auto => {
-            let c = level_color(frac.max(0.15), color_mode);
+            // a fan turning fast is not a warning: fans get a calm teal instead of green-to-red
+            let fan = matches!(kind, Kind::CpuFan | Kind::CaseFan | Kind::Pump | Kind::GpuFan | Kind::Fans);
+            let c = if fan { (0x3F, 0xD0, 0xC9) } else { level_color(frac.max(0.15), color_mode) };
             Box::new(move |_| c)
         }
         BarColor::Colors(list) => {
@@ -1032,6 +1243,7 @@ fn draw_tile(p: &mut Painter, pal: &Palette, s: &Settings, v: &TileView, rect: R
         Kind::Clock => draw_clock(p, &look, v, (x, y, w, h)),
         Kind::Weather => draw_weather(p, &look, v, (x, y, w, h)),
         Kind::Music => draw_music(p, &look, v, (x, y, w, h)),
+        Kind::Fans => draw_fans(p, &look, s, v, (x, y, w, h), color_mode),
         _ => match (v.look, v.frac) {
             (Look::Ring, Some(f)) => draw_ring(p, &look, s, v, f, (x, y, w, h), color_mode),
             (_, f) => draw_value(p, &look, s, v, f, (x, y, w, h), color_mode),
@@ -1090,6 +1302,14 @@ fn draw_value(p: &mut Painter, look: &Look2, s: &Settings, v: &TileView, frac: O
     let bar_h = (h * 0.045).clamp(3.0, 9.0);
     let bar_y = y + h - pad - bar_h;
     let (top, bottom) = (lbase + pad * 0.5, if frac.is_some() { bar_y - pad * 0.5 } else { y + h - pad });
+    // fan speeds under the value, when there is room for them
+    let foot = v.foot.iter().find(|f| p.width(f, lcap, W::Regular) <= inner);
+    let foot_h = foot.map_or(0.0, |_| lcap * 1.6);
+    let foot = foot.filter(|_| bottom - top - foot_h >= h * 0.3);
+    if let Some(f) = foot {
+        p.text(x + pad, bottom, f, lcap, W::Regular, look.muted, 255);
+    }
+    let bottom = if foot.is_some() { bottom - foot_h } else { bottom };
     let avail = (bottom - top).max(10.0);
     let detail_w = if v.detail.is_empty() { 0.0 } else { p.width(&v.detail, lcap * 1.2, W::Regular) };
     let max_w = if detail_w > 0.0 { inner - detail_w - pad } else { inner };
@@ -1140,6 +1360,14 @@ fn draw_ring(p: &mut Painter, look: &Look2, s: &Settings, v: &TileView, frac: f3
                 p.text(x + pad, y + h - pad, &v.detail, dcap, W::Regular, look.muted, 255);
             }
         }
+        // fan speeds above the detail line, when they fit
+        if let Some(f) = v.foot.iter().find(|f| p.width(f, lcap, W::Regular) <= left_w) {
+            let below = if v.detail.is_empty() { 0.0 } else { lcap * 1.9 };
+            let base = y + h - pad - below;
+            if base > lbase + lcap * 2.4 {
+                p.text(x + pad, base, f, lcap, W::Regular, look.muted, 255);
+            }
+        }
     } else {
         let top = lbase + pad * 0.6;
         d = ((w - 2.0 * pad).min(y + h - pad - top)).max(20.0);
@@ -1158,6 +1386,48 @@ fn draw_ring(p: &mut Painter, look: &Look2, s: &Settings, v: &TileView, frac: f3
     let cap = fit_value(p, v, d * 0.27, inner_w, W::Medium);
     let tw = value_width(p, v, cap, W::Medium);
     value_with_unit(p, cx - tw / 2.0, cy + cap / 2.0, v, cap, W::Medium, look.text, look.muted);
+}
+
+fn draw_fans(p: &mut Painter, look: &Look2, s: &Settings, v: &TileView, (x, y, w, h): (f32, f32, f32, f32), color_mode: ColorMode) {
+    let pad = pad_for(w, h);
+    let inner = w - 2.0 * pad;
+    let lcap = label_cap(h);
+    let lbase = y + pad + lcap;
+    let lab = if p.font == FontStyle::Smooth { W::Medium } else { W::Regular };
+    p.text(x + pad, lbase, &fit_label(p, &v.label, lcap, inner), lcap, lab, look.muted, 255);
+    let (top, bottom) = (lbase + pad * 0.5, y + h - pad);
+    if v.fans.is_empty() {
+        let cap = ((bottom - top) * 0.5).clamp(10.0, h * 0.3);
+        p.text(x + pad, top + ((bottom - top) + cap) / 2.0, "--", cap, W::Regular, look.text, 255);
+        return;
+    }
+    let n = v.fans.len() as f32;
+    let row_h = (bottom - top) / n;
+    let cap = (row_h * 0.5).clamp(7.0, lcap * 1.8);
+    let bar_h = (row_h * 0.12).clamp(2.0, 5.0);
+    let gap = cap * 0.55;
+    let with_bar = row_h >= cap + gap + bar_h + 2.0;
+    let content = if with_bar { cap + gap + bar_h } else { cap };
+    for (i, (name, rpm)) in v.fans.iter().enumerate() {
+        let start = top + row_h * i as f32 + (row_h - content) / 2.0;
+        let base = start + cap;
+        let val = rpm.to_string();
+        let ucap = (cap * 0.55).max(6.0);
+        let (vw, uw) = (p.width(&val, cap, W::Regular), p.width("RPM", ucap, W::Regular));
+        let ugap = (cap * 0.12).max(2.0);
+        let right = x + w - pad;
+        p.text(right - uw, base, "RPM", ucap, W::Regular, look.muted, 255);
+        p.text(right - uw - ugap - vw, base, &val, cap, W::Regular, look.text, 255);
+        p.text(x + pad, base, name, cap, W::Regular, look.muted, 255);
+        if with_bar {
+            let by = base + gap;
+            let f = (*rpm as f32 / s.fan_max as f32).clamp(0.0, 1.0);
+            p.layer.fill_rrect_solid((x + pad, by, inner, bar_h), bar_h / 2.0, look.text, look.track_alpha);
+            let fw = (inner * f).max(if f > 0.0 { bar_h } else { 0.0 });
+            let col = bar_rgb(s, Kind::Fans, f, color_mode);
+            p.layer.fill_rrect((x + pad, by, fw, bar_h), bar_h / 2.0, &move |t| col(t * fw / inner), 255);
+        }
+    }
 }
 
 fn draw_clock(p: &mut Painter, look: &Look2, v: &TileView, (x, y, w, h): (f32, f32, f32, f32)) {
@@ -1239,9 +1509,12 @@ pub struct Env<'a> {
     pub fps: f32,
     pub ffmpeg: Option<&'a str>,
     pub effect: &'a effect::Settings,
+    /// Fixed time in seconds (previews); `None` = the real clock.
+    pub secs: Option<f64>,
 }
 
 pub struct TilesScreen {
+    started: std::time::Instant,
     layer: Layer,
     sig: String,
     effect: effect::Effect,
@@ -1254,6 +1527,7 @@ pub struct TilesScreen {
 impl TilesScreen {
     pub fn new() -> Self {
         TilesScreen {
+            started: std::time::Instant::now(),
             layer: Layer::new(1, 1),
             sig: String::new(),
             effect: effect::Effect::new(),
@@ -1332,17 +1606,21 @@ impl TilesScreen {
         let now = Local::now();
         let views: Vec<TileView> = cells.iter().map(|(t, _)| view(*t, data, s, &now)).collect();
         let cm = format!("{color_mode:?}");
-        let sig = format!("{s:?}|{area:?}|{views:?}|{cm}");
+        let pal = s.palette();
+        let secs = env.secs.unwrap_or_else(|| self.started.elapsed().as_secs_f64());
+        let n = cells.len();
+        let fills: Vec<Rgb> = (0..n).map(|i| palette_fill(s, pal.fill, pal.light, i, n, secs)).collect();
+        let sig = format!("{s:?}|{area:?}|{views:?}|{cm}|{fills:?}");
         if sig != self.sig {
             if self.layer.w != area.2 as usize || self.layer.h != area.3 as usize {
                 self.layer = Layer::new(area.2, area.3);
             } else {
                 self.layer.clear();
             }
-            let pal = s.palette();
             let mut painter = Painter { layer: &mut self.layer, font: s.font };
-            for ((_, rect), v) in cells.iter().zip(views.iter()) {
-                draw_tile(&mut painter, &pal, s, v, *rect, (area.0, area.1), color_mode);
+            for (((_, rect), v), fill) in cells.iter().zip(views.iter()).zip(fills.iter()) {
+                let tile_pal = Palette { fill: *fill, alpha: pal.alpha, text: pal.text, light: pal.light };
+                draw_tile(&mut painter, &tile_pal, s, v, *rect, (area.0, area.1), color_mode);
             }
             self.sig = sig;
             self.redraws += 1;
@@ -1370,7 +1648,121 @@ mod tests {
     }
 
     fn env(e: &effect::Settings) -> Env<'_> {
-        Env { fps: 30.0, ffmpeg: None, effect: e }
+        Env { fps: 30.0, ffmpeg: None, effect: e, secs: Some(0.0) }
+    }
+
+    fn parse_cfg(txt: &str) -> anyhow::Result<Settings> {
+        parse(&ConfigFile::parse(txt).unwrap())
+    }
+
+    #[test]
+    fn fan_tiles_show_the_readings_and_the_cpu_tiles_get_the_rpm_line() {
+        lhm::set_current(lhm::Readings::sample());
+        let now = Local::now();
+        let tile = |kind| TileSpec { kind, look: Look::Bar, tall: false };
+        let s = Settings::default();
+        let d = data();
+        let v = view(tile(Kind::CpuFan), &d, &s, &now);
+        assert_eq!((v.value.as_str(), v.unit.as_str()), ("1240", "RPM"));
+        assert_eq!(v.frac, Some(1240.0 / 2500.0));
+        assert_eq!(view(tile(Kind::Pump), &d, &s, &now).value, "2650");
+        assert_eq!(view(tile(Kind::MbTemp), &d, &s, &now).value, "38\u{b0}");
+        let fans = view(tile(Kind::Fans), &d, &s, &now);
+        assert_eq!(fans.fans.len(), 4);
+        let cpu = view(tile(Kind::Cpu), &d, &s, &now);
+        assert_eq!(cpu.foot.first().map(String::as_str), Some("CPU 1240 / CASE 780 / PUMP 2650 RPM"));
+        assert_eq!(cpu.foot.last().map(String::as_str), Some("CPU 1240 RPM"));
+        let off = Settings { rpm: false, ..Settings::default() };
+        assert!(view(tile(Kind::CpuTemp), &d, &off, &now).foot.is_empty());
+        // no LibreHardwareMonitor: placeholders, no line
+        lhm::set_current(lhm::Readings::default());
+        assert_eq!(view(tile(Kind::CpuFan), &d, &s, &now).value, "--");
+        assert!(view(tile(Kind::Cpu), &d, &s, &now).foot.is_empty());
+        assert!(view(tile(Kind::Fans), &d, &s, &now).fans.is_empty());
+        // the new names parse
+        let rows = parse_tiles("cpu_fan, case_fan:ring | fans, pump, gpu_fan | mb_temp, disk_temp").unwrap();
+        assert_eq!(rows.iter().map(Vec::len).sum::<usize>(), 7);
+        let all = Kind::ALL.map(|k| k.key());
+        assert_eq!(Kind::NAMES, all.join(", "));
+    }
+
+    #[test]
+    fn tile_palette_options_parse() {
+        let d = Settings::default();
+        assert!(d.fill_palettes.is_empty());
+        assert_eq!((d.palette_interval, d.palette_stagger), (20, 50));
+        let s = parse_cfg("tiles_palette = pastel, ocean\ntiles_palette_interval = 30\ntiles_palette_stagger = 0\n").unwrap();
+        assert_eq!(s.fill_palettes.len(), 2);
+        assert_eq!((s.palette_interval, s.palette_stagger), (30, 0));
+        assert_eq!(parse_cfg("tiles_palette = all\n").unwrap().fill_palettes, effect::Palette::presets());
+        assert!(parse_cfg("tiles_palette = off\n").unwrap().fill_palettes.is_empty());
+        let c = parse_cfg("tiles_colors = #FF0080, #00FFFF\ntiles_palette = custom, fire\n").unwrap();
+        assert_eq!(c.fill_palettes.len(), 2);
+        // colours alone are enough
+        assert_eq!(parse_cfg("tiles_colors = #FF0080, #00FFFF\n").unwrap().fill_palettes.len(), 1);
+        for bad in ["tiles_palette = beige", "tiles_palette = custom", "tiles_colors = #FF0080", "tiles_palette_interval = 4", "tiles_palette_stagger = 101"] {
+            assert!(parse_cfg(&format!("{bad}\n")).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn palette_fills_differ_per_tile_fade_and_stay_readable() {
+        let base = (0x14, 0x18, 0x26);
+        let s = Settings { fill_palettes: vec![effect::Palette::parse("pastel").unwrap(), effect::Palette::parse("fire").unwrap()], ..Settings::default() };
+        // off: the plain fill
+        assert_eq!(palette_fill(&Settings::default(), base, false, 3, 6, 10.0), base);
+        // every tile has its own colour
+        let c: Vec<Rgb> = (0..6).map(|i| palette_fill(&s, base, false, i, 6, 12.0)).collect();
+        let distinct = c.iter().collect::<std::collections::HashSet<_>>().len();
+        assert!(distinct >= 4, "{c:?}");
+        // dark theme: dark enough for white text, whatever the preset (pastel is very light)
+        for t in 0..120 {
+            for i in 0..6 {
+                let f = palette_fill(&s, base, false, i, 6, t as f64);
+                let luma = f.0 as f32 * 0.299 + f.1 as f32 * 0.587 + f.2 as f32 * 0.114;
+                assert!(luma < 135.0, "t={t} tile={i}: {f:?}");
+                let l = palette_fill(&s, (255, 255, 255), true, i, 6, t as f64);
+                let luma = l.0 as f32 * 0.299 + l.1 as f32 * 0.587 + l.2 as f32 * 0.114;
+                assert!(luma > 150.0, "light t={t} tile={i}: {l:?}");
+            }
+        }
+        // it moves over time (drift + preset change) and is continuous (no jump between neighbouring frames)
+        let mut prev = palette_fill(&s, base, false, 0, 6, 0.0);
+        let mut changed = false;
+        for k in 1..2400 {
+            let cur = palette_fill(&s, base, false, 0, 6, k as f64 * 0.05);
+            let d = (cur.0 as i32 - prev.0 as i32).abs().max((cur.1 as i32 - prev.1 as i32).abs()).max((cur.2 as i32 - prev.2 as i32).abs());
+            assert!(d < 40, "jump of {d} at {}", k as f64 * 0.05);
+            changed |= cur != prev;
+            prev = cur;
+        }
+        assert!(changed);
+        // with stagger 0 the tiles change preset at the same moment, with 100 they do not
+        let together = Settings { palette_stagger: 0, fill_palettes: vec![effect::Palette::custom(vec![(200, 0, 0), (200, 0, 0)]), effect::Palette::custom(vec![(0, 0, 200), (0, 0, 200)])], ..Settings::default() };
+        let a: Vec<Rgb> = (0..4).map(|i| palette_fill(&together, base, false, i, 4, 25.0)).collect();
+        assert!(a.windows(2).all(|w| w[0] == w[1]), "{a:?}");
+        let apart = Settings { palette_stagger: 100, ..together.clone() };
+        let b: Vec<Rgb> = (0..4).map(|i| palette_fill(&apart, base, false, i, 4, 25.0)).collect();
+        assert!(b.windows(2).any(|w| w[0] != w[1]), "{b:?}");
+    }
+
+    #[test]
+    fn palette_tiles_redraw_only_when_a_colour_changes() {
+        let eff = effect::Settings::default();
+        let s = Settings { fill_palettes: vec![effect::Palette::parse("ocean").unwrap()], ..Settings::default() };
+        let mut screen = TilesScreen::new();
+        let mut fb = Framebuffer::new(trofeo_lcd::Resolution::new(1920, 400));
+        let d = data();
+        let mut at = |secs: f64, screen: &mut TilesScreen| {
+            let e = Env { fps: 30.0, ffmpeg: None, effect: &eff, secs: Some(secs) };
+            screen.draw(&mut fb, (0, 0, 1920, 400), &d, ColorMode::Default, &s, &e);
+        };
+        at(0.0, &mut screen);
+        let r0 = screen.redraws;
+        at(0.0, &mut screen);
+        assert_eq!(screen.redraws, r0);
+        at(30.0, &mut screen);
+        assert!(screen.redraws > r0);
     }
 
     #[test]
@@ -1610,6 +2002,9 @@ mod tests {
             ("tiles_effect_colors", Settings { bg: BgMode::Effect, bar: BarColor::Colors(vec![(0x00, 0xC8, 0xFF), (0xFF, 0x00, 0x80)]), ..Settings::default() }, (1920, 400)),
             ("tiles_many", Settings { rows: parse_tiles("cpu, gpu, ram, net | cpu_temp, gpu_temp, cpu_watt, gpu_watt:ring | weather, music, fps, disk").unwrap(), ..Settings::default() }, (1920, 462)),
             ("tiles_portrait", Settings::default(), (400, 1920)),
+            ("tiles_palette_pastel_ocean", Settings { fill_palettes: vec![effect::Palette::parse("pastel").unwrap(), effect::Palette::parse("ocean").unwrap()], ..Settings::default() }, (1920, 462)),
+            ("tiles_palette_sunset", Settings { fill_palettes: vec![effect::Palette::parse("sunset").unwrap()], bg: BgMode::Gradient, bg_colors: vec![(0x10, 0x10, 0x20), (0x20, 0x10, 0x20)], ..Settings::default() }, (1920, 462)),
+            ("tiles_palette_light", Settings { theme: Theme::Light, fill_palettes: vec![effect::Palette::parse("candy").unwrap()], bg: BgMode::Gradient, bg_colors: vec![(0x9f, 0xc5, 0xe8), (0xd9, 0xb8, 0xf0)], ..Settings::default() }, (1920, 462)),
         ];
         for (name, s, (w, h)) in cases {
             let mut screen = TilesScreen::new();
