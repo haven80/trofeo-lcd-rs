@@ -119,9 +119,11 @@ language = en
 # deepcool = false
 # CH170 / CH270 / CH690 DIGITAL case display: what the big field shows (changes live).
 # fan = the fan speed in RPM, read from LibreHardwareMonitor (see "Fans" below).
+# The display has a CPU and a GPU section (temperature, power, usage, clock):
+# deepcool_source = cpu          # cpu (default) | gpu | alternate = CPU and GPU in turn
 # deepcool_mode = alternate      # freq (default) | fan | alternate = frequency and RPM in turn
 # deepcool_fan = cpu             # cpu | case | pump | gpu | both (= CPU fan and case fans in turn)
-# deepcool_alternate = 6         # seconds before it switches (2-120)
+# deepcool_alternate = 6         # seconds before it switches (2-120), also between CPU and GPU
 
 # --- In-game FPS -------------------------------------------------------------
 # Measures the FPS of any DirectX 9-12 game (NVIDIA/AMD/Intel) via ETW.

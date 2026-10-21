@@ -240,28 +240,56 @@ impl DeepCpu {
     }
 }
 
-/// GPU stub — in the deepcool project, GPU monitoring isn't implemented yet
-/// (only cases use it, and it's 0 everywhere). Kept so the CH/LP series
-/// drivers can be ported without meaningful changes.
+/// The graphics card's readings, as the main loop last saw them (see [`set_gpu`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct GpuSample {
+    pub temp_c: Option<i32>,
+    pub power_w: Option<i32>,
+    pub usage_pct: Option<f32>,
+    pub clock_mhz: Option<i32>,
+}
+
+static GPU: Mutex<GpuSample> = Mutex::new(GpuSample { temp_c: None, power_w: None, usage_pct: None, clock_mhz: None });
+
+/// Called by the main loop with the latest GPU readings.
+pub fn set_gpu(s: GpuSample) {
+    if let Ok(mut g) = GPU.lock() {
+        *g = s;
+    }
+}
+
+fn gpu_sample() -> GpuSample {
+    GPU.lock().map(|g| *g).unwrap_or_default()
+}
+
+/// The GPU, for the device drivers: what the main loop reads (NVIDIA through NVML, AMD through
+/// ADL / sysfs). `0` when the card does not report a value.
 pub struct Gpu;
 
 impl Gpu {
-    pub fn get_temp(&self, _fahrenheit: bool) -> u8 {
-        0
+    pub fn get_temp(&self, fahrenheit: bool) -> u8 {
+        match gpu_sample().temp_c {
+            Some(c) => {
+                let v = if fahrenheit { c as f32 * 9.0 / 5.0 + 32.0 } else { c as f32 };
+                v.round().clamp(0.0, 255.0) as u8
+            }
+            None => 0,
+        }
     }
     pub fn get_usage(&self) -> u8 {
-        0
+        gpu_sample().usage_pct.map_or(0, |u| u.round().clamp(0.0, 99.0) as u8)
     }
     pub fn get_power(&self) -> u16 {
-        0
+        gpu_sample().power_w.map_or(0, |w| w.clamp(0, u16::MAX as i32) as u16)
     }
     pub fn get_frequency(&self) -> u16 {
-        0
+        gpu_sample().clock_mhz.map_or(0, |m| m.clamp(0, u16::MAX as i32) as u16)
     }
     pub fn warn_missing(&self) {
         static WARNED: AtomicBool = AtomicBool::new(false);
-        if !WARNED.swap(true, Ordering::Relaxed) {
-            eprintln!("DeepCool: GPU monitoring is not implemented, the GPU section on the case will show 0.");
+        let g = gpu_sample();
+        if g.temp_c.is_none() && g.power_w.is_none() && !WARNED.swap(true, Ordering::Relaxed) {
+            eprintln!("DeepCool: the graphics card reports no temperature or power, the GPU section on the case will show 0.");
         }
     }
 }
@@ -277,6 +305,15 @@ pub enum ShowMode {
     Alternate,
 }
 
+/// Which section of the display is shown (it has a CPU and a GPU one).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Source {
+    Cpu,
+    Gpu,
+    /// CPU and GPU in turn, every `alternate_s` seconds.
+    Alternate,
+}
+
 /// Which fan feeds the RPM field.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum FanSource {
@@ -288,9 +325,12 @@ pub enum FanSource {
     Both,
 }
 
-/// `deepcool_mode`, `deepcool_fan`, `deepcool_alternate`: live (no restart).
+/// `deepcool_source`, `deepcool_mode`, `deepcool_fan`, `deepcool_alternate`: live (no restart).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Settings {
+    /// CPU section, GPU section, or both in turn.
+    pub source: Source,
+    /// What the CPU section shows in its extra field.
     pub mode: ShowMode,
     pub fan: FanSource,
     pub alternate_s: u32,
@@ -298,7 +338,7 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { mode: ShowMode::Frequency, fan: FanSource::Cpu, alternate_s: 6 }
+        Settings { source: Source::Cpu, mode: ShowMode::Frequency, fan: FanSource::Cpu, alternate_s: 6 }
     }
 }
 
@@ -318,23 +358,29 @@ impl Settings {
     /// With `fan = both` the CPU fan and the case fans take turns (and the frequency too in
     /// `alternate` mode).
     pub fn pick(&self, elapsed: Duration) -> (Mode, FanSource) {
-        let step = elapsed.as_secs() / self.alternate_s.max(1) as u64;
+        let phases = self.phases();
+        let step = (elapsed.as_secs() / self.alternate_s.max(1) as u64) as usize;
+        phases[step % phases.len()].clone()
+    }
+
+    /// What the display goes through, in order, one phase every `alternate_s` seconds.
+    fn phases(&self) -> Vec<(Mode, FanSource)> {
         let both = self.fan == FanSource::Both;
-        match self.mode {
-            ShowMode::Frequency => (Mode::CpuFrequency, self.fan),
-            ShowMode::Fan => (Mode::CpuFan, if both { if step % 2 == 0 { FanSource::Cpu } else { FanSource::Case } } else { self.fan }),
-            ShowMode::Alternate => {
-                if both {
-                    match step % 3 {
-                        0 => (Mode::CpuFrequency, FanSource::Cpu),
-                        1 => (Mode::CpuFan, FanSource::Cpu),
-                        _ => (Mode::CpuFan, FanSource::Case),
-                    }
-                } else if step % 2 == 0 {
-                    (Mode::CpuFrequency, self.fan)
-                } else {
-                    (Mode::CpuFan, self.fan)
-                }
+        let mut cpu: Vec<(Mode, FanSource)> = match (self.mode, both) {
+            (ShowMode::Frequency, _) => vec![(Mode::CpuFrequency, self.fan)],
+            (ShowMode::Fan, false) => vec![(Mode::CpuFan, self.fan)],
+            (ShowMode::Fan, true) => vec![(Mode::CpuFan, FanSource::Cpu), (Mode::CpuFan, FanSource::Case)],
+            (ShowMode::Alternate, false) => vec![(Mode::CpuFrequency, self.fan), (Mode::CpuFan, self.fan)],
+            (ShowMode::Alternate, true) => {
+                vec![(Mode::CpuFrequency, FanSource::Cpu), (Mode::CpuFan, FanSource::Cpu), (Mode::CpuFan, FanSource::Case)]
+            }
+        };
+        match self.source {
+            Source::Cpu => cpu,
+            Source::Gpu => vec![(Mode::Gpu, self.fan)],
+            Source::Alternate => {
+                cpu.push((Mode::Gpu, self.fan));
+                cpu
             }
         }
     }
@@ -342,6 +388,14 @@ impl Settings {
 
 pub fn parse(file: &trofeo_lcd::config::ConfigFile) -> anyhow::Result<Settings> {
     let mut s = Settings::default();
+    if let Some(v) = file.get("deepcool_source") {
+        s.source = match v.trim().to_ascii_lowercase().as_str() {
+            "cpu" => Source::Cpu,
+            "gpu" => Source::Gpu,
+            "alternate" | "both" | "alterna" | "auto" => Source::Alternate,
+            _ => anyhow::bail!("deepcool_source: '{v}' not valid (cpu | gpu | alternate)"),
+        };
+    }
     if let Some(v) = file.get("deepcool_mode") {
         s.mode = match v.trim().to_ascii_lowercase().as_str() {
             "freq" | "frequency" | "frequenza" | "default" => ShowMode::Frequency,
@@ -535,6 +589,31 @@ mod tests {
         let f = p("deepcool_mode = fan\n").unwrap();
         assert_eq!(f.pick(Duration::from_secs(99)), (Mode::CpuFan, FanSource::Cpu));
         assert_eq!(Settings::default().pick(Duration::from_secs(99)).0, Mode::CpuFrequency);
+    }
+
+    #[test]
+    fn the_display_can_show_the_gpu_section_or_both_in_turn() {
+        let at = |s: &Settings, secs| s.pick(Duration::from_secs(secs)).0;
+        let g = p("deepcool_source = gpu\n").unwrap();
+        assert_eq!((at(&g, 0), at(&g, 50)), (Mode::Gpu, Mode::Gpu));
+        // CPU frequency, CPU fan, GPU, and round again
+        let a = p("deepcool_source = alternate\ndeepcool_mode = alternate\ndeepcool_alternate = 5\n").unwrap();
+        let seq: Vec<Mode> = (0..4).map(|i| at(&a, i * 5)).collect();
+        assert_eq!(seq, vec![Mode::CpuFrequency, Mode::CpuFan, Mode::Gpu, Mode::CpuFrequency]);
+        // CPU (frequency only) and GPU in turn
+        let b = p("deepcool_source = alternate\ndeepcool_alternate = 5\n").unwrap();
+        assert_eq!((at(&b, 0), at(&b, 5), at(&b, 10)), (Mode::CpuFrequency, Mode::Gpu, Mode::CpuFrequency));
+        assert_eq!(Settings::default().source, Source::Cpu);
+        assert!(p("deepcool_source = psu\n").is_err());
+    }
+
+    #[test]
+    fn the_gpu_reads_what_the_main_loop_saw() {
+        set_gpu(GpuSample { temp_c: Some(58), power_w: Some(142), usage_pct: Some(46.4), clock_mhz: Some(2491) });
+        let g = Gpu;
+        assert_eq!((g.get_temp(false), g.get_temp(true), g.get_power(), g.get_usage(), g.get_frequency()), (58, 136, 142, 46, 2491));
+        set_gpu(GpuSample::default());
+        assert_eq!((g.get_temp(false), g.get_power(), g.get_usage(), g.get_frequency()), (0, 0, 0, 0));
     }
 
     #[test]

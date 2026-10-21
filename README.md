@@ -429,7 +429,9 @@ milliseconds), and `effect_fps` (default 8) keeps the number of frames low — s
 - The **CH170 / CH270 / CH690 DIGITAL** case display can show the CPU frequency, the fan speed in RPM
   (from [LibreHardwareMonitor](#fans-and-sensors-librehardwaremonitor)) or both in turn:
   `deepcool_mode = freq | fan | alternate`, `deepcool_fan = cpu | case | pump | gpu | both`,
-  `deepcool_alternate = 6` (seconds). They apply live. The way the display takes the RPM is not
+  `deepcool_alternate = 6` (seconds). They apply live. The display also has a **GPU section**:
+  `deepcool_source = cpu | gpu | alternate` chooses CPU, GPU, or both in turn (with `alternate` the CPU
+  phases — frequency and/or RPM — are followed by the GPU). The way the display takes the RPM is not
   documented by DeepCool: if the number does not show up on your model, tell us which one it is.
 - Game dashboard FPS works on any GPU via ETW (DirectX 9–12 games; run as
   Administrator; Vulkan/OpenGL-native games are not covered). NVIDIA GPU

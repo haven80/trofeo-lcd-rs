@@ -675,9 +675,10 @@ deepcool = false          # never touch a DeepCool display
 
 | Key | Values | Default |
 |---|---|---|
+| `deepcool_source` | the section: `cpu` \| `gpu` (temperature, power, usage and clock of the GPU) \| `alternate` (the CPU phases, then the GPU, in turn) | `cpu` |
 | `deepcool_mode` | `freq` (the CPU frequency) \| `fan` (the fan speed, RPM) \| `alternate` (the two in turn) | `freq` |
 | `deepcool_fan` | the fan for the RPM: `cpu` \| `case` \| `pump` \| `gpu` \| `both` (CPU fan and case fans in turn) | `cpu` |
-| `deepcool_alternate` | seconds before it switches, `2`-`120` | `6` |
+| `deepcool_alternate` | seconds before it switches (also between CPU and GPU), `2`-`120` | `6` |
 
 The RPM comes from [LibreHardwareMonitor](#fans-and-sensors-librehardwaremonitor); with no reading the
 display shows `0`. With `deepcool_mode = alternate` and `deepcool_fan = both` the display cycles
@@ -685,7 +686,11 @@ frequency, CPU fan, case fans. The display protocol for the fan is not documente
 number is sent in the place of the frequency and in the two bytes after it; if it does not appear on
 your model, please report it. Other DeepCool models (coolers, CH360/CH560, CH510) have no RPM field.
 
+`deepcool_mode` and `deepcool_fan` only apply to the CPU section. The GPU section is sent in the
+display's GPU fields; the PSU section of the display is not supported.
+
 ```ini
+deepcool_source = alternate
 deepcool_mode = alternate
 deepcool_fan = case
 deepcool_alternate = 8

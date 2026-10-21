@@ -317,7 +317,8 @@ fn print_help() {
          \x20\x20                          server (Options > Remote Web Server > Run). Also\n\
          \x20\x20                          --lhm-url, --lhm-interval, --lhm-cpu-fan, --lhm-case-fan,\n\
          \x20\x20                          --lhm-pump, --lhm-mb-temp (part of a sensor's name).\n\
-         \x20\x20--deepcool-mode <M>      DeepCool CH170/CH270/CH690 case display: freq | fan |\n\
+         \x20\x20--deepcool-source <S>    DeepCool case display section: cpu | gpu | alternate (in turn)\n\
+         \x20\x20--deepcool-mode <M>      CPU section of the CH170/CH270/CH690 display: freq | fan |\n\
          \x20\x20                          alternate (fan = RPM from LibreHardwareMonitor);\n\
          \x20\x20                          --deepcool-fan cpu|case|pump|gpu, --deepcool-alternate <s>.\n\
          \x20\x20--weather-city <NAME>    City for the weather module (default: auto-detect\n\
@@ -849,7 +850,7 @@ fn item_key(key: &str) -> Option<(usize, &str)> {
 }
 
 fn is_override_key(key: &str) -> bool {
-    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "clock_backdrop" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
+    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "clock_backdrop" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key == "deepcool_source" || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
 }
 
 /// Style for a single item of the info block.
@@ -2032,6 +2033,12 @@ fn main() -> anyhow::Result<()> {
                 None => latest_gpu_data.fan_rpm = lhm_now.gpu_fan.map(|r| r as i32),
             }
             lhm::set_current(lhm_now);
+            deepcool::set_gpu(deepcool::GpuSample {
+                temp_c: latest_gpu_data.temp_edge_c,
+                power_w: latest_gpu_data.power_w,
+                usage_pct: latest_gpu_percent,
+                clock_mhz: latest_gpu_data.clock_mhz,
+            });
             if latest_gpu_data.fps.is_none() {
                 #[cfg(windows)]
                 if let Some(pid) = foreground::foreground_pid() {

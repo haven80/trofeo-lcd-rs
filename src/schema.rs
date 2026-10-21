@@ -666,6 +666,13 @@ pub fn fields() -> Vec<Field> {
         .help("Lower = the spectrum reacts to quieter sound", "Più basso = lo spettro reagisce a suoni più bassi"));
     add(Field::new("silence_timeout_ms", "system", "Quiet time before idle (ms)", "Silenzio prima dello stato di riposo (ms)", int(0, 60000)).def("800"));
     add(Field::new("deepcool", "system", "Drive the DeepCool display", "Pilota il display DeepCool", Bool).def("true").restart());
+    add(Field::new("deepcool_source", "system", "DeepCool section", "Sezione del display DeepCool", Choice(&["cpu", "gpu", "alternate"]))
+        .def("cpu")
+        .when("deepcool", &["true"])
+        .help(
+            "The display has a CPU and a GPU section: show one of them, or both in turn (CH170 / CH270 / CH690 DIGITAL)",
+            "Il display ha una sezione CPU e una GPU: mostra una delle due, oppure entrambe a turno (CH170 / CH270 / CH690 DIGITAL)",
+        ));
     add(Field::new("deepcool_mode", "system", "DeepCool case display shows", "Il display DeepCool del case mostra", Choice(&["freq", "fan", "alternate"]))
         .def("freq")
         .when("deepcool", &["true"])
@@ -675,11 +682,12 @@ pub fn fields() -> Vec<Field> {
         ));
     add(Field::new("deepcool_fan", "system", "Fan for the RPM", "Ventola per gli RPM", Choice(&["cpu", "case", "pump", "gpu", "both"]))
         .def("cpu")
-        .when("deepcool_mode", &["fan", "alternate"])
+        .when("deepcool", &["true"])
         .help("both = the CPU fan and the case fans in turn", "both = ventola CPU e ventole del case a turno"));
     add(Field::new("deepcool_alternate", "system", "Seconds before switching", "Secondi prima di cambiare", int(2, 120))
         .def("6")
-        .when("deepcool_mode", &["alternate"]));
+        .when("deepcool", &["true"])
+        .help("Also used to switch between the CPU and GPU sections", "Usato anche per passare tra sezione CPU e GPU"));
     add(Field::new("fps_monitor", "system", "Measure the FPS of games", "Misura gli FPS dei giochi", Bool)
         .def("true")
         .restart()
