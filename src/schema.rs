@@ -467,6 +467,10 @@ pub fn fields() -> Vec<Field> {
         .group("cards")
         .help("Layout \"cards\": every group is a column, cards in the same group are stacked", "Layout \"cards\": ogni gruppo è una colonna, le card dello stesso gruppo sono impilate"));
     add(Field::new("cards_radius", "dash", "Corner radius", "Raggio degli angoli", int(0, 60)).group("cards"));
+    add(Field::new("cards_opacity", "dash", "Card opacity (%)", "Opacità delle card (%)", int(0, 100))
+        .def("100")
+        .group("cards")
+        .help("Lower it to see the background through the cards", "Abbassala per vedere lo sfondo attraverso le card"));
     add(Field::new("cards_gap", "dash", "Gap between cards", "Spazio tra le card", int(0, 40)).def("12").group("cards"));
     add(Field::new("orbit", "dash", "Devices", "Dispositivi", Panels { columns: false })
         .def("cpu, gpu, ram")
@@ -482,8 +486,21 @@ pub fn fields() -> Vec<Field> {
         .group("look")
         .help("One or more colors, used instead of the preset", "Uno o più colori, usati al posto del preset"));
     add(Field::new("dash_font", "dash", "Font", "Font", Choice(&["smooth", "pixel"])).def("smooth").group("look"));
-    add(Field::new("dash_text_color", "dash", "Text color", "Colore del testo", Color).group("look"));
-    add(Field::new("dash_plate", "dash", "Dark plate behind deck and orbit (%)", "Fondo scuro dietro deck e orbit (%)", int(0, 100)).def("50").group("look"));
+    add(Field::new("dash_theme", "dash", "Theme", "Tema", Choice(&["dark", "light"]))
+        .def("dark")
+        .group("look")
+        .help(
+            "light = a white plate, dark text and pastel cards",
+            "light = fondo bianco, testo scuro e card pastello",
+        ));
+    add(Field::new("dash_text_color", "dash", "Text color", "Colore del testo", Color).group("look").help("Empty = by theme", "Vuoto = in base al tema"));
+    add(Field::new("dash_plate_color", "dash", "Plate color (deck, orbit)", "Colore del fondo (deck, orbit)", Color)
+        .group("look")
+        .help("The panel behind deck and orbit. Empty = by theme (dark, or white)", "Il pannello dietro deck e orbit. Vuoto = in base al tema (scuro, o bianco)"));
+    add(Field::new("dash_plate", "dash", "Plate opacity, deck and orbit (%)", "Opacità del fondo, deck e orbit (%)", int(0, 100))
+        .def("50")
+        .group("look")
+        .help("50 on the dark theme, 85 on the light one. Lower it to see the animated background through the plate; 0 = no plate", "50 col tema scuro, 85 con quello chiaro. Abbassala per vedere lo sfondo animato attraverso il pannello; 0 = nessun pannello"));
     add(Field::new("dash_graph", "dash", "Graphs of the last minutes", "Grafici degli ultimi minuti", Bool).def("true").group("graphs"));
     add(Field::new("dash_history", "dash", "Seconds of history", "Secondi di storico", int(20, 600)).def("90").group("graphs").when("dash_graph", &["true"]));
     add(Field::new("dash_net_max", "dash", "Network speed at 100% (MB/s)", "Velocità di rete al 100% (MB/s)", int(1, 1000)).def("25").group("graphs"));

@@ -84,13 +84,19 @@ impl PKind {
 pub struct Settings {
     pub font: FontStyle,
     pub text: Option<Rgb>,
+    /// `dark` (white text on a dark plate) or `light` (dark text on a white one, pastel cards).
+    pub theme: Theme,
+    /// The plate behind `deck` and `orbit` (default by theme).
+    pub plate_color: Option<Rgb>,
+    /// 0-100: opacity of the cards.
+    pub cards_opacity: u32,
     /// Accent colours (rings, cards, graph lines).
     pub colors: Vec<Rgb>,
     /// Seconds of history in the graphs.
     pub history: u32,
     pub graph: bool,
-    /// 0-100: darkness of the plate behind `deck` and `orbit`.
-    pub plate: u32,
+    /// 0-100: opacity of the plate behind `deck` and `orbit`.
+    pub plate: Option<u32>,
     /// Network speed (MB/s) that fills a ring / gauge.
     pub net_max: u32,
     pub bg: BgMode,
@@ -120,10 +126,13 @@ impl Default for Settings {
         Settings {
             font: FontStyle::Smooth,
             text: None,
+            theme: Theme::Dark,
+            plate_color: None,
+            cards_opacity: 100,
             colors: DEFAULT_COLORS.to_vec(),
             history: 90,
             graph: true,
-            plate: 50,
+            plate: None,
             net_max: 25,
             bg: BgMode::Global,
             bg_colors: vec![(0x10, 0x14, 0x28), (0x24, 0x10, 0x30)],
@@ -193,6 +202,16 @@ pub fn parse(file: &ConfigFile) -> anyhow::Result<Settings> {
             _ => anyhow::bail!("dash_font: '{v}' not valid (smooth | pixel)"),
         };
     }
+    if let Some(v) = file.get("dash_theme") {
+        s.theme = match v.trim().to_ascii_lowercase().as_str() {
+            "dark" | "scuro" => Theme::Dark,
+            "light" | "chiaro" | "white" | "bianco" => Theme::Light,
+            _ => anyhow::bail!("dash_theme: '{v}' not valid (dark | light)"),
+        };
+    }
+    if let Some(v) = file.get("dash_plate_color") {
+        s.plate_color = Some(parse_rgb("dash_plate_color", v)?);
+    }
     if let Some(v) = file.get("dash_text_color") {
         s.text = Some(parse_rgb("dash_text_color", v)?);
     }
@@ -233,8 +252,11 @@ pub fn parse(file: &ConfigFile) -> anyhow::Result<Settings> {
     if let Some(v) = boolean("dash_graph")? {
         s.graph = v;
     }
+    if let Some(v) = num("cards_opacity", 0, 100)? {
+        s.cards_opacity = v;
+    }
     if let Some(v) = num("dash_plate", 0, 100)? {
-        s.plate = v;
+        s.plate = Some(v);
     }
     if let Some(v) = num("dash_net_max", 1, 1000)? {
         s.net_max = v;
@@ -605,8 +627,34 @@ fn luma(c: Rgb) -> f32 {
     c.0 as f32 * 0.299 + c.1 as f32 * 0.587 + c.2 as f32 * 0.114
 }
 
+/// The `i`-th accent colour; on the light theme the pale ones are deepened so they show on white.
 fn accent(s: &Settings, i: usize) -> Rgb {
-    s.colors[i % s.colors.len().max(1)]
+    let c = s.colors[i % s.colors.len().max(1)];
+    if s.theme == Theme::Light && luma(c) > 150.0 {
+        darken(c, ((luma(c) - 150.0) / 255.0).clamp(0.0, 0.3) + 0.08)
+    } else {
+        c
+    }
+}
+
+fn is_light(s: &Settings) -> bool {
+    s.theme == Theme::Light
+}
+
+/// Text colour by theme (or `dash_text_color`).
+fn text_color(s: &Settings) -> Rgb {
+    s.text.unwrap_or(if is_light(s) { (0x1B, 0x22, 0x36) } else { (0xFF, 0xFF, 0xFF) })
+}
+
+/// Plate behind deck / orbit: colour and alpha.
+fn plate(s: &Settings) -> (Rgb, u8) {
+    let rgb = s.plate_color.unwrap_or(if is_light(s) { (0xFF, 0xFF, 0xFF) } else { (6, 8, 16) });
+    (rgb, (s.plate.unwrap_or(if is_light(s) { 92 } else { 50 }) * 255 / 100) as u8)
+}
+
+/// Lines and outlines: pale on the dark theme, dark on the light one. (colour, alpha for outline, alpha for hairline)
+fn line_style(s: &Settings) -> (Rgb, u8, u8) {
+    if is_light(s) { ((0x1B, 0x22, 0x36), 60, 46) } else { ((255, 255, 255), 34, 30) }
 }
 
 fn darken(c: Rgb, t: f32) -> Rgb {
@@ -773,10 +821,12 @@ fn stat_cell(p: &mut Painter, c: &Ctx, x: f32, y: f32, max_w: f32, st: &Stat, vc
 fn draw_deck(p: &mut Painter, c: &Ctx, panels: &[Panel], area: (f32, f32, f32, f32)) {
     let (x, y, w, h) = area;
     let radius = (h * 0.06).clamp(10.0, 26.0);
-    if c.s.plate > 0 {
-        p.layer.fill_rrect_solid(area, radius, (6, 8, 16), (c.s.plate * 255 / 100) as u8);
+    let (plate_rgb, plate_alpha) = plate(c.s);
+    let (line, outline_a, hair_a) = line_style(c.s);
+    if plate_alpha > 0 {
+        p.layer.fill_rrect_solid(area, radius, plate_rgb, plate_alpha);
     }
-    p.layer.stroke_rrect(area, radius, 1.5, (255, 255, 255), 34);
+    p.layer.stroke_rrect(area, radius, 1.5, line, outline_a);
     let weights: Vec<f32> = panels.iter().map(|q| q.kind.weight()).collect();
     let cols = split(w as u32, 0, &weights);
     for (i, (panel, (off, cw))) in panels.iter().zip(cols).enumerate() {
@@ -784,7 +834,7 @@ fn draw_deck(p: &mut Painter, c: &Ctx, panels: &[Panel], area: (f32, f32, f32, f
         let cw = cw as f32;
         let acc = accent(c.s, i);
         if i > 0 {
-            p.layer.fill_rrect_solid((cx.round(), y + h * 0.08, 1.0, h * 0.84), 0.0, (255, 255, 255), 30);
+            p.layer.fill_rrect_solid((cx.round(), y + h * 0.08, 1.0, h * 0.84), 0.0, line, hair_a);
         }
         deck_column(p, c, panel, acc, (cx, y, cw, h));
     }
@@ -909,13 +959,20 @@ fn card(p: &mut Painter, c: &Ctx, panel: &Panel, idx: usize, (x, y, w, h): (f32,
     }
     let radius = c.s.cards_radius.map_or_else(|| (w.min(h) * 0.16).clamp(10.0, 34.0), |r| r as f32);
     let paper = panel.kind == PKind::Clock;
-    let a = if paper { (0xF3, 0xF1, 0xEC) } else { accent(c.s, idx) };
+    let light = is_light(c.s);
+    // on the light theme the cards are pastel versions of the accents
+    let tone = |col: Rgb| if light { lerp_rgb(col, (255, 255, 255), 0.5) } else { col };
+    let a = if paper { if light { (0xFF, 0xFF, 0xFF) } else { (0xF3, 0xF1, 0xEC) } } else { tone(accent(c.s, idx)) };
     // melts toward the next card's colour
-    let b = if paper { (0xE2, 0xDF, 0xD8) } else { lerp_rgb(a, accent(c.s, idx + 1), 0.38) };
-    let b = darken(b, 0.1);
-    p.layer.fill_rrect((x, y, w, h), radius, &move |t| lerp_rgb(a, b, t), 255);
-    p.layer.stroke_rrect((x, y, w, h), radius, 1.2, (255, 255, 255), 40);
-    let dark_ink = luma(lerp_rgb(a, b, 0.5)) > 140.0;
+    let b = if paper { (0xE2, 0xDF, 0xD8) } else { lerp_rgb(a, tone(accent(c.s, idx + 1)), 0.38) };
+    let b = if light { darken(b, 0.04) } else { darken(b, 0.1) };
+    let alpha = (c.s.cards_opacity.min(100) * 255 / 100) as u8;
+    p.layer.fill_rrect((x, y, w, h), radius, &move |t| lerp_rgb(a, b, t), alpha);
+    let (line, _, _) = line_style(c.s);
+    p.layer.stroke_rrect((x, y, w, h), radius, 1.2, line, 40);
+    // dark text on light cards; when the cards are see-through the text follows the theme, since
+    // what is behind them is the (dark) background
+    let dark_ink = if light { true } else if c.s.cards_opacity < 65 { false } else { luma(lerp_rgb(a, b, 0.5)) > 140.0 };
     let ink: Rgb = if dark_ink { (0x13, 0x15, 0x22) } else { (0xFF, 0xFF, 0xFF) };
     let pad = (h.min(w * 0.6) * 0.1).clamp(9.0, 24.0);
     let inner = w - 2.0 * pad;
@@ -994,10 +1051,12 @@ fn card(p: &mut Painter, c: &Ctx, panel: &Panel, idx: usize, (x, y, w, h): (f32,
 fn draw_orbit(p: &mut Painter, c: &Ctx, panels: &[Panel], clock: Option<&Panel>, area: (f32, f32, f32, f32)) {
     let (x, y, w, h) = area;
     let radius = (h * 0.06).clamp(10.0, 26.0);
-    if c.s.plate > 0 {
-        p.layer.fill_rrect_solid(area, radius, (6, 8, 16), (c.s.plate * 255 / 100) as u8);
+    let (plate_rgb, plate_alpha) = plate(c.s);
+    let (line, outline_a, hair_a) = line_style(c.s);
+    if plate_alpha > 0 {
+        p.layer.fill_rrect_solid(area, radius, plate_rgb, plate_alpha);
     }
-    p.layer.stroke_rrect(area, radius, 1.5, (255, 255, 255), 34);
+    p.layer.stroke_rrect(area, radius, 1.5, line, outline_a);
     let mut weights: Vec<f32> = vec![1.0; panels.len()];
     if clock.is_some() {
         weights.push(0.72);
@@ -1006,14 +1065,14 @@ fn draw_orbit(p: &mut Painter, c: &Ctx, panels: &[Panel], clock: Option<&Panel>,
     let mut ring_color = 0usize;
     for (i, (panel, (off, sw))) in panels.iter().zip(slots.iter()).enumerate() {
         if i > 0 {
-            p.layer.fill_rrect_solid((x + *off as f32, y + h * 0.1, 1.0, h * 0.8), 0.0, (255, 255, 255), 26);
+            p.layer.fill_rrect_solid((x + *off as f32, y + h * 0.1, 1.0, h * 0.8), 0.0, line, hair_a);
         }
         orbit_cluster(p, c, panel, ring_color, (x + *off as f32, y, *sw as f32, h));
         ring_color += panel.rings.len().max(1);
     }
     if let (Some(cp), Some((off, sw))) = (clock, slots.last()) {
         if !panels.is_empty() {
-            p.layer.fill_rrect_solid((x + *off as f32, y + h * 0.1, 1.0, h * 0.8), 0.0, (255, 255, 255), 26);
+            p.layer.fill_rrect_solid((x + *off as f32, y + h * 0.1, 1.0, h * 0.8), 0.0, line, hair_a);
         }
         let pad = (h * 0.075).clamp(9.0, 26.0);
         let lcap = (h * 0.052).clamp(8.0, 17.0);
@@ -1169,7 +1228,7 @@ impl DashScreen {
             } else {
                 self.layer.clear();
             }
-            let text = s.text.unwrap_or((0xFF, 0xFF, 0xFF));
+            let text = text_color(s);
             let ctx = Ctx { s, hist: &self.hist, text, color_mode };
             let mut painter = Painter { layer: &mut self.layer, font: s.font };
             match style {
@@ -1213,6 +1272,12 @@ mod tests {
         assert!(parse_cfg("dash_palette = nonsense\n").is_err());
         assert!(parse_cfg("dash_bg = image\n").is_err());
         assert_eq!(parse_cfg("dash_palette = ocean\n").unwrap().colors.len(), 6);
+        let l = parse_cfg("dash_theme = light\ndash_plate_color = #F0F0F0\ndash_plate = 30\ncards_opacity = 40\n").unwrap();
+        assert_eq!((l.theme, l.plate_color, l.plate, l.cards_opacity), (Theme::Light, Some((0xF0, 0xF0, 0xF0)), Some(30), 40));
+        assert_eq!(Settings::default().plate, None);
+        assert!(parse_cfg("dash_theme = grey\n").is_err());
+        assert!(parse_cfg("cards_opacity = 101\n").is_err());
+        assert!(parse_cfg("dash_plate_color = default\n").is_err());
     }
 
     #[test]
@@ -1252,8 +1317,9 @@ mod tests {
         let ts = tiles::Settings::default();
         let all = "cpu, gpu, ram, fans, net";
         let mut s = parse_cfg(&format!("deck = {all}\norbit = cpu, gpu, ram, fans\ncards = clock | cpu, gpu, ram | fans, net, disk | weather, music\n")).unwrap();
-        for font in [FontStyle::Smooth, FontStyle::Pixel] {
+        for (font, theme) in [(FontStyle::Smooth, Theme::Dark), (FontStyle::Pixel, Theme::Light), (FontStyle::Smooth, Theme::Light)] {
             s.font = font;
+            s.theme = theme;
             for (w, h) in [(1920u32, 462u32), (462, 1920), (1280, 480), (480, 480), (800, 600)] {
                 for style in [Style::Deck, Style::Cards, Style::Orbit] {
                     for lhm_on in [false, true] {
@@ -1280,6 +1346,34 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn the_plate_follows_the_theme_the_colour_and_the_opacity() {
+        let eff = effect::Settings::default();
+        let env = Env { fps: 30.0, ffmpeg: None, effect: &eff, secs: Some(0.0) };
+        let ts = tiles::Settings::default();
+        let at = |s: &Settings, style| {
+            let mut fb = Framebuffer::new(trofeo_lcd::Resolution::new(1920, 462));
+            fb.clear(20, 20, 20);
+            DashScreen::new().draw(&mut fb, (0, 0, 1920, 462), style, &data(), ColorMode::Default, s, &ts, &env);
+            let i = (400 * 1920 + 1500) * 3;
+            let px = [fb.as_bytes()[i], fb.as_bytes()[i + 1], fb.as_bytes()[i + 2]];
+            px
+        };
+        let dark = at(&Settings::default(), Style::Deck);
+        let light = at(&Settings { theme: Theme::Light, ..Settings::default() }, Style::Deck);
+        assert!(dark[0] < 30 && light[0] > 200, "{dark:?} {light:?}");
+        let tint = at(&Settings { plate_color: Some((200, 0, 0)), plate: Some(100), ..Settings::default() }, Style::Orbit);
+        assert!(tint[0] > 150 && tint[1] < 40, "{tint:?}");
+        let none = at(&Settings { plate: Some(0), ..Settings::default() }, Style::Deck);
+        assert_eq!(none, [20, 20, 20]);
+        assert_eq!(text_color(&Settings::default()), (255, 255, 255));
+        assert!(text_color(&Settings { theme: Theme::Light, ..Settings::default() }).0 < 60);
+        // see-through cards let the background show
+        let solid = at(&Settings::default(), Style::Cards);
+        let glass = at(&Settings { cards_opacity: 20, ..Settings::default() }, Style::Cards);
+        assert!(glass[0] < solid[0] || glass[1] < solid[1] || glass[2] < solid[2], "{solid:?} {glass:?}");
     }
 
     #[test]

@@ -654,6 +654,24 @@ dash_bg = gradient                   # global | color | gradient | effect | imag
 dash_bg_color = #10142A, #241030
 ```
 
+**Light, dark, see-through.** `dash_theme = light` gives a white panel with dark text and pastel cards;
+`dash_plate_color` and `dash_plate` set the colour and the opacity of the panel behind `deck` and `orbit`
+(lower it to see an animated background through it, `0` = no panel) and `cards_opacity` the opacity of the
+cards:
+
+![deck and cards, light theme](img/dash-light.png)
+
+![orbit and cards over an animated background](img/dash-glass.png)
+
+```ini
+layout = orbit
+background_effect = aurora
+dash_theme = light       # dark | light
+dash_plate = 35          # opacity of the panel, 0-100
+# dash_plate_color = #FFF4E0
+# cards_opacity = 45
+```
+
 The screens are redrawn about once a second (the graphs move that often) and only when something
 changed. All the keys are in the [options guide](./OPTIONS_GUIDE.md#deck-cards-and-orbit).
 

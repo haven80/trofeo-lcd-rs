@@ -1070,8 +1070,11 @@ the weather and the playing track). `fans` needs [LibreHardwareMonitor](#fans-an
 | `dash_palette` | `default` or a preset of the animated backgrounds (`pastel`, `ocean`, `sunset`, ...) | `default` |
 | `dash_colors` | your own accent colors (used instead of the preset) | |
 | `dash_font` | `smooth` \| `pixel` | `smooth` |
-| `dash_text_color` | the text | white |
-| `dash_plate` | darkness of the plate behind `deck` and `orbit`, `0`-`100` | `50` |
+| `dash_theme` | `dark` \| `light` (a white plate, dark text and pastel cards) | `dark` |
+| `dash_text_color` | the text | by theme (white / dark blue) |
+| `dash_plate_color` | the colour of the panel behind `deck` and `orbit` | by theme (near black / white) |
+| `dash_plate` | opacity of that panel, `0`-`100` (`0` = no panel) | `50` dark, `92` light |
+| `cards_opacity` | opacity of the cards, `0`-`100` | `100` |
 | `dash_graph` | the graphs of the last minutes | `true` |
 | `dash_history` | seconds of history, `20`-`600` | `90` |
 | `dash_net_max` | network MB/s that fills a ring or gauge, `1`-`1000` | `25` |
@@ -1091,6 +1094,21 @@ cards = clock | cpu, ram | gpu, fans | net, disk, music
 dash_palette = ocean
 cards_gap = 16
 ```
+
+Background control. `dash_theme = light` gives a white panel with dark text (and pastel cards); `dash_plate_color`
+and `dash_plate` set the colour and the opacity of the panel behind `deck` and `orbit`, and `cards_opacity` the one of
+the cards, so that an animated background (`background_effect`, or `dash_bg = effect`) shows through:
+
+```ini
+layout = orbit
+background_effect = aurora
+dash_theme = light
+dash_plate = 35            # see the aurora through a white veil
+# dash_plate_color = #FFF4E0   # or any other colour of panel
+# layout = cards
+# cards_opacity = 45
+```
+When the cards are see-through (below 65 on the dark theme) their text turns white, since what is behind them is the dark background.
 
 ## Digital frame
 

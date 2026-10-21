@@ -226,8 +226,12 @@ language = en
 # dash_palette = default                # accent colours: default or a preset of the animated backgrounds
 # dash_colors = #A76BFF, #38C6F4, #FF6FB1   # or your own colours (used instead of the preset)
 # dash_font = smooth                    # smooth | pixel
-# dash_text_color = #FFFFFF
-# dash_plate = 50                       # darkness behind deck and orbit (0-100)
+# dash_theme = light                    # dark (default) | light = white plate, dark text, pastel cards
+# dash_text_color = #FFFFFF             # empty = by theme
+# dash_plate_color = #FFFFFF            # the panel behind deck and orbit (empty = by theme)
+# dash_plate = 50                       # its opacity, 0-100 (50 dark / 92 light); lower it to see an animated
+#                                       # background through it, 0 = no plate
+# cards_opacity = 100                   # opacity of the cards, 0-100; lower it to see the background
 # dash_graph = true                     # the graph of the last minutes
 # dash_history = 90                     # seconds of history in the graphs (20-600)
 # dash_net_max = 25                     # network MB/s that fills a ring / gauge
