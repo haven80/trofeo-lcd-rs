@@ -90,6 +90,10 @@ pub struct Settings {
     pub plate_color: Option<Rgb>,
     /// 0-100: opacity of the cards.
     pub cards_opacity: u32,
+    /// What the big number of the CPU and GPU panels is: the temperature or the load.
+    pub hero_load: bool,
+    /// Cards: the fan speed (RPM) at the top right of the CPU and GPU cards.
+    pub cards_fan: bool,
     /// Accent colours (rings, cards, graph lines).
     pub colors: Vec<Rgb>,
     /// Seconds of history in the graphs.
@@ -129,6 +133,8 @@ impl Default for Settings {
             theme: Theme::Dark,
             plate_color: None,
             cards_opacity: 100,
+            hero_load: false,
+            cards_fan: true,
             colors: DEFAULT_COLORS.to_vec(),
             history: 90,
             graph: true,
@@ -251,6 +257,16 @@ pub fn parse(file: &ConfigFile) -> anyhow::Result<Settings> {
     }
     if let Some(v) = boolean("dash_graph")? {
         s.graph = v;
+    }
+    if let Some(v) = file.get("dash_hero") {
+        s.hero_load = match v.trim().to_ascii_lowercase().as_str() {
+            "temp" | "temperature" | "temperatura" => false,
+            "load" | "usage" | "carico" | "percent" => true,
+            _ => anyhow::bail!("dash_hero: '{v}' not valid (temp | load)"),
+        };
+    }
+    if let Some(v) = boolean("cards_fan")? {
+        s.cards_fan = v;
     }
     if let Some(v) = num("cards_opacity", 0, 100)? {
         s.cards_opacity = v;
@@ -392,6 +408,8 @@ struct Panel {
     lines: Vec<String>,
     /// The hero is text (a title), not a number.
     text: bool,
+    /// Fan speed shown in the header of a card (CPU and GPU).
+    fan: Option<u32>,
 }
 
 fn stat(label: &str, value: impl Into<String>, unit: &str) -> Stat {
@@ -437,25 +455,30 @@ fn panel(kind: PKind, d: &WidgetData, hw: &lhm::Readings, s: &Settings, ts: &til
         rings: Vec::new(),
         lines: Vec::new(),
         text: false,
+        fan: None,
     };
     match kind {
         PKind::Cpu => {
             p.title = "CPU".into();
             match d.cpu_temp {
-                Some(t) => {
+                Some(t) if !s.hero_load => {
                     p.hero = format!("{t:.0}");
                     p.unit = deg.into();
                     p.frac = Some(t / 100.0);
                     p.series = Some(("cpu_temp", 12.0));
                 }
-                None => {
+                _ => {
                     p.hero = pct(d.cpu_pct);
                     p.unit = "%".into();
                     p.frac = Some(d.cpu_pct / 100.0);
                     p.series = Some(("cpu_pct", 30.0));
                 }
             }
-            p.stats.push(stat("LOAD", pct(d.cpu_pct), "%"));
+            // the reading that is not the big number goes first among the small ones
+            match d.cpu_temp {
+                Some(t) if s.hero_load => p.stats.push(stat("TEMP", format!("{t:.0}"), deg)),
+                _ => p.stats.push(stat("LOAD", pct(d.cpu_pct), "%")),
+            }
             if let Some(w) = d.cpu_power {
                 p.stats.push(stat("POWER", format!("{w:.0}"), "W"));
             }
@@ -465,6 +488,7 @@ fn panel(kind: PKind, d: &WidgetData, hw: &lhm::Readings, s: &Settings, ts: &til
             }
             if let Some(r) = hw.cpu_fan {
                 p.stats.push(stat("FAN", r.to_string(), "RPM"));
+                p.fan = Some(r);
             }
             p.rings.push(Ring { label: "LOAD".into(), frac: d.cpu_pct / 100.0 });
             if let Some(t) = d.cpu_temp {
@@ -476,24 +500,31 @@ fn panel(kind: PKind, d: &WidgetData, hw: &lhm::Readings, s: &Settings, ts: &til
         }
         PKind::Gpu => {
             p.title = "GPU".into();
-            match d.gpu_temp {
-                Some(t) => {
+            match (d.gpu_temp, d.gpu_pct) {
+                (Some(t), _) if !s.hero_load || d.gpu_pct.is_none() => {
                     p.hero = t.to_string();
                     p.unit = deg.into();
                     p.frac = Some(t as f32 / 100.0);
                     p.series = Some(("gpu_temp", 12.0));
                 }
-                None => {
-                    if let Some(g) = d.gpu_pct {
-                        p.hero = pct(g);
-                        p.unit = "%".into();
-                        p.frac = Some(g / 100.0);
-                        p.series = Some(("gpu_pct", 30.0));
-                    }
+                (_, Some(g)) => {
+                    p.hero = pct(g);
+                    p.unit = "%".into();
+                    p.frac = Some(g / 100.0);
+                    p.series = Some(("gpu_pct", 30.0));
+                }
+                _ => {}
+            }
+            let temp_is_hero = p.unit == deg;
+            if let Some(t) = d.gpu_temp {
+                if !temp_is_hero {
+                    p.stats.push(stat("TEMP", t.to_string(), deg));
                 }
             }
             if let Some(g) = d.gpu_pct {
-                p.stats.push(stat("LOAD", pct(g), "%"));
+                if temp_is_hero {
+                    p.stats.push(stat("LOAD", pct(g), "%"));
+                }
                 p.rings.push(Ring { label: "LOAD".into(), frac: g / 100.0 });
             }
             if let Some(t) = d.gpu_temp {
@@ -505,6 +536,7 @@ fn panel(kind: PKind, d: &WidgetData, hw: &lhm::Readings, s: &Settings, ts: &til
             }
             if let Some(r) = hw.gpu_fan {
                 p.stats.push(stat("FAN", r.to_string(), "RPM"));
+                p.fan = Some(r);
             }
             if let Some(f) = d.fps {
                 p.stats.push(stat("FPS", f.to_string(), ""));
@@ -989,12 +1021,21 @@ fn card(p: &mut Painter, c: &Ctx, panel: &Panel, idx: usize, (x, y, w, h): (f32,
     let lcap = (h * 0.085).clamp(8.0, 17.0);
     let lbase = y + pad + lcap;
     let lw = if p.font == FontStyle::Smooth { W::Medium } else { W::Regular };
-    let sub_w = if panel.sub.is_empty() { 0.0 } else { p.width(&panel.sub, lcap * 0.9, W::Regular) };
-    let show_sub = !panel.sub.is_empty() && sub_w + pad < inner * 0.5 && panel.kind != PKind::Clock;
+    // top right: the sub-title, or for CPU / GPU the fan speed
+    let fan_txt = match panel.fan {
+        Some(r) if c.s.cards_fan && panel.sub.is_empty() && matches!(panel.kind, PKind::Cpu | PKind::Gpu) => Some(format!("{r} RPM")),
+        _ => None,
+    };
+    let head = fan_txt.as_deref().unwrap_or(&panel.sub);
+    let sub_w = if head.is_empty() { 0.0 } else { p.width(head, lcap * 0.9, W::Regular) };
+    let show_sub = !head.is_empty() && sub_w + pad < inner * 0.6 && panel.kind != PKind::Clock;
     p.text(x + pad, lbase, &clip(p, &panel.title, lcap, inner - if show_sub { sub_w + pad } else { 0.0 }, lw), lcap, lw, ink, 175);
     if show_sub {
-        p.text(x + w - pad - sub_w, lbase, &panel.sub, lcap * 0.9, W::Regular, ink, 130);
+        p.text(x + w - pad - sub_w, lbase, head, lcap * 0.9, W::Regular, ink, if fan_txt.is_some() { 175 } else { 130 });
     }
+    // the fan is in the header: do not repeat it among the small readings
+    let hide_fan = fan_txt.is_some() && show_sub;
+    let stats: Vec<&Stat> = panel.stats.iter().filter(|s| !(hide_fan && s.label == "FAN")).collect();
     if panel.kind == PKind::Clock {
         let tw = if p.font == FontStyle::Smooth { W::Medium } else { W::Regular };
         let cap = p.fit(&panel.hero, h * 0.3, inner, tw);
@@ -1024,23 +1065,23 @@ fn card(p: &mut Painter, c: &Ctx, panel: &Panel, idx: usize, (x, y, w, h): (f32,
         return;
     }
     // in a compact card the readings sit to the right of the value
-    let right_w = if compact && !panel.stats.is_empty() { inner * 0.36 } else { 0.0 };
+    let right_w = if compact && !stats.is_empty() { inner * 0.36 } else { 0.0 };
     let cap = fit_vu(p, &panel.hero, &panel.unit, (avail * 0.9).min(h * 0.5), inner - right_w - if right_w > 0.0 { pad } else { 0.0 }, tw);
     let base = hero_top + (avail + cap) / 2.0;
     value_unit(p, x + pad, base, &panel.hero, &panel.unit, cap, tw, ink, 255, 150);
     if compact {
-        if let Some(st) = panel.stats.first() {
+        if let Some(st) = stats.first().copied() {
             let vcap = (h * 0.15).clamp(9.0, 22.0);
             stat_cell(p, c, x + w - pad - right_w, hero_top + (avail - vcap * 2.2) / 2.0, right_w, st, vcap, ink, 150);
         }
         return;
     }
     // up to three readings in a row at the bottom
-    let n = panel.stats.len().min(3);
+    let n = stats.len().min(3);
     if n > 0 {
         let cell = (inner - pad * (n as f32 - 1.0)) / n as f32;
         let vcap = (stats_h * 0.42).clamp(9.0, 26.0);
-        for (i, st) in panel.stats.iter().take(3).enumerate() {
+        for (i, st) in stats.iter().copied().take(3).enumerate() {
             stat_cell(p, c, x + pad + i as f32 * (cell + pad), y + h - pad - stats_h * 0.92, cell, st, vcap, ink, 150);
         }
     }
@@ -1407,6 +1448,54 @@ mod tests {
         let f = panel(PKind::Fans, &data(), &hw, &s, &ts, &now);
         assert_eq!((f.hero.as_str(), f.rings.len()), ("1240", 4));
         assert_eq!(panel(PKind::Fans, &data(), &lhm::Readings::default(), &s, &ts, &now).hero, "--");
+    }
+
+    #[test]
+    fn the_big_number_is_the_temperature_or_the_load() {
+        let ts = tiles::Settings::default();
+        let now = Local::now();
+        let hw = lhm::Readings::sample();
+        let temp = Settings::default();
+        let load = parse_cfg("dash_hero = load\n").unwrap();
+        assert!(load.hero_load && !temp.hero_load);
+        assert!(parse_cfg("dash_hero = sideways\n").is_err());
+        for kind in [PKind::Cpu, PKind::Gpu] {
+            let t = panel(kind, &data(), &hw, &temp, &ts, &now);
+            let l = panel(kind, &data(), &hw, &load, &ts, &now);
+            assert!(t.unit.contains('C') && l.unit == "%", "{kind:?}: {} / {}", t.unit, l.unit);
+            // the other reading becomes a small one
+            assert_eq!(t.stats[0].label, "LOAD", "{kind:?}");
+            assert_eq!(l.stats[0].label, "TEMP", "{kind:?}");
+            // the graph follows the big number
+            assert_ne!(t.series, l.series);
+        }
+        // no temperature: the load is the big number whatever is asked
+        let mut d = data();
+        d.cpu_temp = None;
+        d.gpu_temp = None;
+        for kind in [PKind::Cpu, PKind::Gpu] {
+            assert_eq!(panel(kind, &d, &hw, &temp, &ts, &now).unit, "%");
+        }
+    }
+
+    #[test]
+    fn the_cards_show_the_fan_speed_in_the_header_when_asked() {
+        let eff = effect::Settings::default();
+        let env = Env { fps: 30.0, ffmpeg: None, effect: &eff, secs: Some(0.0) };
+        let ts = tiles::Settings::default();
+        let draw = |s: &Settings, hw: lhm::Readings| {
+            let mut fb = Framebuffer::new(trofeo_lcd::Resolution::new(480, 480));
+            fb.clear(8, 8, 16);
+            lhm::set_current(hw);
+            DashScreen::new().draw(&mut fb, (0, 0, 480, 480), Style::Cards, &data(), ColorMode::Default, s, &ts, &env);
+            fb.as_bytes().to_vec()
+        };
+        let on = Settings { cards: vec![vec![PKind::Cpu]], cards_fan: true, ..Settings::default() };
+        let off = Settings { cards_fan: false, ..on.clone() };
+        let with = draw(&on, lhm::Readings::sample());
+        assert_ne!(with, draw(&off, lhm::Readings::sample()), "the option changes the card");
+        assert_ne!(with, draw(&on, lhm::Readings::default()), "no reading, no fan text");
+        assert!(parse_cfg("cards_fan = false\n").is_ok_and(|s| !s.cards_fan));
     }
 
     #[test]

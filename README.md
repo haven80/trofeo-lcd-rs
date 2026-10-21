@@ -656,6 +656,14 @@ dash_bg = gradient                   # global | color | gradient | effect | imag
 dash_bg_color = #10142A, #241030
 ```
 
+**Temperature or load, and the fan.** `dash_hero = temp | load` chooses what is shown big on the CPU and GPU
+panels (the other becomes a small reading and the graph follows it); on the cards `cards_fan = true` adds the
+fan RPM at the top right (LibreHardwareMonitor).
+
+![cards: temperature big](img/cards-temp-fan.png)
+
+![cards: load big](img/cards-load-fan.png)
+
 **Light, dark, see-through.** `dash_theme = light` gives a white panel with dark text and pastel cards;
 `dash_plate_color` and `dash_plate` set the colour and the opacity of the panel behind `deck` and `orbit`
 (lower it to see an animated background through it, `0` = no panel) and `cards_opacity` the opacity of the

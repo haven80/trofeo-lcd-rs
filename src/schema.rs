@@ -471,6 +471,13 @@ pub fn fields() -> Vec<Field> {
         .def("100")
         .group("cards")
         .help("Lower it to see the background through the cards", "Abbassala per vedere lo sfondo attraverso le card"));
+    add(Field::new("cards_fan", "dash", "Fan speed in the card", "Giri ventola nella card", Bool)
+        .def("true")
+        .group("cards")
+        .help(
+            "The fan RPM at the top right of the CPU and GPU cards (needs LibreHardwareMonitor)",
+            "I giri della ventola in alto a destra nelle card CPU e GPU (serve LibreHardwareMonitor)",
+        ));
     add(Field::new("cards_gap", "dash", "Gap between cards", "Spazio tra le card", int(0, 40)).def("12").group("cards"));
     add(Field::new("orbit", "dash", "Devices", "Dispositivi", Panels { columns: false })
         .def("cpu, gpu, ram")
@@ -485,6 +492,13 @@ pub fn fields() -> Vec<Field> {
     add(Field::new("dash_colors", "dash", "Own colors", "Colori propri", ColorList)
         .group("look")
         .help("One or more colors, used instead of the preset", "Uno o più colori, usati al posto del preset"));
+    add(Field::new("dash_hero", "dash", "Big number of CPU and GPU", "Numero grande di CPU e GPU", Choice(&["temp", "load"]))
+        .def("temp")
+        .group("look")
+        .help(
+            "temp = the temperature in big, the load becomes a small reading; load = the opposite (deck, cards and orbit)",
+            "temp = in grande la temperatura, il carico diventa una lettura piccola; load = il contrario (deck, cards e orbit)",
+        ));
     add(Field::new("dash_font", "dash", "Font", "Font", Choice(&["smooth", "pixel"])).def("smooth").group("look"));
     add(Field::new("dash_theme", "dash", "Theme", "Tema", Choice(&["dark", "light"]))
         .def("dark")

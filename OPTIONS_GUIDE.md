@@ -1074,6 +1074,8 @@ the weather and the playing track). `fans` needs [LibreHardwareMonitor](#fans-an
 | `orbit_legend` | the names of the rings under each cluster | `true` |
 | `dash_palette` | `default` or a preset of the animated backgrounds (`pastel`, `ocean`, `sunset`, ...) | `default` |
 | `dash_colors` | your own accent colors (used instead of the preset) | |
+| `dash_hero` | the big number of the CPU and GPU: `temp` (temperature) \| `load` (usage); the other one becomes a small reading and the graph follows | `temp` |
+| `cards_fan` | the fan RPM at the top right of the CPU and GPU cards (needs [LibreHardwareMonitor](#fans-and-sensors-librehardwaremonitor)) | `true` |
 | `dash_font` | `smooth` \| `pixel` | `smooth` |
 | `dash_theme` | `dark` \| `light` (a white plate, dark text and pastel cards) | `dark` |
 | `dash_text_color` | the text | by theme (white / dark blue) |
