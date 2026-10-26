@@ -388,11 +388,14 @@ fn print_help() {
          \x20\x20--font-weight <auto|light|regular|medium>  Weight of the smooth font (default: by text size)\n\
          \x20\x20--pixel-game <true|false>  Pixel-art mini game under the clock on the default screen (default: true)\n\
          \x20\x20--pixel-game-hero <knight|cat|both>, --pixel-game-height <20-70>, --pixel-game-hud <true|false>\n\
-         \x20\x20--background-effect <plasma|aurora|lava|waves|matrix|rain|aquarium|network|globe|none>  Animated background instead of an image (default: none)\n\
+         \x20\x20--background-effect <plasma|aurora|lava|waves|matrix|rain|aquarium|sea|ink|network|globe|none>  Animated background instead of an image (default: none)\n\
          \x20\x20--effect-palette <P>    pastel | fluo | neon | candy | sunset | ocean | aurora | fire | forest | ice | mono | rainbow |\n         \x20\x20                          matrix | amber | violet | crimson | snow (one-colour, for matrix/rain) |\n         \x20\x20                          lagoon | deep | tropical (for aquarium) | all\n\
          \x20\x20--effect-colors <C>     Own colors: 2+ colors, e.g. #FF0080,#00FFFF (used when --effect-palette is not set)\n\
          \x20\x20--effect-speed <0-100>, --effect-scale <25-400>, --effect-brightness <0-100>, --effect-fps <1-30>, --effect-level <0-100> (aquarium: how high the water is; network / globe: how many nodes)\n\
-         \x20\x20--effect-theme <dark|light>  matrix / rain / aquarium / network / globe on a dark (default) or a white background\n\
+         \x20\x20--effect-level-source <none|cpu|gpu|ram>  aquarium / sea: the water level follows that load (default: none)\n\
+         \x20\x20--effect-reactive <BOOL> aquarium / sea / ink: the music moves them (default: false)\n\
+         \x20\x20--effect-flip <BOOL>   aquarium upside down: the water hangs from the top (default: false)\n\
+         \x20\x20--effect-theme <dark|light>  matrix / rain / aquarium / sea / ink / network / globe on a dark (default) or a white background\n\
          \x20\x20                          (defaults: 30, 100, 40, 8); --effect-palette-interval <SEC> rotates several palettes\n\
          \x20\x20--music-stats <list>      Music screen footer: cpu, gpu, ram, net, disk, time, uptime, all or none (default: cpu,gpu,ram)\n\
          \x20\x20--music-bg <gradient|blur|color|solid|none>  Music screen background (default: gradient)\n\
@@ -866,7 +869,7 @@ const OVERRIDE_KEYS: &[&str] = &[
     "music_bg_blur", "music_bg_fit", "music_bg_color", "music_stats", "music_spectrum_color",
     "pixel_game", "pixel_game_hero", "pixel_game_height", "pixel_game_hud",
     "background_effect", "effect_palette", "effect_colors", "effect_palette_interval",
-    "effect_speed", "effect_scale", "effect_brightness", "effect_fps", "effect_level", "effect_theme",
+    "effect_speed", "effect_scale", "effect_brightness", "effect_fps", "effect_level", "effect_theme", "effect_flip", "effect_level_source", "effect_reactive",
     "panel", "panel_size", "font", "font_weight",
 ];
 
@@ -1258,8 +1261,11 @@ fn parse_effect(file: &ConfigFile) -> anyhow::Result<effect::Settings> {
             Some(effect::Style::Matrix | effect::Style::Rain) => {
                 e.palettes = vec![effect::Palette::parse("matrix").expect("preset")];
             }
-            Some(effect::Style::Aquarium) => {
+            Some(effect::Style::Aquarium | effect::Style::Sea) => {
                 e.palettes = vec![effect::Palette::parse("lagoon").expect("preset")];
+            }
+            Some(effect::Style::Ink) => {
+                e.palettes = vec![effect::Palette::parse("sunset").expect("preset")];
             }
             Some(effect::Style::Network | effect::Style::Globe) => {
                 e.palettes = vec![effect::Palette::parse("ice").expect("preset")];
@@ -1287,12 +1293,20 @@ fn parse_effect(file: &ConfigFile) -> anyhow::Result<effect::Settings> {
     // water needs more light than the other styles to look like water, and the light
     // variants need strong enough colors to stand out on white
     let default_brightness = match e.style {
-        Some(effect::Style::Aquarium) => 65,
+        Some(effect::Style::Aquarium | effect::Style::Sea) => 65,
+        Some(effect::Style::Ink) => 70,
         Some(effect::Style::Matrix | effect::Style::Rain) if e.light => 65,
         Some(effect::Style::Network | effect::Style::Globe) => 70,
         _ => e.brightness,
     };
     e.brightness = ranged("effect_brightness", default_brightness, 0, 100)?;
+    e.level_source = match file.get("effect_level_source") {
+        None => effect::LevelSource::None,
+        Some(v) => effect::LevelSource::parse(v)
+            .ok_or_else(|| anyhow::anyhow!("effect_level_source: '{v}' not valid ({})", effect::LevelSource::NAMES))?,
+    };
+    e.reactive = file.get_bool("effect_reactive").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(false);
+    e.flip = file.get_bool("effect_flip").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(false);
     e.fps = ranged("effect_fps", e.fps, 1, 30)?;
     e.level = ranged("effect_level", e.level, 0, 100)?;
     e.palette_interval = ranged("effect_palette_interval", e.palette_interval, 5, 3600)?;
@@ -1590,7 +1604,7 @@ fn build_display(config: &Config) -> anyhow::Result<Display> {
         config.idle_fps.max(config.active_fps)
     } else if effect_on && config.ui.effect.is_moving() {
         // The effect drifts slowly: its own (low) frame rate is enough.
-        config.idle_fps.max(config.ui.effect.fps as f32)
+        config.idle_fps.max(config.ui.effect.wanted_fps() as f32)
     } else {
         config.idle_fps
     };
@@ -2203,7 +2217,7 @@ fn main() -> anyhow::Result<()> {
         };
         let target_fps = if frame_wanted { target_fps.max(frame_screen.wanted_fps()) } else { target_fps };
         let target_fps = match (tiles_wanted, opts().tiles.bg) {
-            (true, tiles::BgMode::Effect) => target_fps.max(config.ui.effect.fps as f32),
+            (true, tiles::BgMode::Effect) => target_fps.max(config.ui.effect.wanted_fps() as f32),
             (true, tiles::BgMode::Image) => target_fps.max(config.active_fps),
             // colour presets drifting through the tiles: a few frames a second are plenty
             (true, _) if !opts().tiles.fill_palettes.is_empty() => target_fps.max(5.0),
@@ -2367,7 +2381,22 @@ fn main() -> anyhow::Result<()> {
         if composite {
             match (background.as_mut(), config.ui.effect.style) {
                 (Some(bg), _) => bg.render_into(&mut fb),
-                (None, Some(style)) => bg_effect.render(&mut fb, &config.ui.effect, style, config.ui.effect.brightness),
+                (None, Some(style)) => {
+                    // what moves the liquids: the load that sets the water level, the music
+                    let es = &config.ui.effect;
+                    let load = match es.level_source {
+                        effect::LevelSource::None => None,
+                        effect::LevelSource::Cpu => Some(sys.global_cpu_info().cpu_usage() / 100.0),
+                        effect::LevelSource::Gpu => latest_gpu_percent.map(|p| p / 100.0),
+                        effect::LevelSource::Ram => {
+                            Some(sys.used_memory() as f32 / sys.total_memory().max(1) as f32)
+                        }
+                    };
+                    let low = bar_heights.len().min(10).max(1);
+                    let volume = (bar_heights.iter().take(low).sum::<f32>() / low as f32 * 1.4).min(1.0);
+                    bg_effect.set_live(load, volume, false);
+                    bg_effect.render(&mut fb, es, style, es.brightness)
+                }
                 (None, None) => {
                     let c = config.background_color.unwrap_or((0x08, 0x08, 0x10));
                     fb.clear(c.0, c.1, c.2)
@@ -2605,7 +2634,11 @@ fn render_preview(config: &Config, req: &PreviewReq) -> anyhow::Result<Framebuff
         match (background.as_mut(), config.ui.effect.style) {
             (Some(bg), _) => bg.render_into(&mut fb),
             (None, Some(style)) => {
-                effect::Effect::new().render_at(&mut fb, &config.ui.effect, style, config.ui.effect.brightness, req.secs)
+                // sample values, so the editor shows what the level source and the music do
+                let mut e = effect::Effect::new();
+                let es = &config.ui.effect;
+                e.set_live((es.level_source != effect::LevelSource::None).then_some(0.62), 0.45, true);
+                e.render_at(&mut fb, es, style, es.brightness, req.secs)
             }
             (None, None) => {
                 let c = config.background_color.unwrap_or((0x08, 0x08, 0x10));
@@ -4521,6 +4554,16 @@ mod layout_tests {
         assert!(e("effect_theme = pink\n").is_err());
         assert!(is_override_key("effect_theme"));
         assert!(is_override_key("effect_level"));
+        assert!(is_override_key("effect_flip"));
+        assert!(is_override_key("effect_level_source") && is_override_key("effect_reactive"));
+        let q = e("background_effect = sea\neffect_level_source = cpu\neffect_reactive = true\n").unwrap();
+        assert_eq!((q.style, q.level_source, q.reactive), (Some(effect::Style::Sea), effect::LevelSource::Cpu, true));
+        assert_eq!(q.palettes, vec![effect::Palette::parse("lagoon").unwrap()]);
+        assert_eq!(e("background_effect = inchiostro\n").unwrap().style, Some(effect::Style::Ink));
+        assert!(e("effect_level_source = disk\n").is_err());
+        assert!(e("background_effect = aquarium\neffect_flip = true\n").unwrap().flip);
+        assert!(!e("background_effect = aquarium\n").unwrap().flip);
+        assert!(e("effect_flip = maybe\n").is_err());
     }
 
     #[test]

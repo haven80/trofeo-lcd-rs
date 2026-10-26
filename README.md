@@ -20,7 +20,11 @@ whose driver was rewritten byte-for-byte from
 See **[NOTICE.md](./NOTICE.md)** for the full provenance and a summary of
 what this fork adds on top of the original.
 
-**New in 2.6.0 — a notice when a new version is out** (optional, off by default): the program looks on GitHub at start-up and, if a newer version exists, shows a banner at the bottom of the screen for a few seconds. Switch it on in the settings editor (System section) or with `update_check = true`. See [New version notice](#new-version-notice).
+**New in 2.7.0 — two new liquid backgrounds, and the water can follow your PC and your music.** `background_effect = sea` is a sunset over layers of waves with foam and the sun's glitter, `ink` is clouds of coloured ink curling in water. The aquarium and the sea can **rise and fall with the CPU, GPU or RAM load** (`effect_level_source`), and the aquarium, sea and ink can **move with the music** (`effect_reactive`). See [Animated background](#backgrounds-solid-color-and-animated-effects).
+
+**2.6.1 — the aquarium can be turned upside down** (`effect_flip = true`, or *Upside down* in the editor): the water hangs from the top of the panel.
+
+**2.6.0 — a notice when a new version is out** (optional, off by default): the program looks on GitHub at start-up and, if a newer version exists, shows a banner at the bottom of the screen for a few seconds. Switch it on in the settings editor (System section) or with `update_check = true`. See [New version notice](#new-version-notice).
 
 **2.5.1 — a new README section, [Which sensors you need and what to install](#which-sensors-you-need-and-what-to-install)**: what to install for each reading (PawnIO for AMD CPUs, LibreHardwareMonitor for Intel CPUs and the fans, the graphics driver for the card) and what to run when a value is missing.
 
@@ -342,7 +346,7 @@ Also settable in `trofeo.conf` (see `trofeo.conf.example`), in the [settings edi
 - `background_color = black | #0B1D3A | …`: a **solid color** instead of a picture — a name
   (`black`, `white`, `pink`, `navy`, `teal`, …) or a hex code. See
   [Backgrounds](#backgrounds-solid-color-and-animated-effects).
-- `background_effect = plasma | aurora | lava | waves | matrix | rain | aquarium | network | globe`: an
+- `background_effect = plasma | aurora | lava | waves | matrix | rain | aquarium | sea | ink | network | globe`: an
   **animated background** with no file needed — see
   [Backgrounds](#backgrounds-solid-color-and-animated-effects).
   It replaces `background` while it is on.
@@ -458,9 +462,46 @@ where the water ends), water that darkens with depth, slanting **rays of light**
 **caustics** and **bubbles** that rise and fade at the surface. `effect_level = 0-100` sets how
 high the water reaches (`50` = half the panel). Water palettes: `lagoon` (turquoise, the
 default), `deep` (blue to navy) and `tropical` (green-turquoise) — any other palette works too,
-its lightest color becoming the surface. It also works in portrait.
+its lightest color becoming the surface. It also works in portrait. `effect_flip = true` turns it
+**upside down**: the water hangs from the top of the panel.
 
 ![Aquarium](img/background-aquarium.png)
+
+**The water as a gauge, and moving with the music.** Two options make the aquarium and the sea
+alive. `effect_level_source = cpu` (or `gpu`, `ram`) makes the water level follow that load: a full
+tank means a busy PC, a nearly empty one an idle PC (it never goes below 5%, and it rises and falls
+smoothly over a second or so; `effect_level` is not used then). `effect_reactive = true` makes the
+surface rise with the bass of the music, the light rays brighten and, in the sea, the sun glows and the near waves
+grow; the ink spreads faster and thicker. In silence everything is calm. Both need nothing installed; a
+reactive effect refreshes at least 15 times a second (a load-driven one at least 10), whatever `effect_fps` says.
+
+```ini
+background_effect = aquarium
+effect_level_source = cpu        # none | cpu | gpu | ram
+effect_reactive = true           # the music moves the water
+```
+
+**Sea.** `background_effect = sea` is a sunset seen from the water: a sky that goes from night blue
+to orange at the horizon, the **sun** on the horizon with its glow, and five **layers of waves**, each
+larger and darker than the one behind (the far ones take the orange of the sky, the near ones the color of
+the water), with a light edge, **foam** on the nearest two and the sun's **glitter** on the water, a column
+that widens towards you. `effect_level` sets how much of the panel is sea (`50` = the horizon in the middle),
+the water takes the aquarium's palettes (`lagoon` by default, `deep`, `tropical`...). With
+`effect_theme = light` the sky is a clear day. It also works in portrait.
+
+![Sea](img/background-sea.png)
+
+![Sea, light variant](img/background-sea-light.png)
+
+**Ink.** `background_effect = ink` is clouds of coloured ink spreading and curling in dark water (or
+dark ink on white paper in the light variant). The colors come from the palette (`sunset` by default; `neon`,
+`ocean`, `aurora`, `fire` and `rainbow` look good too) and drift along it as the clouds move; `effect_scale`
+makes the swirls larger or smaller. Both the sea and the ink do a little more work than the other effects
+(about 15 ms a frame on a large screen): lower `effect_fps` if you want them lighter.
+
+![Ink](img/background-ink.png)
+
+![Ink with the neon palette](img/background-ink-neon.png)
 
 **Network and globe.** `background_effect = network` is a web of points drifting slowly,
 joined by thin lines while they are near each other, so the net keeps changing shape (a few nodes
@@ -474,7 +515,7 @@ with red nodes, a several-colour one (`neon`, `rainbow`) nodes of different colo
 
 ![Globe](img/background-globe.png)
 
-**Light (white) variants.** `effect_theme = light` gives `matrix`, `rain`, `aquarium`, `network`
+**Light (white) variants.** `effect_theme = light` gives `matrix`, `rain`, `aquarium`, `sea`, `ink`, `network`
 and `globe` a **white background**: dark characters and streaks on white paper, a white room with
 pale water that deepens in color toward the bottom, or grey-blue lines and nodes on white. `effect_brightness` then sets how saturated the colors
 are. Remember to give the text a dark color:
@@ -506,7 +547,7 @@ It is built to be light: the picture is only calculated on a coarse grid and
 stretched through a color table (about a millisecond per frame; the aquarium, a few
 milliseconds), and `effect_fps` (default 8) keeps the number of frames low — see
 [Performance](#performance). Details and every key in the
-**[Options guide](./OPTIONS_GUIDE.md#animated-background-effect-plasma-aurora-lava-waves-matrix-rain-aquarium-network-globe)**.
+**[Options guide](./OPTIONS_GUIDE.md#animated-background-effect-plasma-aurora-lava-waves-matrix-rain-aquarium-sea-ink-network-globe)**.
 
 ### Brightness, DeepCool, FPS
 

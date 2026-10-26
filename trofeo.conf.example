@@ -321,12 +321,17 @@ language = en
 # A soft animated background instead of a picture: colors that blend and drift.
 # Very light on the CPU (the picture is calculated on a coarse grid and stretched).
 # It replaces "background" while it is on, and works with margins and panel_opacity.
-# background_effect = plasma   # plasma | aurora | lava | waves | matrix | rain | aquarium | network | globe | none
+# background_effect = plasma   # plasma | aurora | lava | waves | matrix | rain | aquarium | sea | ink | network | globe | none
 #   matrix = minimal digital rain (characters), rain = thin streaks; green by default
 #   aquarium = side view of an aquarium: moving water surface, light rays, caustics, bubbles
+#   sea = a sunset sky over layers of waves with foam and the sun's glitter on the water
+#   ink = clouds of coloured ink spreading and curling in water
 #   network = nodes drifting about, joined by thin lines (no text, only lines and dots)
 #   globe = a slowly turning sphere of nodes and lines
-# effect_level = 50            # aquarium: how high the water reaches; network / globe: how many nodes (0-100)
+# effect_level = 50            # aquarium and sea: how high the water reaches; network / globe: how many nodes (0-100)
+# effect_level_source = none   # aquarium / sea: none | cpu | gpu | ram - the water level follows that load
+# effect_reactive = false      # aquarium / sea / ink: the music moves them (taller waves, more ink); frame rate rises to 15
+# effect_flip = false          # aquarium upside down: the water hangs from the top of the panel
 # effect_theme = dark          # dark | light: matrix / rain / aquarium / network / globe on a white background
 #                              # (use a dark text_color / clock_color with light)
 # Colors: pastel | fluo | neon | candy | sunset | ocean | aurora | fire | forest | ice |

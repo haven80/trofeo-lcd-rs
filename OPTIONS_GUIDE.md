@@ -185,7 +185,7 @@ Video backgrounds need ffmpeg; `background_dim` darkens the image so text
 stays readable over it. With an animated background (GIF or video) the idle
 FPS is automatically raised to the active FPS, so the animation stays smooth
 even while nothing else is happening. For a soft moving background that needs
-no file at all see [Animated background effect](#animated-background-effect-plasma-aurora-lava-waves-matrix-rain-aquarium-network-globe).
+no file at all see [Animated background effect](#animated-background-effect-plasma-aurora-lava-waves-matrix-rain-aquarium-sea-ink-network-globe).
 
 ```ini
 background = C:\Pictures\space.mp4
@@ -198,26 +198,29 @@ ffmpeg = C:\ffmpeg\bin\ffmpeg.exe
 # background_color = #0B1D3A      # ... or a hex code
 ```
 
-## Animated background effect (plasma, aurora, lava, waves, matrix, rain, aquarium, network, globe)
+## Animated background effect (plasma, aurora, lava, waves, matrix, rain, aquarium, sea, ink, network, globe)
 
 Instead of a picture, the background can be a slow, soft effect whose colors
 blend into each other and drift: a plasma, curtains of aurora, a lava lamp or
-silk-like waves — a minimal **digital rain** (`matrix`, `rain`) an **aquarium** seen from the side, a **network** of nodes and lines or a turning **globe**. It is drawn behind everything (clock, status lines, spectrum,
+silk-like waves — a minimal **digital rain** (`matrix`, `rain`) an **aquarium** seen from the side, a **sea** at sunset, clouds of **ink** in water, a **network** of nodes and lines or a turning **globe**. It is drawn behind everything (clock, status lines, spectrum,
 the pixel game, layouts), costs almost no CPU, and you choose the colors, the
 speed and the brightness.
 
 | Key | CLI | Values | Default |
 |---|---|---|---|
-| `background_effect` | `--background-effect` | `plasma` / `aurora` / `lava` / `waves` / `matrix` / `rain` / `aquarium` / `network` / `globe` / `none` | `none` |
-| `effect_palette` | `--effect-palette` | `pastel` / `fluo` / `neon` / `candy` / `sunset` / `ocean` / `aurora` / `fire` / `forest` / `ice` / `mono` / `rainbow` / `custom`; for `matrix` / `rain` also `matrix` (green) / `amber` / `violet` / `crimson` / `snow` (white); for `aquarium` also `lagoon` / `deep` / `tropical`; `network` and `globe` use `ice` unless you choose; several (comma-separated) or `all` rotate | `neon` |
+| `background_effect` | `--background-effect` | `plasma` / `aurora` / `lava` / `waves` / `matrix` / `rain` / `aquarium` / `sea` / `ink` / `network` / `globe` / `none` | `none` |
+| `effect_palette` | `--effect-palette` | `pastel` / `fluo` / `neon` / `candy` / `sunset` / `ocean` / `aurora` / `fire` / `forest` / `ice` / `mono` / `rainbow` / `custom`; for `matrix` / `rain` also `matrix` (green) / `amber` / `violet` / `crimson` / `snow` (white); for `aquarium` and `sea` also `lagoon` / `deep` / `tropical`; `ink` uses `sunset` unless you choose; `network` and `globe` use `ice` unless you choose; several (comma-separated) or `all` rotate | `neon` |
 | `effect_colors` | `--effect-colors` | 2 or more colors, e.g. `#FF0080, #00FFFF` | — |
 | `effect_palette_interval` | `--effect-palette-interval` | `5`-`3600` seconds (rotation period) | `60` |
 | `effect_speed` | `--effect-speed` | `0` (frozen) - `100` (fast) | `30` |
 | `effect_scale` | `--effect-scale` | `25`-`400` % (size of the features; bigger = larger, calmer shapes) | `100` |
 | `effect_brightness` | `--effect-brightness` | `0`-`100` | `40` |
 | `effect_fps` | `--effect-fps` | `1`-`30` | `8` |
-| `effect_theme` | `--effect-theme` | `dark` / `light` (`matrix`, `rain`, `aquarium`, `network` and `globe`: a white background instead of a dark one; the other styles ignore it) | `dark` |
-| `effect_level` | `--effect-level` | `0`-`100` % (`aquarium`: how high the water reaches, `0` empty, `100` full; `network` and `globe`: how many nodes, `0` few, `100` many) | `50` |
+| `effect_theme` | `--effect-theme` | `dark` / `light` (`matrix`, `rain`, `aquarium`, `sea`, `ink`, `network` and `globe`: a white background instead of a dark one; the other styles ignore it) | `dark` |
+| `effect_flip` | `--effect-flip` | `true` / `false` (`aquarium` only: upside down, the water hangs from the top of the panel, the light rays and the bubbles go the other way; `effect_level` is then measured from the top) | `false` |
+| `effect_level_source` | `--effect-level-source` | `none` / `cpu` / `gpu` / `ram` (`aquarium` and `sea`: the water level follows that load, smoothly, never below 5 %; `effect_level` is then not used; if the reading is missing the level of `effect_level` is used) | `none` |
+| `effect_reactive` | `--effect-reactive` | `true` / `false` (`aquarium`, `sea`, `ink`: the music moves them: taller waves and brighter light with the bass, more and faster ink; the frame rate rises to at least 15, a load-driven level to at least 10) | `false` |
+| `effect_level` | `--effect-level` | `0`-`100` % (`aquarium` and `sea`: how high the water reaches, `0` empty, `100` full; `network` and `globe`: how many nodes, `0` few, `100` many) | `50` |
 
 - **Styles** (`background_effect`): `plasma` is the classic demoscene look (a
   sum of waves and a moving ring); `aurora` is undulating bands of light; `lava`
@@ -229,6 +232,23 @@ speed and the brightness.
   so text stays readable, and they cost less than the soft styles. `effect_scale`
   sets the size of the characters / thickness of the streaks, `effect_speed` how fast
   they fall (`30` is a calm rain).
+- **Sea** (`background_effect = sea`): a sky (a sunset in the dark variant, a clear day in the
+  light one) with the **sun** on the horizon, and five **layers of waves**, each larger and
+  darker than the one behind: the far ones take the orange of the sky, the near ones the color of
+  the water (`lagoon`, `deep`, `tropical`...), all with a light edge; the two nearest have
+  **foam**, and the sun leaves a column of **glitter** on the water that widens towards you.
+  `effect_level` is how much of the panel is sea (`50` = the horizon in the middle),
+  `effect_scale` the size of the waves, `effect_speed` their speed. It works in portrait too.
+- **Ink** (`background_effect = ink`): clouds of coloured ink spreading and curling in dark
+  water (dark ink on white paper in the light variant), made of a warped fractal noise. The
+  colors come from the palette (`sunset` unless you choose, `neon`, `ocean`, `fire`,
+  `rainbow` look good) and drift along it; `effect_scale` is the size of the swirls.
+- **Water as a gauge and with the music** (aquarium, sea, ink): `effect_level_source` makes the
+  water level follow the load of the CPU, the GPU or the RAM (a full tank = a busy PC), and
+  `effect_reactive = true` lets the music move the picture: taller surface waves and brighter
+  rays in the aquarium, higher near waves and a glowing sun in the sea, thicker and faster ink.
+  The sea and the ink cost about 15 ms a frame on a large screen (the aquarium 4 ms): lower
+  `effect_fps` to make them lighter.
 - **Aquarium** (`background_effect = aquarium`): the panel becomes the glass of an
   aquarium seen from the side. A moving, slightly irregular **water surface** with a
   bright edge separates the dark air from the water, so you always see where the water
@@ -236,7 +256,8 @@ speed and the brightness.
   surface, a fine net of **caustics** shimmers near the top and a few **bubbles** rise and
   fade as they reach the surface. `effect_level` decides how much of the panel is water
   (`50` = half; `80` = nearly full with the surface in the top fifth; `0` = empty). The
-  surface works in portrait as well. `effect_speed` is the speed of the waves and bubbles,
+  surface works in portrait as well. With `effect_flip = true` the whole tank is upside down: the water hangs
+  from the top of the panel and `effect_level` is measured from the top. `effect_speed` is the speed of the waves and bubbles,
   `effect_scale` makes waves, bubbles and light patterns larger (and calmer).
   Colors: `lagoon` (turquoise, the default), `deep` (blue to navy), `tropical`
   (green-turquoise); any other palette works too — its lightest color is the surface and
@@ -339,6 +360,9 @@ effect_palette = amber
 # background_effect = aquarium
 # effect_palette = lagoon
 # effect_level = 60
+# effect_flip = true            # aquarium upside down
+# effect_level_source = cpu     # aquarium / sea: the water level follows the CPU load
+# effect_reactive = true        # aquarium / sea / ink: the music moves them
 
 background_effect = aurora
 effect_palette = ocean, aurora, neon     # rotates, cross-fading
@@ -536,7 +560,7 @@ spectrum at the bottom. When the music stops the normal screen/layout comes back
   - `solid` — one flat color of your choice, `music_bg_color` (`#RRGGBB`, `R,G,B`
     or a name), the same for every track.
   - `none` — keep whatever is behind (solid color, your `background` image or the
-    [background effect](#animated-background-effect-plasma-aurora-lava-waves-matrix-rain-aquarium-network-globe));
+    [background effect](#animated-background-effect-plasma-aurora-lava-waves-matrix-rain-aquarium-sea-ink-network-globe));
     the cover and text are drawn on top.
   - `effect` — the animated background effect (plasma, aurora, lava, waves, matrix, rain, aquarium, network or globe, with
     the style, palette, speed and size you set in its section; plasma if you set none),

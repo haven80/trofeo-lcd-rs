@@ -130,7 +130,7 @@ pub const SECTIONS: &[(&str, &str, &str)] = &[
 pub const POSITIONS: &[&str] =
     &["top-left", "top", "top-right", "center-left", "center", "center-right", "bottom-left", "bottom", "bottom-right"];
 pub const LANGUAGES: &[&str] = &["en", "it", "de", "es", "fr", "pt"];
-pub const EFFECTS: &[&str] = &["none", "plasma", "aurora", "lava", "waves", "matrix", "rain", "aquarium", "network", "globe"];
+pub const EFFECTS: &[&str] = &["none", "plasma", "aurora", "lava", "waves", "matrix", "rain", "aquarium", "sea", "ink", "network", "globe"];
 pub const EFFECT_PALETTES: &[&str] = &[
     "pastel", "fluo", "neon", "candy", "sunset", "ocean", "aurora", "fire", "forest", "ice", "mono", "rainbow", "matrix", "amber",
     "violet", "crimson", "snow", "lagoon", "deep", "tropical", "custom", "all",
@@ -317,8 +317,8 @@ fn int(min: i64, max: i64) -> Kind {
 /// Every setting of the editor, in the order they are shown.
 pub fn fields() -> Vec<Field> {
     use Kind::*;
-    let on_effect: &[&str] = &["plasma", "aurora", "lava", "waves", "matrix", "rain", "aquarium", "network", "globe"];
-    let themed: &[&str] = &["matrix", "rain", "aquarium", "network", "globe"];
+    let on_effect: &[&str] = &["plasma", "aurora", "lava", "waves", "matrix", "rain", "aquarium", "sea", "ink", "network", "globe"];
+    let themed: &[&str] = &["matrix", "rain", "aquarium", "sea", "ink", "network", "globe"];
     let music_on: &[&str] = &["true"];
     let mut v: Vec<Field> = Vec::new();
     let mut add = |f: Field| v.push(f);
@@ -385,16 +385,28 @@ pub fn fields() -> Vec<Field> {
     add(Field::new("effect_theme", "effect", "Dark or light", "Scuro o chiaro", Choice(&["dark", "light"]))
         .def("dark")
         .when("background_effect", themed)
-        .help("light = a white background (matrix, rain, aquarium, network, globe)", "light = sfondo bianco (matrix, rain, acquario, network, globe)"));
+        .help("light = a white background (matrix, rain, aquarium, sea, ink, network, globe)", "light = sfondo bianco (matrix, rain, acquario, mare, inchiostro, network, globe)"));
     add(Field::new("effect_level", "effect", "Water level / number of nodes", "Livello dell'acqua / numero di nodi", int(0, 100))
         .def("50")
-        .when("background_effect", &["aquarium", "network", "globe"])
-        .help("Aquarium: how much of the panel is water. Network and globe: how many nodes", "Acquario: quanta parte del pannello è acqua. Network e globe: quanti nodi"));
+        .when("background_effect", &["aquarium", "sea", "network", "globe"])
+        .help("Aquarium and sea: how much of the panel is water. Network and globe: how many nodes", "Acquario e mare: quanta parte del pannello è acqua. Network e globe: quanti nodi"));
+    add(Field::new("effect_level_source", "effect", "Water level follows", "Il livello segue", Choice(&["none", "cpu", "gpu", "ram"]))
+        .def("none")
+        .when("background_effect", &["aquarium", "sea"])
+        .help("The water rises and falls with the load of the CPU, the graphics card or the RAM (the level above is then not used)", "L'acqua sale e scende con il carico di CPU, scheda video o RAM (il livello sopra non viene usato)"));
+    add(Field::new("effect_reactive", "effect", "Moves with the music", "Si muove con la musica", Bool)
+        .def("false")
+        .when("background_effect", &["aquarium", "sea", "ink"])
+        .help("Taller waves, more light and more ink with the bass (the frame rate goes up to 15)", "Onde più alte, più luce e più inchiostro con i bassi (i fotogrammi salgono a 15)"));
+    add(Field::new("effect_flip", "effect", "Upside down", "Sottosopra", Bool)
+        .def("false")
+        .when("background_effect", &["aquarium"])
+        .help("The water hangs from the top of the panel; the light and the bubbles go the other way", "L'acqua è appesa in alto; la luce e le bolle vanno nel verso opposto"));
     add(Field::new("effect_palette", "effect", "Colors", "Colori", Multi(EFFECT_PALETTES))
         .def("neon")
-        .style_def(&[("matrix", "matrix"), ("rain", "matrix"), ("aquarium", "lagoon"), ("network", "ice"), ("globe", "ice")])
+        .style_def(&[("matrix", "matrix"), ("rain", "matrix"), ("aquarium", "lagoon"), ("sea", "lagoon"), ("ink", "sunset"), ("network", "ice"), ("globe", "ice")])
         .when("background_effect", on_effect)
-        .help("Several = they rotate. matrix/amber/violet/crimson/snow are for matrix and rain; lagoon/deep/tropical for the aquarium; network and globe use ice unless you choose", "Più di uno = ruotano. matrix/amber/violet/crimson/snow per matrix e rain; lagoon/deep/tropical per l'acquario; network e globe usano ice se non scegli"));
+        .help("Several = they rotate. matrix/amber/violet/crimson/snow are for matrix and rain; lagoon/deep/tropical for the aquarium and the sea; network and globe use ice unless you choose", "Più di uno = ruotano. matrix/amber/violet/crimson/snow per matrix e rain; lagoon/deep/tropical per l'acquario; network e globe usano ice se non scegli"));
     add(Field::new("effect_colors", "effect", "Own colors", "Colori personalizzati", ColorList)
         .when("background_effect", on_effect)
         .help("2 or more colors; used when no palette is chosen, or add \"custom\" to the palettes", "2 o più colori; usati se non scegli una palette, oppure aggiungi \"custom\" alle palette"));
@@ -402,7 +414,7 @@ pub fn fields() -> Vec<Field> {
     add(Field::new("effect_scale", "effect", "Size of the shapes (%)", "Dimensione delle forme (%)", int(25, 400)).def("100").when("background_effect", on_effect));
     add(Field::new("effect_brightness", "effect", "Brightness", "Luminosità", int(0, 100))
         .def("40")
-        .style_def(&[("aquarium", "65"), ("network", "70"), ("globe", "70")])
+        .style_def(&[("aquarium", "65"), ("sea", "65"), ("ink", "70"), ("network", "70"), ("globe", "70")])
         .when("background_effect", on_effect)
         .help("Lower = text easier to read. Unset: 65 for the aquarium and the light variants, 70 for network and globe", "Più basso = testo più leggibile. Non impostato: 65 per l'acquario e le varianti chiare, 70 per network e globe"));
     add(Field::new("effect_fps", "effect", "Frames per second", "Fotogrammi al secondo", int(1, 30))

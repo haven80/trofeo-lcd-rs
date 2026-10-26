@@ -19,6 +19,8 @@
 
 use trofeo_lcd::Framebuffer;
 
+mod liquid;
+
 pub type Rgb = (u8, u8, u8);
 
 /// Pixels between two samples of the field.
@@ -58,6 +60,10 @@ pub enum Style {
     Rain,
     /// A side view of an aquarium: a moving water surface, light rays, caustics, bubbles.
     Aquarium,
+    /// A sea seen from the side: a sunset sky, layers of waves with foam, the sun's glitter.
+    Sea,
+    /// Clouds of coloured ink spreading and curling in water.
+    Ink,
     /// Nodes drifting about, joined by thin lines while they are near each other.
     Network,
     /// A slowly turning sphere of nodes and lines.
@@ -65,10 +71,10 @@ pub enum Style {
 }
 
 impl Style {
-    pub const NAMES: &'static str = "plasma | aurora | lava | waves | matrix | rain | aquarium | network | globe";
+    pub const NAMES: &'static str = "plasma | aurora | lava | waves | matrix | rain | aquarium | sea | ink | network | globe";
     #[cfg(test)]
-    pub const ALL: [Style; 9] = [
-        Style::Plasma, Style::Aurora, Style::Lava, Style::Waves, Style::Matrix, Style::Rain, Style::Aquarium,
+    pub const ALL: [Style; 11] = [
+        Style::Plasma, Style::Aurora, Style::Lava, Style::Waves, Style::Matrix, Style::Rain, Style::Aquarium, Style::Sea, Style::Ink,
         Style::Network, Style::Globe,
     ];
 
@@ -81,6 +87,8 @@ impl Style {
             "matrix" | "digital" | "code" | "codice" => Some(Style::Matrix),
             "rain" | "streaks" | "pioggia" | "minimal" => Some(Style::Rain),
             "aquarium" | "acquario" | "water" | "acqua" | "tank" => Some(Style::Aquarium),
+"sea" | "mare" | "ocean-view" | "waves-sea" => Some(Style::Sea),
+            "ink" | "inchiostro" | "smoke" | "fumo" => Some(Style::Ink),
             "network" | "net" | "rete" | "plexus" | "nodes" | "nodi" => Some(Style::Network),
             "globe" | "sphere" | "world" | "globo" | "sfera" | "mondo" => Some(Style::Globe),
             _ => None,
@@ -329,6 +337,31 @@ fn lerp_rgb(a: Rgb, b: Rgb, t: f32) -> Rgb {
 // Settings
 // ---------------------------------------------------------------------------
 
+/// What drives the water level of the aquarium and the sea (`effect_level_source`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum LevelSource {
+    /// A fixed level (`effect_level`).
+    #[default]
+    None,
+    Cpu,
+    Gpu,
+    Ram,
+}
+
+impl LevelSource {
+    pub const NAMES: &'static str = "none | cpu | gpu | ram";
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "" | "none" | "off" | "fixed" | "no" | "nessuno" | "fisso" => Some(LevelSource::None),
+            "cpu" | "processor" | "processore" => Some(LevelSource::Cpu),
+            "gpu" | "video" | "graphics" => Some(LevelSource::Gpu),
+            "ram" | "memory" | "mem" | "memoria" => Some(LevelSource::Ram),
+            _ => None,
+        }
+    }
+}
+
 /// What the user configures (`effect_*` keys).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
@@ -350,6 +383,14 @@ pub struct Settings {
     pub level: u32,
     /// Matrix, rain, aquarium, network and globe: a light (white) variant instead of the dark one.
     pub light: bool,
+    /// Aquarium: upside down (the water hangs from the top of the panel and the light and
+    /// the bubbles go the other way).
+    pub flip: bool,
+    /// Aquarium and sea: the water level follows the load of the CPU / GPU / RAM
+    /// (`effect_level` is then not used).
+    pub level_source: LevelSource,
+    /// Aquarium, sea and ink: the music moves them (taller waves, more ink, brighter light).
+    pub reactive: bool,
 }
 
 impl Default for Settings {
@@ -364,6 +405,9 @@ impl Default for Settings {
             fps: 8,
             level: 50,
             light: false,
+            flip: false,
+            level_source: LevelSource::None,
+            reactive: false,
         }
     }
 }
@@ -378,6 +422,13 @@ impl Settings {
     /// Does the picture change over time (so it needs a steady frame rate)?
     pub fn is_moving(&self) -> bool {
         self.speed > 0
+    }
+
+    /// Frames per second the effect wants: `fps`, or more when the music or a load moves it
+    /// (a level that changes with the music would look choppy at the calm default).
+    pub fn wanted_fps(&self) -> u32 {
+        let need = if self.reactive { 15 } else if self.level_source != LevelSource::None { 10 } else { 0 };
+        self.fps.max(need)
     }
 }
 
@@ -422,6 +473,12 @@ pub struct Effect {
     xs: Vec<f32>,
     ys: Vec<f32>,
     grid_key: Option<(usize, usize, u32)>,
+    /// The live inputs (`set_live`): the smoothed level (0-1) from a load, the smoothed
+    /// loudness of the music (0-1), and a phase that the music winds forward.
+    live_level: Option<f32>,
+    bass: f32,
+    react_phase: f32,
+    live_at: Option<std::time::Instant>,
 }
 
 impl Effect {
@@ -443,7 +500,49 @@ impl Effect {
             xs: Vec::new(),
             ys: Vec::new(),
             grid_key: None,
+            live_level: None,
+            bass: 0.0,
+            react_phase: 0.0,
+            live_at: None,
         }
+    }
+
+    /// Feeds the effect with what is happening now: `load` (0-1) is the CPU / GPU / RAM load that
+    /// drives the water level (`None` when no source is chosen) and `volume` (0-1) the loudness
+    /// of the music. They are smoothed here (the water rises slowly and falls slowly, the music
+    /// rises fast and falls a little slower); `snap` skips the smoothing (previews, tests).
+    pub fn set_live(&mut self, load: Option<f32>, volume: f32, snap: bool) {
+        let now = std::time::Instant::now();
+        let dt = self.live_at.map(|t| now.duration_since(t).as_secs_f32()).unwrap_or(0.1).clamp(0.0, 0.5);
+        self.live_at = Some(now);
+        let volume = volume.clamp(0.0, 1.0);
+        match (load.map(|l| l.clamp(0.0, 1.0)), self.live_level) {
+            (None, _) => self.live_level = None,
+            (Some(l), None) => self.live_level = Some(l),
+            (Some(l), Some(cur)) => {
+                self.live_level = Some(if snap { l } else { cur + (l - cur) * (1.0 - (-dt / 1.2).exp()) });
+            }
+        }
+        if snap {
+            self.bass = volume;
+        } else {
+            let tau = if volume > self.bass { 0.06 } else { 0.35 };
+            self.bass += (volume - self.bass) * (1.0 - (-dt / tau).exp());
+        }
+        self.react_phase += dt * self.bass * 1.5;
+    }
+
+    /// Water level in % for the aquarium and the sea: the one of the settings, or the load.
+    fn water_level(&self, s: &Settings) -> f32 {
+        match (s.level_source, self.live_level) {
+            (LevelSource::None, _) | (_, None) => s.level.min(100) as f32,
+            (_, Some(l)) => 5.0 + 95.0 * l,
+        }
+    }
+
+    /// How much the music moves the picture (0 when `reactive` is off).
+    fn react(&self, s: &Settings) -> f32 {
+        if s.reactive { self.bass } else { 0.0 }
     }
 
     /// Paint the effect over all of `fb` at the current time.
@@ -461,7 +560,24 @@ impl Effect {
         self.update_lut(s, brightness, secs);
         if style == Style::Aquarium {
             let t = secs * (s.speed as f64 / 30.0);
-            self.paint_aquarium(fb, s.level, s.scale, t);
+            let (level, react) = (self.water_level(s), self.react(s));
+            self.paint_aquarium(fb, level, s.scale, t, react);
+            if s.flip {
+                flip_rows(fb);
+            }
+            return;
+        }
+        if style == Style::Sea {
+            let t = secs * (s.speed as f64 / 30.0);
+            let (level, react) = (self.water_level(s), self.react(s));
+            self.paint_sea(fb, level, s.scale, t, react);
+            return;
+        }
+        if style == Style::Ink {
+            let t = secs * (s.speed as f64 / 30.0);
+            let react = self.react(s);
+            let phase = if s.reactive { self.react_phase } else { 0.0 };
+            self.paint_ink(fb, s.scale, t, react, phase);
             return;
         }
         if matches!(style, Style::Matrix | Style::Rain) {
@@ -636,7 +752,7 @@ impl Effect {
                 }
             }
             // The rain styles are not a smooth field: `render_at` paints them directly.
-            Style::Matrix | Style::Rain | Style::Aquarium | Style::Network | Style::Globe => {}
+            Style::Matrix | Style::Rain | Style::Aquarium | Style::Sea | Style::Ink | Style::Network | Style::Globe => {}
             Style::Waves => {
                 let (p1, p2, p3) = (ph(0.21), ph(0.15), ph(0.25));
                 for r in 0..rows {
@@ -877,12 +993,12 @@ impl Effect {
     /// surface. Under it the colour darkens with depth, soft rays of light slant down from
     /// the surface, a net of caustics ripples near the top, and a few bubbles rise.
     /// Stateless: a pure function of `t`.
-    fn paint_aquarium(&mut self, fb: &mut Framebuffer, level: u32, scale: u32, t: f64) {
+    fn paint_aquarium(&mut self, fb: &mut Framebuffer, level: f32, scale: u32, t: f64, react: f32) {
         let (w, h) = (fb.width() as usize, fb.height() as usize);
         let g = scale.clamp(25, 400) as f32 / 100.0;
         let tf = (t % 100_000.0) as f32;
-        let amp = (w.min(h) as f32 * 0.045) * g.sqrt();
-        let y0 = h as f32 * (1.0 - level.min(100) as f32 / 100.0);
+        let amp = (w.min(h) as f32 * 0.045) * g.sqrt() * (1.0 + 1.6 * react);
+        let y0 = h as f32 * (1.0 - level.clamp(0.0, 100.0) / 100.0);
         let wl = &self.water_lut;
         let light_theme = self.light;
         let air = if light_theme {
@@ -892,7 +1008,7 @@ impl Effect {
             [a[0] / 2, a[1] / 2, a[2] / 2]
         };
         let px = fb.as_bytes_mut();
-        if level == 0 {
+        if level <= 0.0 {
             for p in px.chunks_exact_mut(3) {
                 p.copy_from_slice(&air);
             }
@@ -938,6 +1054,7 @@ impl Effect {
         };
         let glow_k = if light_theme { 30.0 } else { 90.0 };
         let air_i = [air[0] as i32, air[1] as i32, air[2] as i32];
+        let ray_k = 100 + (react * 130.0) as u32;
         for y in 0..h {
             let yf = y as f32 + 0.5;
             let (o_ray, o_c1, o_c2) = (y * 3 / 10, y * 45 / 100, (h - y) * 7 / 10);
@@ -953,7 +1070,7 @@ impl Effect {
                 let mut c = [b[0] as i32, b[1] as i32, b[2] as i32];
                 // light: caustics (crossing ridges) + rays, weaker with depth
                 let caustic = (c1[x + o_c1] as u32 * c2[x + o_c2] as u32) >> 8;
-                let l = ((caustic * 140 + rays[x + o_ray] as u32 * 100) >> 8) * fade[idx] >> 8;
+                let l = ((caustic * 140 + rays[x + o_ray] as u32 * ray_k) >> 8) * fade[idx] >> 8;
                 let l = l.min(255) as i32;
                 for k in 0..3 {
                     c[k] += (light[k] - c[k]) * l >> 8;
@@ -1020,6 +1137,17 @@ impl Effect {
                 }
             }
         }
+    }
+}
+
+/// Turns the picture upside down (the first row becomes the last).
+fn flip_rows(fb: &mut Framebuffer) {
+    let (w, h) = (fb.width() as usize, fb.height() as usize);
+    let px = fb.as_bytes_mut();
+    let row = w * 3;
+    for y in 0..h / 2 {
+        let (top, bottom) = px.split_at_mut((h - 1 - y) * row);
+        top[y * row..(y + 1) * row].swap_with_slice(&mut bottom[..row]);
     }
 }
 
@@ -1523,7 +1651,7 @@ mod tests {
         // unless the palette itself does: with a smooth palette the biggest
         // horizontal step stays small.
         for style in Style::ALL {
-            if matches!(style, Style::Matrix | Style::Rain | Style::Aquarium | Style::Network | Style::Globe) {
+            if matches!(style, Style::Matrix | Style::Rain | Style::Aquarium | Style::Sea | Style::Ink | Style::Network | Style::Globe) {
                 continue; // glyphs, streaks and the water surface have hard edges by design
             }
             let s = settings(style, "ocean");
@@ -1548,7 +1676,7 @@ mod tests {
         assert_eq!(Style::parse("matrix"), Some(Style::Matrix));
         assert_eq!(Style::parse("CODICE"), Some(Style::Matrix));
         assert_eq!(Style::parse("pioggia"), Some(Style::Rain));
-        assert_eq!(Style::ALL.len(), 9);
+        assert_eq!(Style::ALL.len(), 11);
         for n in ["matrix", "green", "amber", "ambra", "violet", "crimson", "snow", "bianco", "neon"] {
             assert!(Palette::parse(n).is_some(), "{n}");
         }
@@ -1727,6 +1855,169 @@ mod tests {
         let mut f = fb(1920, 462);
         Effect::new().render_at(&mut f, &settings(Style::Aquarium, "lagoon"), Style::Aquarium, 65, 3.0);
         assert!(col_luma(&f, 100, 10) < 100 && col_luma(&f, 100, 300) > 200);
+    }
+
+    #[test]
+    fn sea_and_ink_parse_and_render_everywhere() {
+        for n in ["sea", "MARE"] {
+            assert_eq!(Style::parse(n), Some(Style::Sea), "{n}");
+        }
+        for n in ["ink", "inchiostro"] {
+            assert_eq!(Style::parse(n), Some(Style::Ink), "{n}");
+        }
+        for style in [Style::Sea, Style::Ink] {
+            for (w, h) in [(1920u32, 462u32), (480, 1280), (320, 240), (9, 7)] {
+                for pal in ["lagoon", "deep", "sunset", "neon", "snow"] {
+                    for light in [false, true] {
+                        for level in [0u32, 50, 100] {
+                            let mut st = settings(style, pal);
+                            st.light = light;
+                            st.level = level;
+                            let mut a = fb(w, h);
+                            let mut b = fb(w, h);
+                            Effect::new().render_at(&mut a, &st, style, 65, 5.0);
+                            Effect::new().render_at(&mut b, &st, style, 65, 5.0);
+                            assert!(a.as_bytes() == b.as_bytes(), "{style:?} {w}x{h} {pal} is not a pure function of the time");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn sea_and_ink_move_and_the_light_variant_is_light() {
+        for style in [Style::Sea, Style::Ink] {
+            let st = settings(style, "lagoon");
+            let (mut a, mut b) = (fb(960, 231), fb(960, 231));
+            Effect::new().render_at(&mut a, &st, style, 65, 5.0);
+            Effect::new().render_at(&mut b, &st, style, 65, 9.0);
+            assert!(a.as_bytes() != b.as_bytes(), "{style:?} does not move");
+            let mut still = st.clone();
+            still.speed = 0;
+            let (mut c, mut d) = (fb(960, 231), fb(960, 231));
+            Effect::new().render_at(&mut c, &still, style, 65, 5.0);
+            Effect::new().render_at(&mut d, &still, style, 65, 9.0);
+            assert!(c.as_bytes() == d.as_bytes(), "{style:?} moves at speed 0");
+            let mut l = st.clone();
+            l.light = true;
+            let mut lf = fb(960, 231);
+            Effect::new().render_at(&mut lf, &l, style, 65, 5.0);
+            assert!(avg_luma(&lf) > avg_luma(&a) + 40.0, "{style:?}: light {} dark {}", avg_luma(&lf), avg_luma(&a));
+        }
+    }
+
+    #[test]
+    fn music_moves_the_liquids_only_when_reactive() {
+        for style in [Style::Aquarium, Style::Sea, Style::Ink] {
+            let mut st = settings(style, "lagoon");
+            let render = |st: &Settings, volume: f32| {
+                let mut e = Effect::new();
+                e.set_live(None, volume, true);
+                let mut f = fb(640, 200);
+                e.render_at(&mut f, st, style, 65, 5.0);
+                f.as_bytes().to_vec()
+            };
+            let (quiet, loud) = (render(&st, 0.0), render(&st, 1.0));
+            assert!(quiet == loud, "{style:?} reacts although it is not reactive");
+            st.reactive = true;
+            let (quiet, loud) = (render(&st, 0.0), render(&st, 1.0));
+            assert!(quiet != loud, "{style:?} ignores the music");
+            // silence changes nothing compared with a plain, non-reactive picture
+            st.reactive = false;
+            assert!(render(&st, 0.0) == quiet, "{style:?}: silence changes the picture");
+        }
+    }
+
+    #[test]
+    fn the_water_level_follows_the_load() {
+        // a higher load = more water: the aquarium's water column grows
+        let mut counts = Vec::new();
+        for load in [0.1f32, 0.5, 0.9] {
+            let mut st = settings(Style::Aquarium, "lagoon");
+            st.level_source = LevelSource::Cpu;
+            let mut e = Effect::new();
+            e.set_live(Some(load), 0.0, true);
+            let mut f = fb(400, 300);
+            e.render_at(&mut f, &st, Style::Aquarium, 65, 3.0);
+            let air = [f.as_bytes()[0], f.as_bytes()[1], f.as_bytes()[2]];
+            let b = f.as_bytes();
+            counts.push((0..300usize).filter(|&y| b[(y * 400 + 200) * 3..(y * 400 + 200) * 3 + 3] != air).count());
+        }
+        assert!(counts[0] + 30 < counts[1] && counts[1] + 30 < counts[2], "{counts:?}");
+        // without a load the level of the settings is used
+        let mut st = settings(Style::Aquarium, "lagoon");
+        st.level_source = LevelSource::Cpu;
+        let (mut a, mut b) = (fb(200, 100), fb(200, 100));
+        Effect::new().render_at(&mut a, &st, Style::Aquarium, 65, 3.0);
+        st.level_source = LevelSource::None;
+        Effect::new().render_at(&mut b, &st, Style::Aquarium, 65, 3.0);
+        assert!(a.as_bytes() == b.as_bytes());
+    }
+
+    #[test]
+    fn live_inputs_are_smoothed() {
+        let mut e = Effect::new();
+        e.set_live(Some(0.0), 0.0, true);
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        e.set_live(Some(1.0), 1.0, false);
+        let (l, b) = (e.live_level.unwrap(), e.bass);
+        assert!(l > 0.0 && l < 0.2, "the level jumped to {l}");
+        assert!(b > 0.0 && b < 1.0, "the loudness jumped to {b}");
+        e.set_live(None, 0.0, false);
+        assert_eq!(e.live_level, None);
+        assert!(LevelSource::parse("CPU") == Some(LevelSource::Cpu) && LevelSource::parse("memoria") == Some(LevelSource::Ram));
+        assert!(LevelSource::parse("disk").is_none());
+    }
+
+    #[test]
+    fn sea_and_ink_frame_cost_is_small() {
+        for style in [Style::Sea, Style::Ink] {
+            let st = settings(style, "lagoon");
+            let mut e = Effect::new();
+            let mut f = fb(1920, 462);
+            e.render_at(&mut f, &st, style, 65, 1.0);
+            let t = std::time::Instant::now();
+            for k in 0..10 {
+                e.render_at(&mut f, &st, style, 65, 2.0 + k as f64 * 0.1);
+            }
+            let ms = t.elapsed().as_secs_f64() * 100.0;
+            eprintln!("{style:?}: {ms:.1} ms per frame");
+            assert!(ms < 120.0, "{style:?} takes {ms} ms per frame");
+        }
+    }
+
+    /// With TROFEO_DUMP_DIR set, writes the sea and the ink as PPM files.
+    #[test]
+    fn dump_liquid_previews() {
+        let Ok(dir) = std::env::var("TROFEO_DUMP_DIR") else { return };
+        for (style, pal, light) in [(Style::Sea, "lagoon", false), (Style::Sea, "deep", false), (Style::Sea, "lagoon", true), (Style::Ink, "sunset", false), (Style::Ink, "neon", false), (Style::Ink, "ocean", true)] {
+            let mut st = settings(style, pal);
+            st.light = light;
+            let mut f = fb(1920, 462);
+            Effect::new().render_at(&mut f, &st, style, 65, 12.0);
+            std::fs::write(
+                format!("{dir}/liquid_{style:?}_{pal}_{light}.ppm"),
+                [format!("P6\n{} {}\n255\n", f.width(), f.height()).into_bytes(), f.as_bytes().to_vec()].concat(),
+            )
+            .unwrap();
+        }
+    }
+
+    #[test]
+    fn flipped_aquarium_is_the_same_picture_upside_down() {
+        for (w, h) in [(1920usize, 462usize), (480, 1280), (7, 5)] {
+            let mut a = fb(w as u32, h as u32);
+            let mut b = fb(w as u32, h as u32);
+            let mut st = settings(Style::Aquarium, "lagoon");
+            Effect::new().render_at(&mut a, &st, Style::Aquarium, 65, 4.0);
+            st.flip = true;
+            Effect::new().render_at(&mut b, &st, Style::Aquarium, 65, 4.0);
+            let (pa, pb) = (a.as_bytes(), b.as_bytes());
+            for y in 0..h {
+                assert_eq!(pa[y * w * 3..(y + 1) * w * 3], pb[(h - 1 - y) * w * 3..(h - y) * w * 3], "{w}x{h} row {y}");
+            }
+        }
     }
 
     #[test]
