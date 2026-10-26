@@ -119,6 +119,15 @@ language = en
 # ticker_backdrop = true         # a panel behind the ticker line (default: text_backdrop)
 # ticker_width = 100             # % of the canvas the ticker line can use
 
+# --- New version notice ----------------------------------------------------------
+# Off by default. When on, the program looks on GitHub at start-up (one small request, nothing about
+# your computer is sent, nothing is downloaded) and, if a newer version exists, shows a banner at the
+# bottom of the screen for a few seconds. These three need a restart. "trofeo_lcd --update-demo"
+# shows the banner right away with a made-up version, to see how it looks.
+# update_check = false
+# update_notice_secs = 8         # how long the banner stays (2-120)
+# update_check_hours = 0         # check again every N hours; 0 = only at start-up (max 720)
+
 # --- Brightness ------------------------------------------------------------
 # 0-100 (100 = unchanged). The panel has no known brightness command:
 # the image is darkened in software before being sent.

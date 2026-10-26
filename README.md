@@ -20,7 +20,9 @@ whose driver was rewritten byte-for-byte from
 See **[NOTICE.md](./NOTICE.md)** for the full provenance and a summary of
 what this fork adds on top of the original.
 
-**New in 2.5.1 — a new README section, [Which sensors you need and what to install](#which-sensors-you-need-and-what-to-install)**: what to install for each reading (PawnIO for AMD CPUs, LibreHardwareMonitor for Intel CPUs and the fans, the graphics driver for the card) and what to run when a value is missing.
+**New in 2.6.0 — a notice when a new version is out** (optional, off by default): the program looks on GitHub at start-up and, if a newer version exists, shows a banner at the bottom of the screen for a few seconds. Switch it on in the settings editor (System section) or with `update_check = true`. See [New version notice](#new-version-notice).
+
+**2.5.1 — a new README section, [Which sensors you need and what to install](#which-sensors-you-need-and-what-to-install)**: what to install for each reading (PawnIO for AMD CPUs, LibreHardwareMonitor for Intel CPUs and the fans, the graphics driver for the card) and what to run when a value is missing.
 
 **2.5.0 — the Trofeo Vision 6.86 is confirmed working**, and the other screens of its family
 (USB `0416:5302`) are open to try: other sizes with JPEG pictures, and the small 320×240 screens with RGB565
@@ -244,6 +246,7 @@ The table below covers just the handful of flags that only exist on the command 
 | Option | Purpose | Default |
 |---|---|---|
 | `--idle-fps` / `--active-fps` | FPS when idle / has sound | `2` / `15` |
+| `--update-demo` | Show the [new version banner](#new-version-notice) now, with a made-up version | off |
 | `--no-deepcool` | Turn off DeepCool integration | enabled |
 | `--deepcool-update-ms` | DeepCool send interval (100–2000 ms) | `1000` |
 | `--openrgb-device <NAME>` | Sync color with an OpenRGB device | disabled |
@@ -844,6 +847,26 @@ neighbors). Details inside the CPU/GPU lines can be hidden with
 `mem_unit` (`mb|gb`) set the network and RAM units. `percent_decimals = 1` adds a decimal place to
 every CPU/GPU/RAM usage percentage shown anywhere (`37%` → `37.4%`); default `0` keeps the original
 whole-number look.
+
+### New version notice
+
+![The new version banner](img/update-banner.png)
+
+Off by default. With `update_check = true` the program asks GitHub, **once at start-up**, for the latest
+release of the project (a single small HTTPS request; nothing about your computer is sent, and nothing is
+downloaded or installed). If that release is newer than the version you are running, a banner appears at the
+bottom of the screen, on top of whatever is shown, and disappears by itself. When there is no network, or
+GitHub does not answer, nothing happens and nothing is shown.
+
+```ini
+update_check = true              # false (default) = never connect
+update_notice_secs = 8           # how long the banner stays on screen (2-120)
+update_check_hours = 0           # 0 = only at start-up; 24 = check again every day (max 720)
+```
+
+All three are in the settings editor (System section) and need a restart of `trofeo_lcd`. The banner is in the
+language of `language`. To see how it looks without waiting for a release, start the program with
+`--update-demo`: it pretends that version 99.0.0 exists.
 
 ### Autostart on Windows
 

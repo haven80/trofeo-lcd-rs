@@ -37,6 +37,7 @@ mod spectrum;
 mod frame;
 mod tiles;
 mod ticker;
+mod update;
 mod weather;
 mod weather_icon;
 
@@ -234,6 +235,12 @@ struct Config {
     ticker_source: Option<String>,
     /// How often to re-fetch the ticker sources, in minutes. Restart-required.
     ticker_refresh_min: u32,
+    /// "New version available" notice (`update_check`, off by default). The three keys
+    /// below are read at start-up (restart required): they decide whether the background
+    /// check runs, how often it repeats (0 = only at start-up) and how long the banner stays.
+    update_check: bool,
+    update_check_hours: u32,
+    update_notice_secs: u32,
     /// Background position/fit.
     bg_layout: BgLayout,
     ui: UiOptions,
@@ -340,6 +347,13 @@ fn print_help() {
          \x20\x20                          Requires a restart, like --weather-city.\n\
          \x20\x20ticker_refresh_min <N>   (config-file only) How often to re-fetch, in minutes\n\
          \x20\x20                          (default: 10). Requires a restart.\n\
+         \x20\x20update_check <BOOL>     (config-file only) Look on GitHub, once at start-up, whether\n\
+         \x20\x20                          a newer version exists and show a banner at the bottom of\n\
+         \x20\x20                          the screen if so (default: false). Requires a restart.\n\
+         \x20\x20update_notice_secs <N>  (config-file only) How long the banner stays (2-120, default 8)\n\
+         \x20\x20update_check_hours <N>  (config-file only) Check again every N hours (0 = only at\n\
+         \x20\x20                          start-up, default 0). Requires a restart.\n\
+         \x20\x20--update-demo           Show the banner now with a made-up version, to see it\n\
          \x20\x20--ticker-position <P>    Ticker line position (default: bottom)\n\
          \x20\x20--ticker-size <1-30>     Ticker line text size (default: 3)\n\
          \x20\x20--ticker-color <COLOR>   Ticker line color\n\
@@ -615,6 +629,9 @@ fn parse_args() -> anyhow::Result<Config> {
             "--lcd-test-out" => {
                 args.next().ok_or_else(|| anyhow::anyhow!("--lcd-test-out requires a file path"))?;
             }
+            "--update-demo" => {
+                // Handled in `main()`; only needs to not be rejected here.
+            }
             "--diag" => {
                 // Handled in `main()` after parsing, so it can see `weather_city`;
                 // here it just needs to not be rejected as an unrecognized argument.
@@ -778,12 +795,24 @@ fn parse_args() -> anyhow::Result<Config> {
     if !(1..=1440).contains(&ticker_refresh_min) {
         anyhow::bail!("ticker_refresh_min: must be between 1 and 1440 (minutes)");
     }
+    let update_check = file.get_bool("update_check").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(false);
+    let update_check_hours = file.get_u32("update_check_hours").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(0);
+    if update_check_hours > 720 {
+        anyhow::bail!("update_check_hours: must be between 0 and 720 (0 = only at start-up)");
+    }
+    let update_notice_secs = file.get_u32("update_notice_secs").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(8);
+    if !(2..=120).contains(&update_notice_secs) {
+        anyhow::bail!("update_notice_secs: must be between 2 and 120 (seconds)");
+    }
 
     Ok(Config {
         config_explicit: config_path.clone(),
         weather_city,
         ticker_source,
         ticker_refresh_min,
+        update_check,
+        update_check_hours,
+        update_notice_secs,
         idle_fps,
         active_fps,
         silence_threshold,
@@ -1933,6 +1962,17 @@ fn main() -> anyhow::Result<()> {
     let mut latest_ticker: Vec<String> = Vec::new();
     let mut ticker_marquee = Marquee::new();
 
+    // "New version available" banner (update.rs): off unless `update_check = true` (or the
+    // `--update-demo` flag, which pretends that a newer version exists).
+    let update_monitor = if std::env::args().any(|a| a == "--update-demo") {
+        update::UpdateMonitor::demo("99.0.0")
+    } else if config.update_check {
+        update::UpdateMonitor::spawn(config.update_check_hours)
+    } else {
+        update::UpdateMonitor::off()
+    };
+    let mut update_notice: Option<(String, Instant)> = None;
+
     let audio_ring = audio::spawn_capture()?;
     #[cfg(not(any(windows, target_os = "linux")))]
     println!(
@@ -2031,7 +2071,10 @@ fn main() -> anyhow::Result<()> {
                             || new_cfg.screenshot_key != config.screenshot_key
                             || new_cfg.weather_city != config.weather_city
                             || new_cfg.ticker_source != config.ticker_source
-                            || new_cfg.ticker_refresh_min != config.ticker_refresh_min;
+                            || new_cfg.ticker_refresh_min != config.ticker_refresh_min
+                            || new_cfg.update_check != config.update_check
+                            || new_cfg.update_check_hours != config.update_check_hours
+                            || new_cfg.update_notice_secs != config.update_notice_secs;
                         match build_display(&new_cfg) {
                             Ok(d) => {
                                 resolution = d.resolution;
@@ -2058,7 +2101,7 @@ fn main() -> anyhow::Result<()> {
                                 println!("Configuration reloaded.");
                                 report_config_error("");
                                 if restart_needed {
-                                    println!("(deepcool, fps_monitor, openrgb, hide_console, screenshot_key, weather_city, ticker_source, ticker_source and ticker_refresh_min require a restart)");
+                                    println!("(deepcool, fps_monitor, openrgb, hide_console, screenshot_key, weather_city, ticker_source, ticker_refresh_min and the update_* keys require a restart)");
                                 }
                                 config = new_cfg;
                             }
@@ -2446,6 +2489,18 @@ fn main() -> anyhow::Result<()> {
             let panel = (config.ui.panel_opacity < 100)
                 .then_some((PANEL_KEY, PANEL_COLOR, config.ui.panel_opacity));
             fb.blit_ui(&ui, config.margins.left, config.margins.top, UI_KEY, panel);
+        }
+
+        // The "new version available" banner, on top of everything, for a few seconds.
+        if let Some(v) = update_monitor.take_new() {
+            update_notice = Some((v, Instant::now()));
+        }
+        if let Some((v, since)) = &update_notice {
+            if since.elapsed() < Duration::from_secs(config.update_notice_secs as u64) {
+                draw_update_banner(&mut fb, &update::banner_text(i18n::language(), v, update::CURRENT));
+            } else {
+                update_notice = None;
+            }
         }
 
         // 4) Send to the screen.
@@ -3449,6 +3504,27 @@ fn draw_idle_clock(fb: &mut Framebuffer, color_mode: ColorMode) {
 /// available and `show.ticker` (or `layout_show.ticker` while a panel is
 /// active — see `opts()`) is on. Independent from the dedicated "news"
 /// preset layout, which instead takes over the whole content area.
+/// A bar across the bottom of the screen with one line of text (the "new version available"
+/// notice). Opaque, with a thin accent line on top, so it reads on any background; the text
+/// is as large as fits the width.
+fn draw_update_banner(fb: &mut Framebuffer, text: &str) {
+    let (w, h) = (fb.width(), fb.height());
+    let side = 10u32.min(w / 20);
+    let mut scale = 4u32;
+    while scale > 1 && Framebuffer::text_width(text, scale) + 2 * side + 24 > w {
+        scale -= 1;
+    }
+    let text_h = Framebuffer::text_height(scale) + smooth_extra(scale);
+    let bar_h = (text_h + 24).min(h);
+    let bar_w = w.saturating_sub(2 * side).max(1);
+    let y0 = h.saturating_sub(bar_h + side);
+    fb.fill_rect(side, y0, bar_w, bar_h, 18, 20, 28);
+    fb.fill_rect(side, y0, bar_w, 3, 255, 196, 0);
+    let tw = Framebuffer::text_width(text, scale);
+    let x = side + bar_w.saturating_sub(tw) / 2;
+    fb.draw_text(x, y0 + (bar_h.saturating_sub(text_h)) / 2 + 1, text, 255, 255, 255, scale);
+}
+
 fn draw_ticker_bar(fb: &mut Framebuffer, items: &[String], marquee: &mut Marquee) {
     if items.is_empty() {
         return;
@@ -4569,7 +4645,7 @@ mod layout_tests {
         }
         // every key of the editor is one the program reads from the config file
         let from_cli_or_file = |k: &str| is_override_key(k) || ["orientation", "flip", "panel_size", "background", "background_dim", "ffmpeg", "language",
-            "hid_mount", "hid_header", "color", "silence_threshold", "silence_timeout_ms", "weather_city", "ticker_source", "ticker_refresh_min", "margin", "margin_top", "margin_bottom", "margin_left", "margin_right"].contains(&k);
+            "hid_mount", "hid_header", "color", "silence_threshold", "silence_timeout_ms", "weather_city", "ticker_source", "ticker_refresh_min", "update_check", "update_check_hours", "update_notice_secs", "margin", "margin_top", "margin_bottom", "margin_left", "margin_right"].contains(&k);
         for f in fields() {
             assert!(from_cli_or_file(&f.key), "{} is not a key of the program", f.key);
         }
@@ -4959,6 +5035,29 @@ mod layout_tests {
                 format!("{dir}/it_margin_bg.ppm"),
                 [format!("P6\n{} {}\n255\n", fb.width(), fb.height()).into_bytes(), fb.as_bytes().to_vec()].concat(),
             ).unwrap();
+        }
+    }
+}
+
+#[cfg(test)]
+mod update_banner_tests {
+    use super::*;
+
+    #[test]
+    fn banner_draws_a_bar_at_the_bottom_and_nothing_above() {
+        for (w, h) in [(1920u32, 480u32), (1280, 480), (480, 1280), (320, 240)] {
+            let mut fb = Framebuffer::new(trofeo_lcd::Resolution::new(w, h));
+            draw_update_banner(&mut fb, &update::banner_text(Lang::En, "2.6.0", "2.5.1"));
+            let px = |x: u32, y: u32| {
+                let i = ((y * w + x) * 3) as usize;
+                fb.as_bytes()[i..i + 3].to_vec()
+            };
+            // the top of the screen is untouched, the bottom part has the dark bar
+            assert_eq!(px(w / 2, 0), vec![0, 0, 0], "{w}x{h}");
+            assert_eq!(px(12, h - 12), vec![18, 20, 28], "{w}x{h}");
+            // the text is in white somewhere on the bar
+            let white = (h / 2..h).any(|y| (0..w).any(|x| px(x, y) == vec![255, 255, 255]));
+            assert!(white, "no text on {w}x{h}");
         }
     }
 }

@@ -698,6 +698,13 @@ pub fn fields() -> Vec<Field> {
         .def("0.005")
         .help("Lower = the spectrum reacts to quieter sound", "Più basso = lo spettro reagisce a suoni più bassi"));
     add(Field::new("silence_timeout_ms", "system", "Quiet time before idle (ms)", "Silenzio prima dello stato di riposo (ms)", int(0, 60000)).def("800"));
+    add(Field::new("update_check", "system", "Tell me when a new version is out", "Avvisami quando esce una nuova versione", Bool)
+        .def("false")
+        .restart()
+        .group("update")
+        .help("Looks on GitHub at start-up (one small request) and shows a banner at the bottom of the screen if a newer version exists. Nothing is downloaded.", "Controlla su GitHub all'avvio (una piccola richiesta) e mostra un banner in basso se esiste una versione piu recente. Non scarica nulla."));
+    add(Field::new("update_notice_secs", "system", "Show the banner for (seconds)", "Mostra il banner per (secondi)", int(2, 120)).def("8").restart().group("update").when("update_check", &["true"]));
+    add(Field::new("update_check_hours", "system", "Check again every (hours, 0 = only at start-up)", "Ricontrolla ogni (ore, 0 = solo all'avvio)", int(0, 720)).def("0").restart().group("update").when("update_check", &["true"]));
     add(Field::new("deepcool", "system", "Drive the DeepCool display", "Pilota il display DeepCool", Bool).def("true").restart());
     add(Field::new("deepcool_source", "system", "DeepCool section", "Sezione del display DeepCool", Choice(&["cpu", "gpu", "alternate"]))
         .def("cpu")
@@ -738,6 +745,7 @@ pub fn group_title(group: &str) -> (&str, &str) {
         "news" => ("News ticker", "Notizie scorrevoli"),
         "palette" => ("Colors from the presets", "Colori dai preset"),
         "look" => ("Look", "Aspetto"),
+        "update" => ("New version notice", "Avviso di nuova versione"),
         "sides" => ("Side columns", "Colonne laterali"),
         other => (other, other),
     }

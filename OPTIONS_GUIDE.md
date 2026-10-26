@@ -75,8 +75,8 @@ default.
 ## Requires a restart
 
 Of the options that actually live in `trofeo.conf`, everything reloads live
-*except* `deepcool`, `fps_monitor`, `weather_city`, `ticker_source` and
-`ticker_refresh_min` — change one of these in the file and the program tells
+*except* `deepcool`, `fps_monitor`, `weather_city`, `ticker_source`,
+`ticker_refresh_min` and the three `update_*` keys — change one of these in the file and the program tells
 you on the next reload that a restart is needed, while the rest of the file
 still applies live.
 
@@ -1089,6 +1089,22 @@ lhm_pump = AIO
 tiles = clock:tall, cpu_temp, fans | ram:ring, cpu:ring, cpu_fan:ring, mb_temp
 ```
 
+## New version notice *(restart required)*
+
+When switched on, the program looks on GitHub **once at start-up** (one HTTPS request, nothing is sent about
+your computer, nothing is downloaded) and, if the latest release is newer than the running version, draws a
+banner at the bottom of the screen, over everything else, for a few seconds. No network or no answer: nothing
+happens. In the editor: *System → New version notice*.
+
+| Key | Values | Default |
+|---|---|---|
+| `update_check` | `true` \| `false`: look for a new version | `false` |
+| `update_notice_secs` | how long the banner stays, `2`-`120` seconds | `8` |
+| `update_check_hours` | check again every N hours; `0` = only at start-up; max `720` | `0` |
+
+`trofeo_lcd --update-demo` shows the banner at once with a made-up version, to see how it looks (it works even
+with `update_check = false`).
+
 ## Deck, Cards and Orbit
 
 Three more full screens (`layout = deck`, `cards`, `orbit`). Every key can also be a command-line
@@ -1314,6 +1330,11 @@ nowplaying_width = 45
 weather_city = Milano
 weather_unit = c
 
+# --- New version notice (restart to apply) ---
+# update_check = true
+# update_notice_secs = 8
+# update_check_hours = 0
+
 # --- Ticker (restart to apply ticker_source/ticker_refresh_min) ---
 ticker_source = https://www.ansa.it/sito/ansait_rss.xml
 ticker_refresh_min = 10
@@ -1352,7 +1373,7 @@ mem_unit = gb
 # --- Integrations (restart to apply) ---
 deepcool = true
 fps_monitor = true
-# ticker_source/ticker_refresh_min above also require a restart.
+# ticker_source/ticker_refresh_min and the update_* keys above also require a restart.
 # screenshot hotkey, OpenRGB sync, idle/active FPS, hide_console: command-line
 # only, not trofeo.conf keys — see the sections above.
 ```
