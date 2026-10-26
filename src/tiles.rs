@@ -32,6 +32,7 @@ pub enum Kind {
     CpuWatt,
     Gpu,
     GpuTemp,
+    GpuHotspot,
     GpuWatt,
     Ram,
     Net,
@@ -51,13 +52,13 @@ pub enum Kind {
 }
 
 impl Kind {
-    pub const ALL: [Kind; 20] = [
-        Kind::Clock, Kind::Cpu, Kind::CpuTemp, Kind::CpuWatt, Kind::Gpu, Kind::GpuTemp, Kind::GpuWatt,
+    pub const ALL: [Kind; 21] = [
+        Kind::Clock, Kind::Cpu, Kind::CpuTemp, Kind::CpuWatt, Kind::Gpu, Kind::GpuTemp, Kind::GpuHotspot, Kind::GpuWatt,
         Kind::Ram, Kind::Net, Kind::Disk, Kind::Fps, Kind::Weather, Kind::Music,
         Kind::CpuFan, Kind::CaseFan, Kind::Pump, Kind::GpuFan, Kind::Fans, Kind::MbTemp, Kind::DiskTemp,
     ];
     pub const NAMES: &'static str =
-        "clock, cpu, cpu_temp, cpu_watt, gpu, gpu_temp, gpu_watt, ram, net, disk, fps, weather, music, cpu_fan, case_fan, pump, gpu_fan, fans, mb_temp, disk_temp";
+        "clock, cpu, cpu_temp, cpu_watt, gpu, gpu_temp, gpu_hotspot, gpu_watt, ram, net, disk, fps, weather, music, cpu_fan, case_fan, pump, gpu_fan, fans, mb_temp, disk_temp";
 
     pub fn key(self) -> &'static str {
         match self {
@@ -67,6 +68,7 @@ impl Kind {
             Kind::CpuWatt => "cpu_watt",
             Kind::Gpu => "gpu",
             Kind::GpuTemp => "gpu_temp",
+            Kind::GpuHotspot => "gpu_hotspot",
             Kind::GpuWatt => "gpu_watt",
             Kind::Ram => "ram",
             Kind::Net => "net",
@@ -97,6 +99,7 @@ impl Kind {
             "cpu_watt" | "cpu_power" | "cpu_w" => Kind::CpuWatt,
             "gpu" | "gpu_load" | "gpu_usage" => Kind::Gpu,
             "gpu_temp" | "gputemp" | "gpu_temperature" => Kind::GpuTemp,
+            "gpu_hotspot" | "gpuhotspot" | "gpu_hot_spot" | "hotspot" | "hot_spot" | "gpu_junction" | "junction" => Kind::GpuHotspot,
             "gpu_watt" | "gpu_power" | "gpu_w" => Kind::GpuWatt,
             "ram" | "mem" | "memory" => Kind::Ram,
             "net" | "network" | "rete" => Kind::Net,
@@ -1087,6 +1090,19 @@ fn view(spec: TileSpec, d: &WidgetData, s: &Settings, now: &chrono::DateTime<Loc
                 v.detail = pct(p) + "%";
             }
         }
+        Kind::GpuHotspot => {
+            v.label = "GPU HOTSPOT".into();
+            match d.gpu_hotspot {
+                Some(t) => {
+                    v.value = format!("{t}{deg}");
+                    v.frac = Some(t as f32 / 110.0);
+                }
+                None => v.value = "--".into(),
+            }
+            if let Some(t) = d.gpu_temp {
+                v.detail = format!("EDGE {t}{deg}");
+            }
+        }
         Kind::GpuWatt => {
             v.label = "GPU WATT".into();
             match d.gpu_power {
@@ -1636,7 +1652,7 @@ mod tests {
     fn data() -> WidgetData {
         WidgetData {
             cpu_pct: 37.0, cpu_temp: Some(64.0), cpu_power: Some(88.0), cpu_mhz: Some(4900),
-            gpu_pct: Some(83.0), gpu_temp: Some(71), gpu_power: Some(245), fps: Some(144),
+            gpu_pct: Some(83.0), gpu_temp: Some(71), gpu_hotspot: None, gpu_power: Some(245), fps: Some(144),
             used_mb: 18200, total_mb: 32768, net_kb: (2300.0, 120.0), disk_mb: (35.2, 1.4),
             now_playing: Some("Artist - A very long song title that has to be cut with dots".into()),
             weather: Some(crate::weather::WeatherSnapshot {
@@ -1653,6 +1669,25 @@ mod tests {
 
     fn parse_cfg(txt: &str) -> anyhow::Result<Settings> {
         parse(&ConfigFile::parse(txt).unwrap())
+    }
+
+    #[test]
+    fn the_gpu_hotspot_tile_shows_the_reading_with_the_edge_temperature() {
+        let now = Local::now();
+        let s = Settings::default();
+        let tile = TileSpec { kind: Kind::GpuHotspot, look: Look::Bar, tall: false };
+        let mut d = data();
+        d.gpu_hotspot = Some(83);
+        let v = view(tile, &d, &s, &now);
+        assert_eq!((v.label.as_str(), v.value.as_str()), ("GPU HOTSPOT", "83\u{b0}"));
+        assert_eq!(v.frac, Some(83.0 / 110.0));
+        assert_eq!(v.detail, "EDGE 71\u{b0}");
+        d.gpu_hotspot = None;
+        assert_eq!(view(tile, &d, &s, &now).value, "--");
+        for n in ["gpu_hotspot", "GPU-Hotspot", "hotspot", "gpu_junction"] {
+            assert_eq!(parse_tiles(n).unwrap()[0][0].kind, Kind::GpuHotspot, "{n}");
+        }
+        assert_eq!(Kind::GpuHotspot.key(), "gpu_hotspot");
     }
 
     #[test]

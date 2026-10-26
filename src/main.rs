@@ -2131,10 +2131,15 @@ fn main() -> anyhow::Result<()> {
             if let Some(n) = &nvml {
                 let (t, w, c) = n.sample();
                 if t.is_some() || w.is_some() {
+                    latest_gpu_data.temp_hotspot_c = None; // the AMD value would be the iGPU's
                     latest_gpu_data.temp_edge_c = t;
                     latest_gpu_data.power_w = w;
                     latest_gpu_data.clock_mhz = c;
                 }
+            }
+            // The hot spot: the driver's own reading first, LibreHardwareMonitor's otherwise.
+            if latest_gpu_data.temp_hotspot_c.is_none() {
+                latest_gpu_data.temp_hotspot_c = lhm_now.gpu_hotspot.map(|t| t.round() as i32);
             }
             // The GPU fan: the driver's own reading first, LibreHardwareMonitor's otherwise.
             match latest_gpu_data.fan_rpm {
@@ -2196,6 +2201,7 @@ fn main() -> anyhow::Result<()> {
             cpu_mhz: latest_cpu_mhz,
             gpu_pct: latest_gpu_percent,
             gpu_temp: latest_gpu_data.temp_edge_c,
+            gpu_hotspot: latest_gpu_data.temp_hotspot_c,
             gpu_power: latest_gpu_data.power_w,
             fps: latest_gpu_data.fps,
             used_mb: sys.used_memory() / 1024 / 1024,
@@ -2388,6 +2394,7 @@ fn preview_data() -> (layouts::WidgetData, gpu_amd::GpuAmdData, weather::Weather
         cpu_mhz: Some(4350),
         gpu_pct: Some(46.0),
         gpu_temp: gpu.temp_edge_c,
+        gpu_hotspot: gpu.temp_hotspot_c.or(gpu.temp_edge_c.map(|t| t + 12)),
         gpu_power: gpu.power_w,
         fps: gpu.fps,
         used_mb: 11_800,
@@ -3415,6 +3422,7 @@ fn draw_status_lines(
     let gpu_hw = {
         let mut parts: Vec<String> = Vec::new();
         if let Some(t) = gpu_data.temp_edge_c.filter(|_| sh.gpu_temp) { parts.push(format!("{t}C")); }
+        if let Some(t) = gpu_data.temp_hotspot_c.filter(|_| sh.gpu_hotspot) { parts.push(format!("hot {t}C")); }
         if let Some(w) = gpu_data.power_w.filter(|_| sh.gpu_power) { parts.push(format!("{w}W")); }
         if let Some(r) = gpu_data.fan_rpm.filter(|_| sh.gpu_fan) { parts.push(format!("{r}rpm")); }
         if let Some(c) = gpu_data.clock_mhz.filter(|_| sh.gpu_clock) { parts.push(format_freq_mhz(c.max(0) as u32)); }
@@ -3871,7 +3879,7 @@ mod layout_tests {
         let panel = trofeo_lcd::TROFEO_VISION_11_3;
         let data = layouts::WidgetData {
             cpu_pct: 37.0, cpu_temp: Some(64.0), cpu_power: Some(88.0), cpu_mhz: Some(4900),
-            gpu_pct: Some(83.0), gpu_temp: Some(71), gpu_power: Some(245), fps: Some(144),
+            gpu_pct: Some(83.0), gpu_temp: Some(71), gpu_hotspot: None, gpu_power: Some(245), fps: Some(144),
             used_mb: 18200, total_mb: 32768, net_kb: (2300.0, 120.0), disk_mb: (35.2, 1.4),
             now_playing: Some("Artist - A very long song title".into()),
             weather: Some(weather::WeatherSnapshot {
@@ -3941,7 +3949,7 @@ mod layout_tests {
     fn preset_layouts_render() {
         let data = layouts::WidgetData {
             cpu_pct: 37.0, cpu_temp: Some(64.0), cpu_power: Some(88.0), cpu_mhz: Some(4900),
-            gpu_pct: Some(83.0), gpu_temp: Some(71), gpu_power: Some(245), fps: Some(144),
+            gpu_pct: Some(83.0), gpu_temp: Some(71), gpu_hotspot: None, gpu_power: Some(245), fps: Some(144),
             used_mb: 18200, total_mb: 32768, net_kb: (2300.0, 120.0), disk_mb: (35.2, 1.4),
             now_playing: Some("Artist - A very long song title that has to scroll across the panel".into()),
             weather: Some(weather::WeatherSnapshot {
@@ -3983,7 +3991,7 @@ mod layout_tests {
         }
         let data = layouts::WidgetData {
             cpu_pct: 42.0, cpu_temp: Some(61.0), cpu_power: Some(82.0), cpu_mhz: Some(4700),
-            gpu_pct: Some(76.0), gpu_temp: Some(68), gpu_power: Some(210), fps: Some(120),
+            gpu_pct: Some(76.0), gpu_temp: Some(68), gpu_hotspot: None, gpu_power: Some(210), fps: Some(120),
             used_mb: 16500, total_mb: 32768, net_kb: (1800.0, 95.0), disk_mb: (22.4, 3.1),
             now_playing: Some("Daft Punk - Harder, Better, Faster, Stronger".into()),
             weather: Some(weather::WeatherSnapshot {
@@ -4029,7 +4037,7 @@ mod layout_tests {
     fn panel_opacity_shows_background() {
         let data = layouts::WidgetData {
             cpu_pct: 37.0, cpu_temp: Some(64.0), cpu_power: Some(88.0), cpu_mhz: Some(4900),
-            gpu_pct: Some(83.0), gpu_temp: Some(71), gpu_power: Some(245), fps: Some(144),
+            gpu_pct: Some(83.0), gpu_temp: Some(71), gpu_hotspot: None, gpu_power: Some(245), fps: Some(144),
             used_mb: 18200, total_mb: 32768, net_kb: (2300.0, 120.0), disk_mb: (35.2, 1.4),
             now_playing: None,
             weather: None,

@@ -191,6 +191,8 @@ pub struct WidgetData {
     pub cpu_mhz: Option<u32>,
     pub gpu_pct: Option<f32>,
     pub gpu_temp: Option<i32>,
+    /// GPU hot spot / junction temperature (AMD driver or LibreHardwareMonitor).
+    pub gpu_hotspot: Option<i32>,
     pub gpu_power: Option<i32>,
     pub fps: Option<i32>,
     pub used_mb: u64,

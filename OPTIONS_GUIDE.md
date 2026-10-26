@@ -349,8 +349,9 @@ Element names: `cpu, gpu, uptime, time, date, mem` (or `ram`)`, net, disk,
 volume, nowplaying, weather, spectrum, ticker, clock, clock_date, dashboard`.
 
 Detail fields inside the CPU/GPU lines can also be individually hidden:
-`cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_power, gpu_fan, gpu_clock, gpu_fps`, and the fan speeds
-of [LibreHardwareMonitor](#fans-and-sensors-librehardwaremonitor) in the CPU line: `cpu_fan, case_fan, pump`.
+`cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_hotspot, gpu_power, gpu_fan, gpu_clock, gpu_fps`, and the fan speeds
+of [LibreHardwareMonitor](#fans-and-sensors-librehardwaremonitor) in the CPU line: `cpu_fan, case_fan, pump`. `gpu_hotspot` (the GPU hot spot temperature) is the one detail that is off
+by default: turn it on with `show = gpu_hotspot`.
 
 `show` and `hide` can combine: `show` first restricts to a subset, `hide` then
 removes from what's left.
@@ -994,7 +995,7 @@ layout_interval = 20
 
 | Key | Values | Default |
 |---|---|---|
-| `tiles` | the tiles: `clock cpu cpu_temp cpu_watt gpu gpu_temp gpu_watt ram net disk fps weather music`, and with LibreHardwareMonitor `cpu_fan case_fan pump gpu_fan fans mb_temp disk_temp`, `,` between tiles, `\|` between rows, `:ring` for a ring, `clock:tall` (first tile only) as tall as all the rows; at most 16 | `clock:tall, cpu_temp, gpu_temp \| ram:ring, cpu:ring, gpu:ring` |
+| `tiles` | the tiles: `clock cpu cpu_temp cpu_watt gpu gpu_temp gpu_hotspot gpu_watt ram net disk fps weather music`, and with LibreHardwareMonitor `cpu_fan case_fan pump gpu_fan fans mb_temp disk_temp`, `,` between tiles, `\|` between rows, `:ring` for a ring, `clock:tall` (first tile only) as tall as all the rows; at most 16 | `clock:tall, cpu_temp, gpu_temp \| ram:ring, cpu:ring, gpu:ring` |
 | `tiles_rpm` | a `CPU 1240 / CASE 780 RPM` line on the CPU tiles (needs LibreHardwareMonitor) | `true` |
 | `tiles_fan_max` | the RPM that fills the bar of a fan tile, `500`-`10000` | `2500` |
 | `tiles_font` | `smooth` \| `pixel` | `smooth` |

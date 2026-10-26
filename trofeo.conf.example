@@ -180,7 +180,7 @@ language = en
 #                               # list (no rotation); rotation restarts when the music stops
 
 # --- Tiles (layout = tiles) -----------------------------------------------------
-# Which tiles: clock cpu cpu_temp cpu_watt gpu gpu_temp gpu_watt ram net disk fps weather music
+# Which tiles: clock cpu cpu_temp cpu_watt gpu gpu_temp gpu_hotspot gpu_watt ram net disk fps weather music
 #   and, with LibreHardwareMonitor (see "Fans" below): cpu_fan case_fan pump gpu_fan fans mb_temp disk_temp
 # ("," between tiles, "|" between rows, ":ring" = a ring, "clock:tall" = as tall as all rows).
 # layout = tiles
@@ -402,7 +402,8 @@ language = en
 # nowplaying_width = 40      # % of the screen taken up by the track (avoids covering other items)
 # Turning individual items on/off: show = ... / hide = ... (see above). You can
 # also hide the details inside the CPU and GPU lines:
-#   hide = cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_power, gpu_fan, gpu_clock, gpu_fps, cpu_fan, case_fan, pump
+#   hide = cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_hotspot, gpu_power, gpu_fan, gpu_clock, gpu_fps, cpu_fan, case_fan, pump
+# The GPU hot spot (junction) in the GPU line is off by default:  show = gpu_hotspot
 # Units: network in KB/S (default), MB/S, or auto (KB below 1 MB/S, then MB); RAM in MB or GB
 # net_unit = mb
 # mem_unit = gb

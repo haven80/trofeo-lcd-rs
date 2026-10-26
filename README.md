@@ -562,7 +562,7 @@ tiles_bg_color = #1B2A4A, #4A1B3A
 
 ![tiles looks](img/tiles-looks.png)
 
-Tiles: `clock cpu cpu_temp cpu_watt gpu gpu_temp gpu_watt ram net disk fps weather music`, and, with
+Tiles: `clock cpu cpu_temp cpu_watt gpu gpu_temp gpu_hotspot gpu_watt ram net disk fps weather music`, and, with
 [LibreHardwareMonitor](#fans-and-sensors-librehardwaremonitor), `cpu_fan case_fan pump gpu_fan fans mb_temp disk_temp`.
 Backgrounds: whatever the other screens use (`global`), a color, a gradient, the
 animated effects of [Backgrounds](#backgrounds-solid-color-and-animated-effects)
@@ -682,6 +682,14 @@ fan RPM at the top right (LibreHardwareMonitor).
 
 ![cards: load big](img/cards-load-fan.png)
 
+![tiles with the GPU hot spot](img/tiles-hotspot.png)
+
+**GPU hot spot.** The `gpu_hotspot` tile shows the hottest point of the GPU (junction) with the normal GPU
+temperature under it. On AMD cards it comes from the Radeon driver (ADL), or from
+[LibreHardwareMonitor](#fans-and-sensors-librehardwaremonitor) when the driver does not give it; it is also a small
+reading on the GPU panel of `deck`, `cards` and `orbit`, and in the status line with `show = gpu_hotspot`.
+Not verified on the RX 9070 series yet: `trofeo_lcd --diag` and `--lhm-list` show what is read.
+
 **Light, dark, see-through.** `dash_theme = light` gives a white panel with dark text and pastel cards;
 `dash_plate_color` and `dash_plate` set the colour and the opacity of the panel behind `deck` and `orbit`
 (lower it to see an animated background through it, `0` = no panel) and `cards_opacity` the opacity of the
@@ -766,7 +774,7 @@ turned on/off with `show`/`hide` and styled on its own with `<item>_size` (1-30)
 (3x3 grid), `<item>_color` and `<item>_backdrop`. Setting any of them switches the info block to
 per-item mode (items on the same position stack, and the track scrolls without overlapping its
 neighbors). Details inside the CPU/GPU lines can be hidden with
-`hide = cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_power, gpu_fan, gpu_clock, gpu_fps, cpu_fan, case_fan, pump`.
+`hide = cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_hotspot, gpu_power, gpu_fan, gpu_clock, gpu_fps, cpu_fan, case_fan, pump`.
 `clock_time_size` / `clock_date_size` set the big clock's sizes, and `net_unit` (`kb|mb|auto`) /
 `mem_unit` (`mb|gb`) set the network and RAM units. `percent_decimals = 1` adds a decimal place to
 every CPU/GPU/RAM usage percentage shown anywhere (`37%` → `37.4%`); default `0` keeps the original

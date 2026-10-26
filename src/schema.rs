@@ -141,7 +141,7 @@ pub const SHOW_ITEMS: &[&str] = &[
 ];
 pub const HIDE_ITEMS: &[&str] = &[
     "cpu", "gpu", "uptime", "time", "date", "mem", "net", "disk", "volume", "nowplaying", "weather", "spectrum", "ticker", "clock",
-    "clock_date", "dashboard", "cpu_freq", "cpu_temp", "cpu_power", "gpu_temp", "gpu_power", "gpu_fan", "gpu_clock", "gpu_fps",
+    "clock_date", "dashboard", "cpu_freq", "cpu_temp", "cpu_power", "gpu_temp", "gpu_hotspot", "gpu_power", "gpu_fan", "gpu_clock", "gpu_fps",
     "cpu_fan", "case_fan", "pump",
 ];
 pub const SPECTRUM_STYLES: &[&str] = &["bars", "led", "peaks", "area", "mirror", "all"];
@@ -203,6 +203,7 @@ pub const TILE_KINDS: &[(&str, &str, &str)] = &[
     ("cpu_watt", "CPU power", "Consumo CPU"),
     ("gpu", "GPU load", "Carico GPU"),
     ("gpu_temp", "GPU temperature", "Temperatura GPU"),
+    ("gpu_hotspot", "GPU hot spot", "Hot spot GPU"),
     ("gpu_watt", "GPU power", "Consumo GPU"),
     ("ram", "RAM", "RAM"),
     ("net", "Network", "Rete"),

@@ -89,6 +89,8 @@ pub struct Show {
     pub cpu_temp: bool,
     pub cpu_power: bool,
     pub gpu_temp: bool,
+    /// GPU hot spot temperature in the GPU line (off unless asked: `show = gpu_hotspot`).
+    pub gpu_hotspot: bool,
     pub gpu_power: bool,
     pub gpu_fan: bool,
     pub gpu_clock: bool,
@@ -111,13 +113,13 @@ impl Show {
             cpu: v, gpu: v, uptime: v, time: v, date: v, mem: v, net: v, disk: v,
             volume: v, nowplaying: v, weather: v, spectrum: v, ticker: v, clock: v, clock_date: v, dashboard: v,
             cpu_freq: true, cpu_temp: true, cpu_power: true,
-            gpu_temp: true, gpu_power: true, gpu_fan: true, gpu_clock: true, gpu_fps: true,
+            gpu_temp: true, gpu_hotspot: false, gpu_power: true, gpu_fan: true, gpu_clock: true, gpu_fps: true,
             cpu_fan: true, case_fan: true, pump: true,
         }
     }
 
     pub const NAMES: &'static str =
-        "cpu, gpu, uptime, time, date, mem, net, disk, volume, nowplaying, weather, spectrum, ticker, clock, clock_date, dashboard, cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_power, gpu_fan, gpu_clock, gpu_fps, cpu_fan, case_fan, pump";
+        "cpu, gpu, uptime, time, date, mem, net, disk, volume, nowplaying, weather, spectrum, ticker, clock, clock_date, dashboard, cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_hotspot, gpu_power, gpu_fan, gpu_clock, gpu_fps, cpu_fan, case_fan, pump";
 
     fn slot(&mut self, name: &str) -> Option<&mut bool> {
         Some(match name {
@@ -141,6 +143,7 @@ impl Show {
             "cpu_temp" => &mut self.cpu_temp,
             "cpu_power" | "cpu_watt" => &mut self.cpu_power,
             "gpu_temp" => &mut self.gpu_temp,
+            "gpu_hotspot" | "gpu_hot_spot" | "hotspot" | "gpu_junction" => &mut self.gpu_hotspot,
             "gpu_power" | "gpu_watt" => &mut self.gpu_power,
             "gpu_fan" => &mut self.gpu_fan,
             "gpu_clock" | "gpu_mhz" => &mut self.gpu_clock,

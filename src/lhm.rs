@@ -399,6 +399,8 @@ pub struct Readings {
     pub case_fan: Option<u32>,
     pub pump: Option<u32>,
     pub gpu_fan: Option<u32>,
+    /// The GPU's hottest point (hot spot / junction), °C.
+    pub gpu_hotspot: Option<f32>,
     pub mb_temp: Option<f32>,
     pub disk_temp: Option<f32>,
     /// CPU package temperature / power, for CPUs the program's own sensor does not know.
@@ -430,6 +432,7 @@ impl Readings {
             case_fan: Some(780),
             pump: Some(2650),
             gpu_fan: Some(1480),
+            gpu_hotspot: Some(79.0),
             mb_temp: Some(38.0),
             disk_temp: Some(44.0),
             cpu_temp: None,
@@ -511,6 +514,14 @@ pub fn derive(sensors: &[Sensor], f: &Filters) -> Readings {
                 .map(|s| s.value as f32)
         }
     };
+    r.gpu_hotspot = temps(Class::Gpu)
+        .iter()
+        .filter(|s| {
+            let n = s.name.to_ascii_lowercase().replace(['_', '-'], " ");
+            (n.contains("hot spot") || n.contains("hotspot") || n.contains("junction")) && !n.contains("memory")
+        })
+        .map(|s| s.value as f32)
+        .reduce(f32::max);
     r.disk_temp = temps(Class::Storage).iter().map(|s| s.value as f32).reduce(f32::max);
 
     let cpu_t = temps(Class::Cpu);
@@ -699,6 +710,7 @@ static SHARED: Mutex<Readings> = Mutex::new(Readings {
     case_fan: None,
     pump: None,
     gpu_fan: None,
+    gpu_hotspot: None,
     mb_temp: None,
     disk_temp: None,
     cpu_temp: None,
@@ -735,6 +747,7 @@ pub fn diag(url: &str, filters: &Filters) -> bool {
     println!("  Case fans  : {}   (lhm_case_fan, the average of the others)", fan(r.case_fan));
     println!("  Pump       : {}   (lhm_pump)", fan(r.pump));
     println!("  GPU fan    : {}", fan(r.gpu_fan));
+    println!("  GPU hot spot: {}", temp(r.gpu_hotspot));
     println!("  Motherboard: {}   (lhm_mb_temp)", temp(r.mb_temp));
     println!("  Hottest drive: {}", temp(r.disk_temp));
     println!("  CPU (fallback for CPUs the program cannot read): {} / {}", temp(r.cpu_temp), r.cpu_power.map_or("-".to_string(), |p| format!("{p:.0} W")));
@@ -868,6 +881,25 @@ mod tests {
         assert_eq!(r.cpu_power.map(|t| t.round()), Some(61.0));
         assert!(r.any_fan());
         assert_eq!(r.fan_rows(), vec![("CPU", 1240), ("Case", 780), ("Pump", 2650), ("GPU", 1480)]);
+    }
+
+    #[test]
+    fn the_amd_hot_spot_is_found_and_the_memory_junction_is_not_mistaken_for_it() {
+        let json = r#"{"id":0,"Text":"Sensor","Min":"Min","Value":"Value","Max":"Max","ImageURL":"","Children":[
+          {"id":1,"Text":"AMD Radeon RX 9070 XT","Min":"","Value":"","Max":"","ImageURL":"images_icon/amd.png","Children":[
+            {"id":2,"Text":"Temperatures","Min":"","Value":"","Max":"","ImageURL":"images_icon/temperature.png","Children":[
+              {"id":3,"Text":"GPU Core","Min":"","Value":"61,0 \u00b0C","Max":"","ImageURL":"","SensorId":"/gpu-amd/0/temperature/0","Type":"Temperature","Children":[]},
+              {"id":4,"Text":"GPU Hot Spot","Min":"","Value":"78,0 \u00b0C","Max":"","ImageURL":"","SensorId":"/gpu-amd/0/temperature/1","Type":"Temperature","Children":[]},
+              {"id":5,"Text":"GPU Memory Junction","Min":"","Value":"90,0 \u00b0C","Max":"","ImageURL":"","SensorId":"/gpu-amd/0/temperature/2","Type":"Temperature","Children":[]}
+            ]}
+          ]}
+        ]}"#;
+        let s = parse_sensors(json).unwrap();
+        assert!(s.iter().all(|x| x.class == Class::Gpu), "{:?}", s.iter().map(|x| x.class).collect::<Vec<_>>());
+        assert_eq!(derive(&s, &Filters::default()).gpu_hotspot, Some(78.0));
+        // a card without one has none
+        let s = parse_sensors(NEW_JSON).unwrap();
+        assert_eq!(derive(&s, &Filters::default()).gpu_hotspot, None);
     }
 
     #[test]

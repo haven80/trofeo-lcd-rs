@@ -532,6 +532,9 @@ fn panel(kind: PKind, d: &WidgetData, hw: &lhm::Readings, s: &Settings, ts: &til
             }
             if let Some(w) = d.gpu_power {
                 p.stats.push(stat("POWER", w.to_string(), "W"));
+                if let Some(h) = d.gpu_hotspot {
+                    p.stats.push(stat("HOTSPOT", h.to_string(), deg));
+                }
                 p.rings.push(Ring { label: "POWER".into(), frac: w as f32 / ts.gpu_watt_max as f32 });
             }
             if let Some(r) = hw.gpu_fan {
@@ -1336,7 +1339,7 @@ mod tests {
     fn data() -> WidgetData {
         WidgetData {
             cpu_pct: 37.0, cpu_temp: Some(64.0), cpu_power: Some(88.0), cpu_mhz: Some(4900),
-            gpu_pct: Some(83.0), gpu_temp: Some(71), gpu_power: Some(245), fps: Some(144),
+            gpu_pct: Some(83.0), gpu_temp: Some(71), gpu_hotspot: None, gpu_power: Some(245), fps: Some(144),
             used_mb: 18200, total_mb: 32768, net_kb: (2300.0, 120.0), disk_mb: (35.2, 1.4),
             now_playing: Some("Artist - A very long song title that has to be cut with dots".into()),
             weather: Some(crate::weather::WeatherSnapshot {
