@@ -10,8 +10,8 @@
 **A lightweight, open-source alternative to the official Thermalright TRCC
 software.** Audio visualizer + system info monitor for the
 **Thermalright Trofeo Vision 9.16 LCD** (USB `0416:5408`, "LY" protocol) and
-the **Trofeo Vision 11.3 LCD** (1920×400, same USB ID and protocol) and, new and not yet verified
-on real hardware, the **Trofeo Vision 6.86 LCD** (1280×480, USB `0416:5302`) — see
+the **Trofeo Vision 11.3 LCD** (1920×400, same USB ID and protocol) and the
+**Trofeo Vision 6.86 LCD** (1280×480, USB `0416:5302`, confirmed by its users) — see
 [Supported panels](#supported-panels).
 
 This project is a fork of [sukualam/trofeo-lcd](https://github.com/sukualam/trofeo-lcd),
@@ -20,9 +20,12 @@ whose driver was rewritten byte-for-byte from
 See **[NOTICE.md](./NOTICE.md)** for the full provenance and a summary of
 what this fork adds on top of the original.
 
-**New in 2.1.0 — experimental support for the Trofeo Vision 6.86** (1280×480, USB `0416:5302`):
-see [Supported panels](#supported-panels). It has not been verified on real hardware yet, so it comes with a
-test pattern (`--lcd-test`) to find the right orientation.
+**New in 2.5.1 — a new README section, [Which sensors you need and what to install](#which-sensors-you-need-and-what-to-install)**: what to install for each reading (PawnIO for AMD CPUs, LibreHardwareMonitor for Intel CPUs and the fans, the graphics driver for the card) and what to run when a value is missing.
+
+**2.5.0 — the Trofeo Vision 6.86 is confirmed working**, and the other screens of its family
+(USB `0416:5302`) are open to try: other sizes with JPEG pictures, and the small 320×240 screens with RGB565
+pictures. The settings editor has a **screen test** (Screen section) that finds the orientation for you, and the
+program can also be started with `--lcd-test`. See [Supported panels](#supported-panels).
 
 The display **adapts automatically to what your computer is doing** — no
 manual switching needed. The Trofeo LCD shows one of these views below
@@ -116,11 +119,61 @@ cargo build --release
 `trofeo_screen` (second-monitor mode) and `trofeo_config` (the settings editor).
 
 **Windows** — to read AMD CPU temp/power, install
-[PawnIO](https://github.com/namazso/PawnIO) and run as Administrator.
+[PawnIO](https://github.com/namazso/PawnIO) and run as Administrator. Intel CPUs, fans and a few
+other readings need LibreHardwareMonitor instead — see
+[Which sensors you need and what to install](#which-sensors-you-need-and-what-to-install).
 
 **Linux** — needs `pkg-config` + PulseAudio headers to build, and
 `playerctl` for song titles. For USB access without `sudo`, install
 `99-trofeo-lcd.rules` (see the file's contents).
+
+### Which sensors you need and what to install
+
+Most readings work on their own. A few need a helper program, and which one depends on your
+hardware. If a value shows `N/A`, stays empty, or a tile never appears, find it in this table.
+
+| What | Needs | What to install |
+|---|---|---|
+| CPU load, frequency, RAM, network, disk, clock, weather, music | nothing | nothing |
+| **NVIDIA** graphics card (temperature, load, power, fan, memory) | the NVIDIA driver | the normal NVIDIA driver (it contains `nvml.dll`) |
+| **AMD Radeon** graphics card (temperature, load, power, fan, hot spot) | the Radeon driver | the normal AMD Adrenalin driver |
+| **AMD Ryzen** CPU temperature and power | PawnIO + Administrator | [PawnIO](https://github.com/namazso/PawnIO), then start the program **as administrator** |
+| **Intel** CPU temperature and power | LibreHardwareMonitor | see below |
+| Fans (CPU, case, pump), motherboard and disk temperature, GPU hot spot | LibreHardwareMonitor | see below |
+| Any CPU the built-in reader does not know (it covers Ryzen Zen 1 to 4; if `--diag` says `Sensor chosen: none`) | LibreHardwareMonitor | see below |
+
+**Do Intel users have to use LibreHardwareMonitor?** For the **CPU temperature and power on
+Windows, yes.** The program's own CPU sensor reads AMD Ryzen only, so on an Intel CPU those two
+values stay empty until LibreHardwareMonitor provides them. Everything else (CPU load and
+frequency, RAM, network, disk, and the graphics card) does not need it. On **Linux** the CPU
+temperature of an Intel processor is not read at all, and LibreHardwareMonitor does not exist
+there, so those two values stay empty.
+
+**Setting up LibreHardwareMonitor (Windows), once:**
+
+1. Download [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases)
+   and unzip it anywhere.
+2. Start it **as administrator** (right click → *Run as administrator*). Without administrator
+   rights it cannot read the sensors.
+3. Open *Options → Remote Web Server → Run*. The default port is `8085`; if you change it, set
+   `lhm_url` to match (see [Fans and sensors](#fans-and-sensors-librehardwaremonitor)).
+4. Leave it running, it can sit in the tray. Tick *Run on Windows Startup* and
+   *Start Minimized* in its *Options* menu if you want it to start with the PC.
+
+Nothing else to configure: when the program sees the web server it takes the CPU temperature and
+power from it (only when its own sensor has nothing, so AMD users with PawnIO are not affected),
+plus the fans, motherboard and disk temperature and the GPU hot spot.
+
+**If a value is still missing:**
+
+- `trofeo_lcd --diag` prints what the program's own sensors find: the NVIDIA card, the Radeon card and the CPU sensor it picked (`Sensor chosen: none` on an Intel CPU, which is normal and means LibreHardwareMonitor is needed).
+- `trofeo_lcd --lhm-list` prints everything LibreHardwareMonitor reports and which sensor each
+  role uses. If the list is empty, the web server is not running (step 3) or is on another port.
+  If your board names a sensor differently, point the role at it with `lhm_cpu_fan = "Fan #2"`
+  and the other `lhm_*` keys.
+- A tile can only show what it is told to: check that the item is in `tiles`, `show` or the
+  screen you picked (the settings editor lists them all).
+- Two programs cannot drive the same screen: close the vendor software (TRCC) first.
 
 ### Settings editor (`trofeo_config`)
 
@@ -194,7 +247,7 @@ The table below covers just the handful of flags that only exist on the command 
 | `--no-deepcool` | Turn off DeepCool integration | enabled |
 | `--deepcool-update-ms` | DeepCool send interval (100–2000 ms) | `1000` |
 | `--openrgb-device <NAME>` | Sync color with an OpenRGB device | disabled |
-| `--lcd-test` | Trofeo Vision 6.86 only: shows 8 test pictures (5 s each) to find `hid_mount` / `hid_header`, then exits | off |
+| `--lcd-test` | `0416:5302` screens (Trofeo Vision 6.86 ...): shows numbered test pictures (5 s each), asks which one is upright and writes `hid_mount` / `hid_header` into `trofeo.conf` (the settings editor has a button for it) | off |
 | `--weather-city <NAME>` | Fixed city for the weather module | auto (IP-based) |
 | `--hide-console` | Hide the console window (Windows) | disabled |
 | `-k, --screenshot-key` | Global hotkey to save the current LCD frame as a lossless PNG screenshot (f1-f12, printscreen) | off |
@@ -208,16 +261,28 @@ The table below covers just the handful of flags that only exist on the command 
 | Trofeo Vision 11.3 | 1920×400 | recognised automatically, or `panel = trofeo-11.3` |
 | Trofeo Vision 6.86 | 1280×480 | recognised automatically (USB `0416:5302`), or `panel = trofeo-6.86` |
 
-**Trofeo Vision 6.86 (new, to be tested).** It is a different device: USB ID `0416:5302` and the
-"HID Type 2" protocol (a 20-byte header plus a JPEG, sent in 512-byte reports), taken from the
+**Trofeo Vision 6.86 (confirmed working).** It is a different device from the 9.16": USB ID `0416:5302`
+and the "HID Type 2" protocol (a 20-byte header plus a JPEG, sent in 512-byte reports), taken from the
 open-source [thermalright-trcc-linux](https://github.com/Lexonight1/thermalright-trcc-linux) project.
-It has **not been verified on real hardware by this project**. On the first run, close the vendor
-program (TRCC) and start `trofeo_lcd --lcd-test`: it shows eight test pictures, five seconds
-each, with the corners named. Note the number of the one that is upright and set its two values in
-`trofeo.conf` (`hid_mount = 0 | 90 | 180 | 270`, `hid_header = raster | panel`). The console prints what the screen
-answers (model bytes and size) — please paste it in an issue if something does not work. On Linux install
-`99-trofeo-lcd.rules` (it now includes the 6.86); the screens that need RGB565 pictures (the small
-320×240 ones) are not supported.
+It is recognised by itself and works as it is for most units. If the picture comes out turned, rotated or
+partial, find the right orientation with the **screen test**: close the vendor program (TRCC), open the settings
+editor, go to **Screen** and press *Start the screen test*. Numbered pictures appear on the screen; click the
+number of the one that is upright (readable text, `TOP LEFT` in the top left corner) and press Save. The same
+test runs from the command line with `trofeo_lcd --lcd-test` (it asks for the number and writes the values into
+`trofeo.conf`). The values are `hid_mount = 0 | 90 | 180 | 270` and `hid_header = raster | panel`; they apply live.
+The console prints what the screen answers (model bytes and size) — please paste it in an issue if something does
+not work. On Linux install `99-trofeo-lcd.rules` (it includes the 6.86).
+
+![the screen test in the settings editor](img/editor-screen-test.png)
+
+**Other screens of the same family (`0416:5302`, not verified).** The model is read from the screen at start-up and
+the picture size follows it, so other Vision screens that take JPEG pictures should work the same way (the
+console prints the model bytes and size; if a model is not in the program's table, set `panel_size`). The small
+**320×240** screens take **RGB565** pictures (a 240×320 raster): they are supported too, with `hid_mount` (90 or
+270) and `hid_rgb565 = little | big` found by the same screen test (4 pictures). Not supported: the screens that
+do not answer the handshake (some Frozen Warframe SE units restart on it) and the 320×320 RGB565 model.
+If you have one of these screens, tell us whether it works — see
+[the options](./OPTIONS_GUIDE.md#trofeo-vision-686-usb-04165302).
 
 The 11.3" panel uses the same USB ID (`0416:5408`) and the same handshake as the
 9.16", so it is **recognised automatically** from the handshake (byte 20 of the

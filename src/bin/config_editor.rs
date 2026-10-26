@@ -22,6 +22,186 @@ use trofeo_lcd::schema::{self, Field, Kind};
 /// The commented example shipped with the program: the starting point of a new file.
 const EXAMPLE: &str = include_str!("../../trofeo.conf.example");
 
+// ------------------------------------------------------------------------ screen test
+
+enum TestMsg {
+    /// How many pictures the test shows, and whether the screen takes RGB565.
+    Cases(usize, bool),
+    Failed(String),
+}
+
+/// The orientation test of the HID screens (`trofeo_lcd --lcd-test-loop`), driven from the window:
+/// the program shows numbered pictures on the screen, the user clicks the number of the upright one.
+struct LcdTest {
+    child: Option<std::process::Child>,
+    rx: Option<mpsc::Receiver<TestMsg>>,
+    cases: usize,
+    rgb565: bool,
+    message: Option<(String, bool)>,
+}
+
+impl LcdTest {
+    fn new() -> LcdTest {
+        LcdTest { child: None, rx: None, cases: 0, rgb565: false, message: None }
+    }
+
+    fn running(&self) -> bool {
+        self.child.is_some()
+    }
+
+    fn stop(&mut self) {
+        if let Some(mut c) = self.child.take() {
+            let _ = c.kill();
+            let _ = c.wait();
+        }
+    }
+
+    fn start(&mut self, exe: &Path, text: &str, workdir: &Path) {
+        self.stop();
+        self.cases = 0;
+        self.message = None;
+        let conf = std::env::temp_dir().join(format!("trofeo_config_{}_test.conf", std::process::id()));
+        if let Err(e) = std::fs::write(&conf, text) {
+            self.message = Some((format!("cannot write the temporary file: {e}"), true));
+            return;
+        }
+        let mut cmd = std::process::Command::new(exe);
+        cmd.arg("--config").arg(&conf).arg("--lcd-test-loop").stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
+        if workdir.is_dir() {
+            cmd.current_dir(workdir);
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        }
+        match cmd.spawn() {
+            Ok(mut child) => {
+                let (tx, rx) = mpsc::channel();
+                if let Some(out) = child.stdout.take() {
+                    let tx = tx.clone();
+                    std::thread::spawn(move || {
+                        use std::io::BufRead;
+                        for line in std::io::BufReader::new(out).lines().map_while(Result::ok) {
+                            let mut w = line.split_whitespace();
+                            if w.next() == Some("CASES") {
+                                if let (Some(n), Some(enc)) = (w.next().and_then(|n| n.parse().ok()), w.next()) {
+                                    let _ = tx.send(TestMsg::Cases(n, enc == "RGB565"));
+                                }
+                            }
+                        }
+                    });
+                }
+                if let Some(err) = child.stderr.take() {
+                    std::thread::spawn(move || {
+                        use std::io::BufRead;
+                        let lines: Vec<String> = std::io::BufReader::new(err).lines().map_while(Result::ok).collect();
+                        if let Some(l) = lines.iter().find(|l| !l.trim().is_empty() && !l.starts_with("Stack backtrace")) {
+                            let _ = tx.send(TestMsg::Failed(l.trim_start_matches("Error: ").to_string()));
+                        }
+                    });
+                }
+                self.child = Some(child);
+                self.rx = Some(rx);
+            }
+            Err(e) => self.message = Some((format!("cannot run {}: {e}", exe.display()), true)),
+        }
+    }
+
+    /// Takes what the program said and notices when it has ended.
+    fn poll(&mut self) {
+        if let Some(rx) = &self.rx {
+            while let Ok(m) = rx.try_recv() {
+                match m {
+                    TestMsg::Cases(n, rgb) => {
+                        self.cases = n;
+                        self.rgb565 = rgb;
+                    }
+                    TestMsg::Failed(e) => self.message = Some((e, true)),
+                }
+            }
+        }
+        if let Some(c) = &mut self.child {
+            if let Ok(Some(_)) = c.try_wait() {
+                self.child = None;
+            }
+        }
+    }
+}
+
+impl Drop for LcdTest {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
+/// The box of the "Screen" section: start the test, click the upright picture.
+fn lcd_test_box(ui: &mut egui::Ui, test: &mut LcdTest, ed: &mut Ed, exe: Option<&Path>, workdir: &Path, l: Lang) {
+    ui.add_space(10.0);
+    ui.label(RichText::new(tr(l, "Screen test (Trofeo Vision 6.86 and the other 0416:5302 screens)", "Test dello schermo (Trofeo Vision 6.86 e gli altri schermi 0416:5302)")).strong().color(Color32::from_rgb(140, 190, 255)));
+    ui.separator();
+    ui.label(RichText::new(tr(
+        l,
+        "Close the vendor program (TRCC) and the main program first. The test shows numbered pictures on the screen; click the number of the one that is upright (readable text, TOP LEFT in the top left corner). The mounting is filled in for you: then press Save.",
+        "Chiudi prima il programma del produttore (TRCC) e il programma principale. Il test mostra sullo schermo delle immagini numerate; clicca il numero di quella dritta (testo leggibile, TOP LEFT in alto a sinistra). Il montaggio viene compilato da solo: poi premi Salva.",
+    )).weak().small());
+    ui.add_space(4.0);
+    if test.running() {
+        ui.ctx().request_repaint_after(Duration::from_millis(200));
+        if test.cases == 0 {
+            ui.label(tr(l, "Starting the test...", "Avvio del test..."));
+        } else {
+            ui.label(tr(l, "Look at the screen. The picture changes every 4 seconds; its number is written on it.", "Guarda lo schermo. L'immagine cambia ogni 4 secondi; il numero è scritto sopra."));
+            let enc = if test.rgb565 { trofeo_lcd::hid2::Encoding::Rgb565 } else { trofeo_lcd::hid2::Encoding::Jpeg };
+            let cases = trofeo_lcd::hid2::test_cases(enc);
+            let mut picked = None;
+            ui.horizontal_wrapped(|ui| {
+                ui.label(tr(l, "The upright one is:", "Quella dritta è:"));
+                for (i, c) in cases.iter().enumerate() {
+                    if ui.button(format!("  {}  ", i + 1)).on_hover_text(format!("hid_mount = {}", c.mount.degrees())).clicked() {
+                        picked = Some(*c);
+                    }
+                }
+            });
+            if let Some(c) = picked {
+                ed.set("hid_mount", &c.mount.degrees().to_string());
+                if test.rgb565 {
+                    ed.set("hid_rgb565", if c.big_endian { "big" } else { "little" });
+                    ed.bufs.remove("hid_rgb565");
+                } else {
+                    ed.set("hid_header", if c.header_panel { "panel" } else { "raster" });
+                    ed.bufs.remove("hid_header");
+                }
+                ed.bufs.remove("hid_mount");
+                test.stop();
+                test.message = Some((tr(l, "Done: the values are filled in above. Press Save.", "Fatto: i valori sono compilati qui sopra. Premi Salva.").to_string(), false));
+            }
+        }
+        if ui.button(tr(l, "Stop the test", "Ferma il test")).clicked() {
+            test.stop();
+        }
+    } else {
+        ui.horizontal(|ui| {
+            let enabled = exe.is_some();
+            if ui.add_enabled(enabled, egui::Button::new(tr(l, "Start the screen test", "Avvia il test dello schermo"))).clicked() {
+                if let Some(exe) = exe {
+                    test.start(exe, &ed.doc.to_text(), workdir);
+                }
+            }
+            if !enabled {
+                ui.colored_label(Color32::from_rgb(255, 190, 90), tr(l, "trofeo_lcd was not found next to this program.", "trofeo_lcd non è stato trovato accanto a questo programma."));
+            }
+        });
+    }
+    if let Some((m, err)) = &test.message {
+        if *err {
+            ui.colored_label(Color32::from_rgb(255, 120, 120), m);
+        } else {
+            ui.colored_label(Color32::from_rgb(120, 220, 140), m);
+        }
+    }
+}
+
 // ------------------------------------------------------------------------ language
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -907,6 +1087,7 @@ struct App {
     screenshot: Option<PathBuf>,
     frames: u32,
     shot_requested: bool,
+    lcd_test: LcdTest,
 }
 
 fn default_path() -> PathBuf {
@@ -939,6 +1120,7 @@ impl App {
             screenshot,
             frames: 0,
             shot_requested: false,
+            lcd_test: LcdTest::new(),
         };
         app.load(&path);
         app
@@ -1268,6 +1450,9 @@ impl App {
             }
         }
         self.pv_section = self.section.clone();
+        let show_test = self.section == "screen";
+        let exe = self.preview.exe.clone();
+        let workdir = self.path.parent().map(Path::to_path_buf).unwrap_or_default();
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             let mut last_group = "";
             for f in &fields {
@@ -1287,6 +1472,10 @@ impl App {
                     }
                 }
                 field_row(ui, &mut self.ed, f, l);
+                if show_test && f.key == "hid_rgb565" {
+                    lcd_test_box(ui, &mut self.lcd_test, &mut self.ed, exe.as_deref(), &workdir, l);
+                    ui.add_space(8.0);
+                }
             }
         });
     }
@@ -1348,6 +1537,7 @@ impl eframe::App for App {
             self.save();
         }
         self.drive_preview(ctx);
+        self.lcd_test.poll();
 
         egui::TopBottomPanel::top("bar").show(ctx, |ui| self.top_bar(ui));
         egui::TopBottomPanel::bottom("status").show(ctx, |ui| {
@@ -1442,6 +1632,46 @@ fn main() -> eframe::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    fn fake_exe(name: &str, body: &str) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let p = std::env::temp_dir().join(format!("{name}_{}.sh", std::process::id()));
+        std::fs::write(&p, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        p
+    }
+
+    #[cfg(unix)]
+    fn wait_for(t: &mut LcdTest, done: impl Fn(&LcdTest) -> bool) {
+        for _ in 0..100 {
+            t.poll();
+            if done(t) {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        panic!("the test program did not answer in time");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_screen_test_reads_the_cases_and_the_errors_of_the_program() {
+        let ok = fake_exe("trofeo_fake_ok", "echo 'CASES 4 RGB565'\nsleep 5");
+        let mut t = LcdTest::new();
+        t.start(&ok, "", Path::new("."));
+        assert!(t.running());
+        wait_for(&mut t, |t| t.cases == 4);
+        assert!(t.rgb565);
+        t.stop();
+        assert!(!t.running());
+        let bad = fake_exe("trofeo_fake_bad", "echo 'Error: the screen did not answer' >&2\nexit 1");
+        t.start(&bad, "", Path::new("."));
+        wait_for(&mut t, |t| t.message.is_some());
+        assert_eq!(t.message.as_ref().map(|m| m.0.as_str()), Some("the screen did not answer"));
+        let _ = std::fs::remove_file(ok);
+        let _ = std::fs::remove_file(bad);
+    }
 
     #[test]
     fn layout_list_round_trip() {

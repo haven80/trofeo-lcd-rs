@@ -337,14 +337,20 @@ pub fn fields() -> Vec<Field> {
     add(Field::new("hid_mount", "screen", "Mounting of the 6.86 screen", "Montaggio dello schermo 6.86", Choice(&["auto", "0", "90", "180", "270"]))
         .def("auto")
         .help(
-            "Trofeo Vision 6.86 (USB 0416:5302) only: turns the picture by this many degrees for the way the panel is mounted. Run trofeo_lcd --lcd-test to find the right value",
-            "Solo Trofeo Vision 6.86 (USB 0416:5302): ruota l'immagine di questi gradi in base al montaggio del pannello. Avvia trofeo_lcd --lcd-test per trovare il valore giusto",
+            "Trofeo Vision 6.86 (USB 0416:5302): turns the picture by this many degrees for the way the panel is mounted. Use the screen test below (or trofeo_lcd --lcd-test) to find the right value",
+            "Trofeo Vision 6.86 (USB 0416:5302): ruota l'immagine di questi gradi in base al montaggio del pannello. Usa il test dello schermo qui sotto (o trofeo_lcd --lcd-test) per trovare il valore giusto",
         ));
     add(Field::new("hid_header", "screen", "Size written for the 6.86", "Dimensione scritta per il 6.86", Choice(&["raster", "panel"]))
         .def("raster")
         .help(
-            "Trofeo Vision 6.86 only: the size in the frame header is that of the picture sent (raster) or the panel's own (panel). Changed only if --lcd-test shows a partial picture",
-            "Solo Trofeo Vision 6.86: la dimensione nell'intestazione è quella dell'immagine inviata (raster) o quella del pannello (panel). Da cambiare solo se --lcd-test mostra un'immagine parziale",
+            "JPEG screens of the 0416:5302 family (Trofeo Vision 6.86): the size in the frame header is that of the picture sent (raster) or the panel's own (panel). Changed only if --lcd-test shows a partial picture",
+            "Schermi JPEG della famiglia 0416:5302 (Trofeo Vision 6.86): la dimensione nell'intestazione è quella dell'immagine inviata (raster) o quella del pannello (panel). Da cambiare solo se --lcd-test mostra un'immagine parziale",
+        ));
+    add(Field::new("hid_rgb565", "screen", "Pixel order of the small screens", "Ordine dei pixel degli schermi piccoli", Choice(&["auto", "little", "big"]))
+        .def("auto")
+        .help(
+            "Only the small 320x240 screens of the 0416:5302 family (RGB565 pictures; not verified on hardware): the byte order of the pixels. Use the screen test to find it",
+            "Solo gli schermi piccoli 320x240 della famiglia 0416:5302 (immagini RGB565; non verificati su hardware): l'ordine dei byte dei pixel. Usa il test dello schermo per trovarlo",
         ));
     add(Field::new("brightness", "screen", "Brightness", "Luminosità", int(0, 100)).def("100"));
     add(Field::new("language", "screen", "Language of the display", "Lingua del display", Choice(LANGUAGES)).def("en"));

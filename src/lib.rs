@@ -246,6 +246,10 @@ pub struct Handshake {
     /// HID family: write the panel's own size in the frame header instead of the size of the
     /// picture actually sent (`hid_header = panel`).
     pub header_panel_size: bool,
+    /// HID family: the small screens take RGB565 pictures (a 240x320 raster) instead of JPEG.
+    pub rgb565: bool,
+    /// RGB565 pixels in big-endian order.
+    pub big_endian: bool,
 }
 
 /// Screen resolution in pixels.
@@ -550,6 +554,8 @@ impl LyLcd {
             native: None,
             mount: Rotation::R0,
             header_panel_size: false,
+            rgb565: false,
+            big_endian: false,
         })
     }
 
@@ -580,9 +586,16 @@ impl LyLcd {
                     native,
                     mount: hid2::default_mount(id.pm, id.sub),
                     header_panel_size: false,
+                    rgb565: hid2::encoding_for(id.pm) == Some(hid2::Encoding::Rgb565),
+                    big_endian: hid2::default_big_endian(id.pm),
                 });
             }
             last = buf;
+        }
+        if last.is_empty() {
+            return Err(LcdError::Hid(
+                "the screen did not answer the handshake (close the vendor program TRCC; some Frozen Warframe SE units restart on the handshake and are not supported yet)".into(),
+            ));
         }
         Err(LcdError::BadHandshake(last))
     }
@@ -683,6 +696,15 @@ impl LyLcd {
         } else {
             src
         };
+        if self.variant == Variant::Hid2 && handshake.rgb565 {
+            if (src.width(), src.height()) != (hid2::RGB565_WIDTH, hid2::RGB565_HEIGHT) {
+                return Err(LcdError::Hid(format!(
+                    "this screen takes a {}x{} raster but the picture is {}x{}: set hid_mount to 90 or 270",
+                    hid2::RGB565_WIDTH, hid2::RGB565_HEIGHT, src.width(), src.height()
+                )));
+            }
+            return self.write_frame_hid(&hid2::build_frame_rgb565(src.as_bytes(), handshake.big_endian));
+        }
         // Photo/video backgrounds can exceed the firmware's 450 KB limit:
         // in that case, retry with lower quality instead of failing.
         let mut q = quality.clamp(1, 100);

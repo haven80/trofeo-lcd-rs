@@ -3,9 +3,11 @@
 //!
 //! The protocol comes from the open-source `thermalright-trcc-linux` project
 //! (GPL-3.0, `adapters/device/hid_lcd.py` and `doc/PROTOCOL_USBLCDNEW.md`), which in turn
-//! documents what the vendor's Windows program (TRCC / USBLCDNEW) sends. **It has not been
-//! verified on real hardware by this project** — that is why the program prints what the
-//! screen answers and has a test pattern (`--lcd-test`) to find the right orientation.
+//! documents what the vendor's Windows program (TRCC / USBLCDNEW) sends. **Confirmed on the
+//! Trofeo Vision 6.86 by its users** (JPEG pictures). The other models of the family (other
+//! sizes with JPEG, and the small 320x240 screens with RGB565) follow the same documentation but
+//! have not been verified. The program prints what the screen answers and has a test pattern
+//! (`--lcd-test`) to find the right orientation.
 //!
 //! Wire summary:
 //! - Handshake: 512 bytes `DA DB DC DD` + zeros, command `01` at byte 12. The reply starts
@@ -14,8 +16,8 @@
 //! - Frame: a 20-byte header + the JPEG, padded to a multiple of 512 bytes and written as
 //!   512-byte reports (the firmware latches a frame only when it arrives in such pieces).
 //!   Header: `DA DB DC DD | 02 00 | 00 00 | width LE16 | height LE16 | 02 00 00 00 | length LE32`.
-//!   (`00 00` at bytes 6-7 means JPEG; `01 00` is the RGB565 mode of the small 320x240 screens,
-//!   which this program does not use.)
+//!   (`00 00` at bytes 6-7 means JPEG; `01 00` is the RGB565 mode of the small 320x240 screens:
+//!   the header then says 240x320 and the data is a 240x320 raster of 16-bit pixels.)
 
 use crate::Resolution;
 
@@ -79,15 +81,41 @@ pub fn resolution_for(pm: u8, sub: u8) -> Option<Resolution> {
     Some(Resolution::new(w, h))
 }
 
-/// Models that take RGB565 instead of JPEG: not supported by this program.
-pub fn needs_rgb565(pm: u8) -> bool {
-    matches!(pm, 5 | 32 | 50)
+/// How a model takes its pictures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Encoding {
+    Jpeg,
+    /// 16-bit pixels of a 240x320 raster (the small 320x240 screens).
+    Rgb565,
 }
+
+/// The encoding of a model, or `None` when this program cannot drive it (PM 32, a 320x320
+/// RGB565 screen whose frame header is not documented).
+pub fn encoding_for(pm: u8) -> Option<Encoding> {
+    match pm {
+        32 => None,
+        5 | 50 => Some(Encoding::Rgb565),
+        _ => Some(Encoding::Jpeg),
+    }
+}
+
+/// RGB565 screens have the byte order of the model: PM 50 (SPI mode 2) is big-endian.
+pub fn default_big_endian(pm: u8) -> bool {
+    pm == 50
+}
+
+/// The raster of an RGB565 picture, as the header declares it.
+pub const RGB565_WIDTH: u32 = 240;
+pub const RGB565_HEIGHT: u32 = 320;
 
 /// How the panel is mounted, from the SUB byte: the 6.86" with SUB = 2 wants the picture
 /// turned by 90° (other projects found the landscape/portrait swapped without it). The right
 /// direction can differ from unit to unit: `hid_mount` overrides it, `--lcd-test` finds it.
 pub fn default_mount(pm: u8, sub: u8) -> crate::Rotation {
+    // the small screens are a 240x320 raster: the landscape picture is turned to fit it
+    if encoding_for(pm) == Some(Encoding::Rgb565) {
+        return crate::Rotation::R90;
+    }
     match (resolution_for(pm, sub), sub) {
         (Some(r), 2) if r == Resolution::new(1280, 480) => crate::Rotation::R90,
         _ => crate::Rotation::R0,
@@ -115,6 +143,61 @@ pub fn build_frame(width: u16, height: u16, jpeg: &[u8]) -> Vec<u8> {
     let padded = f.len().div_ceil(REPORT_SIZE) * REPORT_SIZE;
     f.resize(padded, 0);
     f
+}
+
+/// The 20-byte header of an RGB565 frame (mode `01 00`, 240x320, `len` bytes of pixels).
+pub fn frame_header_rgb565(len: u32) -> [u8; HEADER_SIZE] {
+    let mut h = frame_header(RGB565_WIDTH as u16, RGB565_HEIGHT as u16, len);
+    h[6] = 0x01;
+    h
+}
+
+/// RGB888 pixels (`rgb`, 3 bytes each) as RGB565, row by row.
+pub fn rgb565_bytes(rgb: &[u8], big_endian: bool) -> Vec<u8> {
+    let mut out = Vec::with_capacity(rgb.len() / 3 * 2);
+    for p in rgb.chunks_exact(3) {
+        let v = ((p[0] as u16 & 0xF8) << 8) | ((p[1] as u16 & 0xFC) << 3) | (p[2] as u16 >> 3);
+        out.extend_from_slice(&if big_endian { v.to_be_bytes() } else { v.to_le_bytes() });
+    }
+    out
+}
+
+/// Header + RGB565 pixels of a 240x320 picture, padded to a multiple of 512 bytes.
+pub fn build_frame_rgb565(rgb: &[u8], big_endian: bool) -> Vec<u8> {
+    let px = rgb565_bytes(rgb, big_endian);
+    let mut f = Vec::with_capacity(HEADER_SIZE + px.len() + REPORT_SIZE);
+    f.extend_from_slice(&frame_header_rgb565(px.len() as u32));
+    f.extend_from_slice(&px);
+    let padded = f.len().div_ceil(REPORT_SIZE) * REPORT_SIZE;
+    f.resize(padded, 0);
+    f
+}
+
+/// One picture of the orientation test (`--lcd-test`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TestCase {
+    pub mount: crate::Rotation,
+    /// JPEG screens: the size in the header is the panel's own, not the picture's.
+    pub header_panel: bool,
+    /// RGB565 screens: big-endian pixels.
+    pub big_endian: bool,
+}
+
+/// The pictures of the test, in the order they are shown (numbered from 1): JPEG screens try
+/// the four mounts with each header size (8); RGB565 screens need a 240x320 raster, so they try the
+/// two mounts that give one with each byte order (4).
+pub fn test_cases(enc: Encoding) -> Vec<TestCase> {
+    use crate::Rotation::*;
+    match enc {
+        Encoding::Jpeg => [false, true]
+            .into_iter()
+            .flat_map(|header_panel| [R0, R90, R180, R270].into_iter().map(move |mount| TestCase { mount, header_panel, big_endian: false }))
+            .collect(),
+        Encoding::Rgb565 => [false, true]
+            .into_iter()
+            .flat_map(|big_endian| [R90, R270].into_iter().map(move |mount| TestCase { mount, header_panel: false, big_endian }))
+            .collect(),
+    }
 }
 
 #[cfg(test)]
@@ -155,7 +238,9 @@ mod tests {
         assert_eq!(resolution_for(1, 48), Some(Resolution::new(1600, 720)));
         assert_eq!(resolution_for(1, 7), None);
         assert_eq!(resolution_for(99, 0), None);
-        assert!(needs_rgb565(32) && !needs_rgb565(128));
+        assert_eq!(encoding_for(128), Some(Encoding::Jpeg));
+        assert_eq!(encoding_for(5), Some(Encoding::Rgb565));
+        assert_eq!(encoding_for(32), None);
     }
 
     #[test]
@@ -194,5 +279,36 @@ mod tests {
                 assert_eq!(ours[i], capture[i], "byte {i}");
             }
         }
+    }
+
+    #[test]
+    fn an_rgb565_header_is_the_capture_of_the_320x240_screen_exactly() {
+        let capture: [u8; 20] = [0xDA, 0xDB, 0xDC, 0xDD, 2, 0, 1, 0, 0xF0, 0, 0x40, 1, 2, 0, 0, 0, 0, 0x58, 2, 0];
+        assert_eq!(frame_header_rgb565(153_600), capture);
+    }
+
+    #[test]
+    fn pixels_become_16_bits_in_the_order_asked() {
+        let rgb = [255u8, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255];
+        assert_eq!(rgb565_bytes(&rgb, false), vec![0x00, 0xF8, 0xE0, 0x07, 0x1F, 0x00, 0xFF, 0xFF]);
+        assert_eq!(rgb565_bytes(&rgb, true), vec![0xF8, 0x00, 0x07, 0xE0, 0x00, 0x1F, 0xFF, 0xFF]);
+        let full = vec![0u8; (RGB565_WIDTH * RGB565_HEIGHT * 3) as usize];
+        let f = build_frame_rgb565(&full, false);
+        assert_eq!(f.len(), (20 + 153_600usize).div_ceil(512) * 512);
+        assert_eq!(&f[..20], &frame_header_rgb565(153_600));
+    }
+
+    #[test]
+    fn the_test_has_8_pictures_for_jpeg_and_4_for_rgb565() {
+        use crate::Rotation::*;
+        let j = test_cases(Encoding::Jpeg);
+        assert_eq!(j.len(), 8);
+        assert_eq!((j[0].mount, j[0].header_panel), (R0, false));
+        assert_eq!((j[5].mount, j[5].header_panel), (R90, true));
+        let r = test_cases(Encoding::Rgb565);
+        assert_eq!(r.len(), 4);
+        assert!(r.iter().all(|c| matches!(c.mount, R90 | R270)));
+        assert_eq!((r[2].mount, r[2].big_endian), (R90, true));
+        assert_eq!(default_mount(5, 0), R90);
     }
 }

@@ -203,6 +203,8 @@ struct Config {
     hid_mount: Option<trofeo_lcd::Rotation>,
     /// HID screens: write the panel's own size in the frame header (`hid_header = panel`).
     hid_header_panel: bool,
+    /// HID screens with RGB565 pictures: `Some(true)` = big-endian pixels, `None` = by model.
+    hid_big_endian: Option<bool>,
     /// Margins (px) to keep the interface away from the screen edges.
     margins: Margins,
     language: Lang,
@@ -303,9 +305,10 @@ fn print_help() {
          \x20\x20                          Default: ENABLED.\n\
          \x20\x20--deepcool-update-ms <N>   Interval for sending data to the DeepCool display, ms\n\
          \x20\x20                          (100-2000; default: {DEFAULT_DEEPCOOL_UPDATE_MS})\n\
-         \x20\x20--lcd-test               Trofeo Vision 6.86 (0416:5302): shows 8 test pictures to find\n\
-         \x20\x20                          the right hid_mount / hid_header, then exits\n\
-         \x20\x20--hid-mount <D>          6.86: auto | 0 | 90 | 180 | 270 (degrees); --hid-header raster|panel\n\
+         \x20\x20--lcd-test               Screens 0416:5302 (Trofeo Vision 6.86 ...): shows numbered test\n\
+         \x20\x20                          pictures, asks which is upright, writes hid_mount/hid_header\n\
+         \x20\x20--hid-mount <D>          0416:5302: auto | 0 | 90 | 180 | 270 (degrees); --hid-header\n\
+         \x20\x20                          raster|panel; --hid-rgb565 auto|little|big (small screens)\n\
          \x20\x20--orientation <O>       'landscape' (default) or 'portrait' (screen mounted upright)\n\
          \x20\x20--panel <MODEL>         trofeo-9.16 (default, 1920x462) or trofeo-11.3 (1920x400)\n\
          \x20\x20--panel-size <WxH>      Picture size in pixels for any other panel (e.g. 1920x440)\n\
@@ -606,8 +609,11 @@ fn parse_args() -> anyhow::Result<Config> {
             "--lhm-list" => {
                 // Handled in `main()` after parsing (needs the lhm_* settings).
             }
-            "--lcd-test" => {
+            "--lcd-test" | "--lcd-test-loop" => {
                 // Handled in `main()` after the handshake.
+            }
+            "--lcd-test-out" => {
+                args.next().ok_or_else(|| anyhow::anyhow!("--lcd-test-out requires a file path"))?;
             }
             "--diag" => {
                 // Handled in `main()` after parsing, so it can see `weather_city`;
@@ -730,6 +736,13 @@ fn parse_args() -> anyhow::Result<Config> {
         Some(v) if v == "panel" => true,
         Some(v) => anyhow::bail!("hid_header: '{v}' not valid (raster | panel)"),
     };
+    let hid_big_endian = match file.get("hid_rgb565").map(|v| v.trim().to_ascii_lowercase()) {
+        None => None,
+        Some(v) if v == "auto" || v.is_empty() => None,
+        Some(v) if v == "little" => Some(false),
+        Some(v) if v == "big" => Some(true),
+        Some(v) => anyhow::bail!("hid_rgb565: '{v}' not valid (auto | little | big)"),
+    };
     if let Some(p) = &file.path {
         println!("Config file: {}", p.display());
     }
@@ -788,6 +801,7 @@ fn parse_args() -> anyhow::Result<Config> {
         flip,
         hid_mount,
         hid_header_panel,
+        hid_big_endian,
         margins,
         language,
         background,
@@ -1584,52 +1598,132 @@ fn hex_head(b: &[u8], n: usize) -> String {
     b.iter().take(n).map(|x| format!("{x:02x}")).collect::<Vec<_>>().join(" ")
 }
 
-/// `--lcd-test` (HID screens): shows a test picture with its corners named, for every
-/// combination of `hid_mount` and `hid_header`, five seconds each. The one that looks right
-/// (text readable, TOP-LEFT in the top left corner) gives the values for trofeo.conf.
-fn run_lcd_test(lcd: &LyLcd, hs: &mut trofeo_lcd::Handshake, panel: trofeo_lcd::Resolution) -> anyhow::Result<()> {
+/// `--lcd-test` (HID screens): shows a test picture with its corners named for every
+/// combination of `hid_mount` and `hid_header` (RGB565 screens: of mount and byte order), five
+/// seconds each. The one that looks right (text readable, TOP-LEFT in the top left corner) is
+/// the answer:
+/// - alone, the program then asks for the number and writes the values into trofeo.conf;
+/// - with `--lcd-test-loop` (the settings editor) it cycles until it is stopped and prints
+///   `CASES n JPEG|RGB565` first, so the editor can show the numbers and apply the choice;
+/// - with `--lcd-test-out FILE` the choice is written to FILE instead of trofeo.conf.
+fn run_lcd_test(
+    lcd: &LyLcd,
+    hs: &mut trofeo_lcd::Handshake,
+    panel: trofeo_lcd::Resolution,
+    looping: bool,
+    out: Option<std::path::PathBuf>,
+    config_path: Option<&std::path::Path>,
+) -> anyhow::Result<()> {
+    use trofeo_lcd::hid2;
     use trofeo_lcd::Rotation;
+    let enc = if hs.rgb565 { hid2::Encoding::Rgb565 } else { hid2::Encoding::Jpeg };
+    let cases = hid2::test_cases(enc);
+    let n_cases = cases.len();
+    println!("CASES {n_cases} {}", if hs.rgb565 { "RGB565" } else { "JPEG" });
     println!();
     println!("LCD test: every 5 seconds the picture changes. Note the number of the one that is upright");
     println!("(readable text, 'TOP LEFT' in the top left corner, the arrow pointing right).");
-    let mounts = [Rotation::R0, Rotation::R90, Rotation::R180, Rotation::R270];
-    let mut n = 0;
-    for header_panel in [false, true] {
-        for m in mounts {
-            n += 1;
-            hs.mount = m;
-            hs.header_panel_size = header_panel;
-            hs.rotation = Rotation::R0;
-            hs.brightness = 100;
-            let label = format!("{n}/8  hid_mount = {}  hid_header = {}", m.degrees(), if header_panel { "panel" } else { "raster" });
-            println!("  {label}");
-            let mut fb = Framebuffer::new(panel);
-            let (w, h) = (panel.width, panel.height);
-            fb.clear(16, 20, 40);
-            fb.fill_rect(0, 0, w, 6, 255, 200, 0);
-            fb.fill_rect(0, h - 6, w, 6, 0, 200, 255);
-            fb.fill_rect(0, 0, 6, h, 255, 60, 60);
-            fb.fill_rect(w - 6, 0, 6, h, 60, 255, 60);
-            fb.fill_rect(10, 10, 80, 80, 255, 60, 60);
-            fb.draw_text(110, 24, "TOP LEFT", 255, 255, 255, 5);
-            let bw = Framebuffer::text_width("BOTTOM RIGHT", 5);
-            fb.draw_text(w.saturating_sub(bw + 24), h.saturating_sub(70), "BOTTOM RIGHT", 255, 255, 255, 5);
-            fb.draw_text(w / 2 - 220, h / 2 - 40, "-----> RIGHT", 255, 255, 0, 6);
-            fb.draw_text(w / 2 - 300, h / 2 + 40, &label, 200, 200, 200, 3);
-            let t = Instant::now();
-            while t.elapsed() < Duration::from_secs(5) {
-                lcd.send_framebuffer(hs, &fb, 80)?;
-                std::thread::sleep(Duration::from_millis(100));
+    let show = |hs: &mut trofeo_lcd::Handshake, i: usize, secs: u64| -> anyhow::Result<()> {
+        let c = cases[i];
+        hs.mount = c.mount;
+        hs.header_panel_size = c.header_panel;
+        hs.big_endian = c.big_endian;
+        hs.rotation = Rotation::R0;
+        hs.brightness = 100;
+        let label = if hs.rgb565 {
+            format!("{}/{n_cases}  hid_mount = {}  hid_rgb565 = {}", i + 1, c.mount.degrees(), if c.big_endian { "big" } else { "little" })
+        } else {
+            format!("{}/{n_cases}  hid_mount = {}  hid_header = {}", i + 1, c.mount.degrees(), if c.header_panel { "panel" } else { "raster" })
+        };
+        println!("  {label}");
+        let mut fb = Framebuffer::new(panel);
+        let (w, h) = (panel.width, panel.height);
+        let big = (w / 200).clamp(2, 6);
+        let small = (big / 2).max(1);
+        let bar = (h / 80).max(3);
+        fb.clear(16, 20, 40);
+        fb.fill_rect(0, 0, w, bar, 255, 200, 0);
+        fb.fill_rect(0, h - bar, w, bar, 0, 200, 255);
+        fb.fill_rect(0, 0, bar, h, 255, 60, 60);
+        fb.fill_rect(w - bar, 0, bar, h, 60, 255, 60);
+        fb.fill_rect(bar + 2, bar + 2, h / 6, h / 6, 255, 60, 60);
+        fb.draw_text(h / 6 + bar * 2 + 6, bar + 6, "TOP LEFT", 255, 255, 255, big);
+        let bw = Framebuffer::text_width("BOTTOM RIGHT", big);
+        fb.draw_text(w.saturating_sub(bw + bar + 6), h.saturating_sub(Framebuffer::text_height(big) + bar + 6), "BOTTOM RIGHT", 255, 255, 255, big);
+        let aw = Framebuffer::text_width("-----> RIGHT", big);
+        fb.draw_text(w.saturating_sub(aw) / 2, h / 2 - Framebuffer::text_height(big), "-----> RIGHT", 255, 255, 0, big);
+        let lw = Framebuffer::text_width(&label, small);
+        fb.draw_text(w.saturating_sub(lw) / 2, h / 2 + Framebuffer::text_height(big), &label, 200, 200, 200, small);
+        let t = Instant::now();
+        while t.elapsed() < Duration::from_secs(secs) {
+            lcd.send_framebuffer(hs, &fb, 80)?;
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        Ok(())
+    };
+    if looping {
+        loop {
+            for i in 0..n_cases {
+                show(hs, i, 4)?;
             }
         }
     }
-    println!("Done. Put the numbers of the right picture in trofeo.conf, e.g.:  hid_mount = 90   hid_header = raster");
-    Ok(())
+    let stdin = std::io::stdin();
+    loop {
+        for i in 0..n_cases {
+            show(hs, i, 5)?;
+        }
+        println!();
+        println!("Number of the upright picture (1-{n_cases}), Enter to show them again, q to quit:");
+        let mut line = String::new();
+        if stdin.read_line(&mut line).unwrap_or(0) == 0 {
+            return Ok(()); // no keyboard (started without a console)
+        }
+        let t = line.trim();
+        if t.eq_ignore_ascii_case("q") {
+            return Ok(());
+        }
+        let Some(c) = t.parse::<usize>().ok().filter(|n| (1..=n_cases).contains(n)).map(|n| cases[n - 1]) else {
+            continue;
+        };
+        let mut values: Vec<(&str, String)> = vec![("hid_mount", c.mount.degrees().to_string())];
+        if hs.rgb565 {
+            values.push(("hid_rgb565", if c.big_endian { "big" } else { "little" }.to_string()));
+        } else {
+            values.push(("hid_header", if c.header_panel { "panel" } else { "raster" }.to_string()));
+        }
+        if let Some(path) = &out {
+            let text: String = values.iter().map(|(k, v)| format!("{k} = {v}\n")).collect();
+            std::fs::write(path, text)?;
+            println!("Chosen: {}", values.iter().map(|(k, v)| format!("{k} = {v}")).collect::<Vec<_>>().join(", "));
+            return Ok(());
+        }
+        let path = trofeo_lcd::config::ConfigFile::find_path(config_path).unwrap_or_else(|| {
+            std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join("trofeo.conf"))).unwrap_or_else(|| "trofeo.conf".into())
+        });
+        let old = std::fs::read_to_string(&path).unwrap_or_default();
+        let mut doc = trofeo_lcd::conf_edit::ConfDoc::parse(&old);
+        for (k, v) in &values {
+            doc.set(k, v);
+        }
+        if path.is_file() {
+            let _ = std::fs::copy(&path, path.with_extension("conf.bak"));
+        }
+        std::fs::write(&path, doc.to_text())?;
+        println!("Written to {}: {}", path.display(), values.iter().map(|(k, v)| format!("{k} = {v}")).collect::<Vec<_>>().join(", "));
+        println!("Start trofeo_lcd normally now.");
+        return Ok(());
+    }
 }
 
 fn main() -> anyhow::Result<()> {
     let diag_mode = std::env::args().any(|a| a == "--diag");
     let lcd_test = std::env::args().any(|a| a == "--lcd-test");
+    let lcd_test_loop = std::env::args().any(|a| a == "--lcd-test-loop");
+    let lcd_test_out: Option<std::path::PathBuf> = {
+        let v: Vec<String> = std::env::args().collect();
+        v.iter().position(|a| a == "--lcd-test-out").and_then(|i| v.get(i + 1)).map(std::path::PathBuf::from)
+    };
     let lhm_list = std::env::args().any(|a| a == "--lhm-list");
     let mut config = parse_args()?;
     if lhm_list {
@@ -1676,14 +1770,21 @@ fn main() -> anyhow::Result<()> {
     hs.brightness = config.brightness;
     println!("Connected: {:?}, PM={} SUB={}", lcd.variant(), hs.pm, hs.sub);
     let hid_default_mount = hs.mount;
+    let hid_default_big_endian = hs.big_endian;
     if lcd.variant() == trofeo_lcd::Variant::Hid2 {
         println!("HID screen (0416:5302): handshake reply {}", hex_head(&hs.raw_response, 40));
         match hs.native {
             Some(r) => println!("  model PM={} SUB={} -> picture {}x{}", hs.pm, hs.sub, r.width, r.height),
             None => println!("  model PM={} SUB={} is not in the table: using the panel size of the configuration (panel_size)", hs.pm, hs.sub),
         }
-        if trofeo_lcd::hid2::needs_rgb565(hs.pm) {
-            anyhow::bail!("this HID screen (PM={}) takes RGB565 pictures, which this program does not send yet. Please report the model.", hs.pm);
+        if trofeo_lcd::hid2::encoding_for(hs.pm).is_none() {
+            anyhow::bail!("this HID screen (model PM={}) is not supported yet. Please report the model.", hs.pm);
+        }
+        if hs.rgb565 {
+            println!("  this screen takes RGB565 pictures (a 240x320 raster): not verified on hardware: use the screen test (--lcd-test)");
+            if let Some(big) = config.hid_big_endian {
+                hs.big_endian = big;
+            }
         }
         hs.mount = config.hid_mount.unwrap_or(hid_default_mount);
         hs.header_panel_size = config.hid_header_panel;
@@ -1698,11 +1799,11 @@ fn main() -> anyhow::Result<()> {
                 config.panel = r;
             }
         }
-        if lcd_test {
-            return run_lcd_test(&lcd, &mut hs, config.panel);
+        if lcd_test || lcd_test_loop {
+            return run_lcd_test(&lcd, &mut hs, config.panel, lcd_test_loop, lcd_test_out, config.config_explicit.as_deref());
         }
-    } else if lcd_test {
-        anyhow::bail!("--lcd-test is for the HID screens (Trofeo Vision 6.86, USB 0416:5302)");
+    } else if lcd_test || lcd_test_loop {
+        anyhow::bail!("--lcd-test is for the HID screens (Trofeo Vision 6.86 and family, USB 0416:5302)");
     }
     trofeo_lcd::set_detected_panel(trofeo_lcd::panel_from_handshake(&hs.raw_response));
     if config.panel_auto {
@@ -1950,6 +2051,9 @@ fn main() -> anyhow::Result<()> {
                                 if lcd.variant() == trofeo_lcd::Variant::Hid2 {
                                     hs.mount = new_cfg.hid_mount.unwrap_or(hid_default_mount);
                                     hs.header_panel_size = new_cfg.hid_header_panel;
+                                    if hs.rgb565 {
+                                        hs.big_endian = new_cfg.hid_big_endian.unwrap_or(hid_default_big_endian);
+                                    }
                                 }
                                 println!("Configuration reloaded.");
                                 report_config_error("");
