@@ -5,6 +5,10 @@ which in turn is based on the byte-for-byte protocol reverse-engineering done
 in [thermalright-trcc-linux](https://github.com/Lexonight1/thermalright-trcc-linux)
 by Lexonight1.
 
+The support for the Trofeo Vision 6.86 (`src/hid2.rs`, the HID Type 2 protocol: handshake,
+model table, frame header) is adapted from `adapters/device/hid_lcd.py` and the protocol notes of
+thermalright-trcc-linux (GPL-3.0) by Lexonight1, and has not been verified on real hardware.
+
 It is distributed, like the projects above, under the
 **[GNU GPL v3.0-or-later](./LICENSE)**. Modifying and redistributing this
 software is welcome and encouraged under the terms of that license — this

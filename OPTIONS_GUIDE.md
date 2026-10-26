@@ -90,6 +90,22 @@ to be command-line only too, but are now also `trofeo.conf` keys
 (`silence_threshold`, `silence_timeout_ms`) that apply live, like everything
 else in the file — the CLI flags still work and take priority if both are set.
 
+## Trofeo Vision 6.86 (USB 0416:5302)
+
+New and **not verified on real hardware**: the protocol is taken from the thermalright-trcc-linux
+project. The screen is recognised by itself and its size (1280×480) comes from the handshake.
+
+| Key | Flag | Values | Default |
+|---|---|---|---|
+| `hid_mount` | `--hid-mount` | `auto` \| `0` \| `90` \| `180` \| `270` (degrees the picture is turned for the way the panel is mounted) | `auto` |
+| `hid_header` | `--hid-header` | `raster` (the size of the picture sent) \| `panel` (the panel's own size) | `raster` |
+| — | `--lcd-test` | shows 8 test pictures (every `hid_mount` with each `hid_header`), 5 s each, then exits | |
+
+`auto` is `90` for a 6.86 whose model byte SUB is 2 and `0` otherwise (what other projects found).
+Use `--lcd-test` to find the right pair: note the number of the upright picture and write its
+`hid_mount` and `hid_header`. They apply live. `orientation` and `flip` work on top of them, as on the
+other screens. Close the vendor program (TRCC) first: only one program can drive the screen.
+
 ## Orientation, flip, margins
 
 | Key | CLI | Values | Default |

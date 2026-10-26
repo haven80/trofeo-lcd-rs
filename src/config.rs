@@ -155,6 +155,9 @@ impl ConfigFile {
     /// (`panel = trofeo-11.3`); neither = the Trofeo Vision 9.16 (1920x462).
     pub fn panel_resolution(&self) -> Result<Resolution, String> {
         if self.panel_is_auto() {
+            if let Some(r) = crate::detected_resolution() {
+                return Ok(r);
+            }
             return Ok(crate::detected_panel().unwrap_or_default().resolution());
         }
         panel_from(self.get("panel"), self.get("panel_size"))

@@ -199,6 +199,10 @@ struct Config {
     panel_auto: bool,
     /// Extra 180° rotation (`--flip` / `flip = true`), if the result comes out upside down.
     flip: bool,
+    /// HID screens (Trofeo Vision 6.86): how the panel is mounted. `None` = from the handshake.
+    hid_mount: Option<trofeo_lcd::Rotation>,
+    /// HID screens: write the panel's own size in the frame header (`hid_header = panel`).
+    hid_header_panel: bool,
     /// Margins (px) to keep the interface away from the screen edges.
     margins: Margins,
     language: Lang,
@@ -299,6 +303,9 @@ fn print_help() {
          \x20\x20                          Default: ENABLED.\n\
          \x20\x20--deepcool-update-ms <N>   Interval for sending data to the DeepCool display, ms\n\
          \x20\x20                          (100-2000; default: {DEFAULT_DEEPCOOL_UPDATE_MS})\n\
+         \x20\x20--lcd-test               Trofeo Vision 6.86 (0416:5302): shows 8 test pictures to find\n\
+         \x20\x20                          the right hid_mount / hid_header, then exits\n\
+         \x20\x20--hid-mount <D>          6.86: auto | 0 | 90 | 180 | 270 (degrees); --hid-header raster|panel\n\
          \x20\x20--orientation <O>       'landscape' (default) or 'portrait' (screen mounted upright)\n\
          \x20\x20--panel <MODEL>         trofeo-9.16 (default, 1920x462) or trofeo-11.3 (1920x400)\n\
          \x20\x20--panel-size <WxH>      Picture size in pixels for any other panel (e.g. 1920x440)\n\
@@ -599,6 +606,9 @@ fn parse_args() -> anyhow::Result<Config> {
             "--lhm-list" => {
                 // Handled in `main()` after parsing (needs the lhm_* settings).
             }
+            "--lcd-test" => {
+                // Handled in `main()` after the handshake.
+            }
             "--diag" => {
                 // Handled in `main()` after parsing, so it can see `weather_city`;
                 // here it just needs to not be rejected as an unrecognized argument.
@@ -704,6 +714,22 @@ fn parse_args() -> anyhow::Result<Config> {
         Some(f) => f,
         None => file.get_bool("flip").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(false),
     };
+    let hid_mount = match file.get("hid_mount").map(|v| v.trim().to_ascii_lowercase()) {
+        None => None,
+        Some(v) if v == "auto" || v.is_empty() => None,
+        Some(v) => Some(
+            v.parse::<u32>()
+                .ok()
+                .and_then(trofeo_lcd::Rotation::from_degrees)
+                .ok_or_else(|| anyhow::anyhow!("hid_mount: '{v}' not valid (auto | 0 | 90 | 180 | 270)"))?,
+        ),
+    };
+    let hid_header_panel = match file.get("hid_header").map(|v| v.trim().to_ascii_lowercase()) {
+        None => false,
+        Some(v) if v == "raster" || v == "picture" => false,
+        Some(v) if v == "panel" => true,
+        Some(v) => anyhow::bail!("hid_header: '{v}' not valid (raster | panel)"),
+    };
     if let Some(p) = &file.path {
         println!("Config file: {}", p.display());
     }
@@ -760,6 +786,8 @@ fn parse_args() -> anyhow::Result<Config> {
         panel,
         panel_auto,
         flip,
+        hid_mount,
+        hid_header_panel,
         margins,
         language,
         background,
@@ -850,7 +878,7 @@ fn item_key(key: &str) -> Option<(usize, &str)> {
 }
 
 fn is_override_key(key: &str) -> bool {
-    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "clock_backdrop" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key == "deepcool_source" || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
+    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "clock_backdrop" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key.starts_with("hid_") || key == "deepcool_source" || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
 }
 
 /// Style for a single item of the info block.
@@ -1552,8 +1580,56 @@ fn config_stamp(explicit: Option<&std::path::Path>) -> Option<(std::path::PathBu
     Some((p, m.modified().ok()?, m.len()))
 }
 
+fn hex_head(b: &[u8], n: usize) -> String {
+    b.iter().take(n).map(|x| format!("{x:02x}")).collect::<Vec<_>>().join(" ")
+}
+
+/// `--lcd-test` (HID screens): shows a test picture with its corners named, for every
+/// combination of `hid_mount` and `hid_header`, five seconds each. The one that looks right
+/// (text readable, TOP-LEFT in the top left corner) gives the values for trofeo.conf.
+fn run_lcd_test(lcd: &LyLcd, hs: &mut trofeo_lcd::Handshake, panel: trofeo_lcd::Resolution) -> anyhow::Result<()> {
+    use trofeo_lcd::Rotation;
+    println!();
+    println!("LCD test: every 5 seconds the picture changes. Note the number of the one that is upright");
+    println!("(readable text, 'TOP LEFT' in the top left corner, the arrow pointing right).");
+    let mounts = [Rotation::R0, Rotation::R90, Rotation::R180, Rotation::R270];
+    let mut n = 0;
+    for header_panel in [false, true] {
+        for m in mounts {
+            n += 1;
+            hs.mount = m;
+            hs.header_panel_size = header_panel;
+            hs.rotation = Rotation::R0;
+            hs.brightness = 100;
+            let label = format!("{n}/8  hid_mount = {}  hid_header = {}", m.degrees(), if header_panel { "panel" } else { "raster" });
+            println!("  {label}");
+            let mut fb = Framebuffer::new(panel);
+            let (w, h) = (panel.width, panel.height);
+            fb.clear(16, 20, 40);
+            fb.fill_rect(0, 0, w, 6, 255, 200, 0);
+            fb.fill_rect(0, h - 6, w, 6, 0, 200, 255);
+            fb.fill_rect(0, 0, 6, h, 255, 60, 60);
+            fb.fill_rect(w - 6, 0, 6, h, 60, 255, 60);
+            fb.fill_rect(10, 10, 80, 80, 255, 60, 60);
+            fb.draw_text(110, 24, "TOP LEFT", 255, 255, 255, 5);
+            let bw = Framebuffer::text_width("BOTTOM RIGHT", 5);
+            fb.draw_text(w.saturating_sub(bw + 24), h.saturating_sub(70), "BOTTOM RIGHT", 255, 255, 255, 5);
+            fb.draw_text(w / 2 - 220, h / 2 - 40, "-----> RIGHT", 255, 255, 0, 6);
+            fb.draw_text(w / 2 - 300, h / 2 + 40, &label, 200, 200, 200, 3);
+            let t = Instant::now();
+            while t.elapsed() < Duration::from_secs(5) {
+                lcd.send_framebuffer(hs, &fb, 80)?;
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
+    }
+    println!("Done. Put the numbers of the right picture in trofeo.conf, e.g.:  hid_mount = 90   hid_header = raster");
+    Ok(())
+}
+
 fn main() -> anyhow::Result<()> {
     let diag_mode = std::env::args().any(|a| a == "--diag");
+    let lcd_test = std::env::args().any(|a| a == "--lcd-test");
     let lhm_list = std::env::args().any(|a| a == "--lhm-list");
     let mut config = parse_args()?;
     if lhm_list {
@@ -1599,6 +1675,35 @@ fn main() -> anyhow::Result<()> {
     hs.rotation = config.orientation.output_rotation(config.flip);
     hs.brightness = config.brightness;
     println!("Connected: {:?}, PM={} SUB={}", lcd.variant(), hs.pm, hs.sub);
+    let hid_default_mount = hs.mount;
+    if lcd.variant() == trofeo_lcd::Variant::Hid2 {
+        println!("HID screen (0416:5302): handshake reply {}", hex_head(&hs.raw_response, 40));
+        match hs.native {
+            Some(r) => println!("  model PM={} SUB={} -> picture {}x{}", hs.pm, hs.sub, r.width, r.height),
+            None => println!("  model PM={} SUB={} is not in the table: using the panel size of the configuration (panel_size)", hs.pm, hs.sub),
+        }
+        if trofeo_lcd::hid2::needs_rgb565(hs.pm) {
+            anyhow::bail!("this HID screen (PM={}) takes RGB565 pictures, which this program does not send yet. Please report the model.", hs.pm);
+        }
+        hs.mount = config.hid_mount.unwrap_or(hid_default_mount);
+        hs.header_panel_size = config.hid_header_panel;
+        println!("  mount {}° (hid_mount = {}), frame header size: {}",
+            hs.mount.degrees(),
+            config.hid_mount.map_or("auto".to_string(), |r| r.degrees().to_string()),
+            if hs.header_panel_size { "panel" } else { "picture" });
+        trofeo_lcd::set_detected_panel(None);
+        trofeo_lcd::set_detected_resolution(hs.native);
+        if config.panel_auto {
+            if let Some(r) = hs.native {
+                config.panel = r;
+            }
+        }
+        if lcd_test {
+            return run_lcd_test(&lcd, &mut hs, config.panel);
+        }
+    } else if lcd_test {
+        anyhow::bail!("--lcd-test is for the HID screens (Trofeo Vision 6.86, USB 0416:5302)");
+    }
     trofeo_lcd::set_detected_panel(trofeo_lcd::panel_from_handshake(&hs.raw_response));
     if config.panel_auto {
         if let Some(p) = trofeo_lcd::detected_panel() {
@@ -1842,6 +1947,10 @@ fn main() -> anyhow::Result<()> {
                                 layout_marquee = Marquee::new();
                                 hs.rotation = new_cfg.orientation.output_rotation(new_cfg.flip);
                                 hs.brightness = new_cfg.brightness;
+                                if lcd.variant() == trofeo_lcd::Variant::Hid2 {
+                                    hs.mount = new_cfg.hid_mount.unwrap_or(hid_default_mount);
+                                    hs.header_panel_size = new_cfg.hid_header_panel;
+                                }
                                 println!("Configuration reloaded.");
                                 report_config_error("");
                                 if restart_needed {
@@ -4348,7 +4457,7 @@ mod layout_tests {
         }
         // every key of the editor is one the program reads from the config file
         let from_cli_or_file = |k: &str| is_override_key(k) || ["orientation", "flip", "panel_size", "background", "background_dim", "ffmpeg", "language",
-            "color", "silence_threshold", "silence_timeout_ms", "weather_city", "ticker_source", "ticker_refresh_min", "margin", "margin_top", "margin_bottom", "margin_left", "margin_right"].contains(&k);
+            "hid_mount", "hid_header", "color", "silence_threshold", "silence_timeout_ms", "weather_city", "ticker_source", "ticker_refresh_min", "margin", "margin_top", "margin_bottom", "margin_left", "margin_right"].contains(&k);
         for f in fields() {
             assert!(from_cli_or_file(&f.key), "{} is not a key of the program", f.key);
         }

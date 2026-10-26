@@ -329,10 +329,22 @@ pub fn fields() -> Vec<Field> {
     add(Field::new("flip", "screen", "Rotate 180°", "Ruota di 180°", Bool)
         .def("false")
         .help("If the picture comes out upside down", "Se l'immagine esce capovolta"));
-    add(Field::new("panel", "screen", "Display model", "Modello di display", Choice(&["trofeo-9.16", "trofeo-11.3"]))
+    add(Field::new("panel", "screen", "Display model", "Modello di display", Choice(&["trofeo-9.16", "trofeo-11.3", "trofeo-6.86"]))
         .help("Unset = recognised automatically when the display is connected", "Non impostato = riconosciuto in automatico quando il display è collegato"));
     add(Field::new("panel_size", "screen", "Own picture size", "Dimensione immagine personalizzata", Text)
         .help("Only for unusual panels, e.g. 1920x462", "Solo per pannelli particolari, es. 1920x462"));
+    add(Field::new("hid_mount", "screen", "Mounting of the 6.86 screen", "Montaggio dello schermo 6.86", Choice(&["auto", "0", "90", "180", "270"]))
+        .def("auto")
+        .help(
+            "Trofeo Vision 6.86 (USB 0416:5302) only: turns the picture by this many degrees for the way the panel is mounted. Run trofeo_lcd --lcd-test to find the right value",
+            "Solo Trofeo Vision 6.86 (USB 0416:5302): ruota l'immagine di questi gradi in base al montaggio del pannello. Avvia trofeo_lcd --lcd-test per trovare il valore giusto",
+        ));
+    add(Field::new("hid_header", "screen", "Size written for the 6.86", "Dimensione scritta per il 6.86", Choice(&["raster", "panel"]))
+        .def("raster")
+        .help(
+            "Trofeo Vision 6.86 only: the size in the frame header is that of the picture sent (raster) or the panel's own (panel). Changed only if --lcd-test shows a partial picture",
+            "Solo Trofeo Vision 6.86: la dimensione nell'intestazione è quella dell'immagine inviata (raster) o quella del pannello (panel). Da cambiare solo se --lcd-test mostra un'immagine parziale",
+        ));
     add(Field::new("brightness", "screen", "Brightness", "Luminosità", int(0, 100)).def("100"));
     add(Field::new("language", "screen", "Language of the display", "Lingua del display", Choice(LANGUAGES)).def("en"));
     for (k, en, it) in [

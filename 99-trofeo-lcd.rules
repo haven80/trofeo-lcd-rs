@@ -1,4 +1,4 @@
-# Udev rule supaya Thermalright Trofeo Vision LCD (VID:PID 0416:5408 / 0416:5409)
+# Udev rule supaya Thermalright Trofeo Vision LCD (VID:PID 0416:5408 / 0416:5409 / 0416:5302)
 # bisa diakses lewat rusb/libusb TANPA perlu jalankan trofeo_lcd sebagai root.
 #
 # Cara pasang:
@@ -15,3 +15,6 @@
 
 SUBSYSTEM=="usb", ATTR{idVendor}=="0416", ATTR{idProduct}=="5408", MODE="0660", GROUP="plugdev", TAG+="uaccess"
 SUBSYSTEM=="usb", ATTR{idVendor}=="0416", ATTR{idProduct}=="5409", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+# Trofeo Vision 6.86 (HID family, via hidapi/hidraw)
+SUBSYSTEM=="usb", ATTR{idVendor}=="0416", ATTR{idProduct}=="5302", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="0416", ATTRS{idProduct}=="5302", MODE="0660", GROUP="plugdev", TAG+="uaccess"

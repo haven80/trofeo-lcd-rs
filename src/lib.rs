@@ -53,6 +53,7 @@ pub mod schema;
 pub mod i18n;
 pub mod layout;
 pub mod hotkey;
+pub mod hid2;
 pub mod png_save;
 
 pub const VENDOR_ID: u16 = 0x0416;
@@ -84,6 +85,9 @@ pub const TROFEO_VISION_9_16: Resolution = Resolution::new(1920, 462);
 /// `panel_size = WIDTHxHEIGHT`.
 pub const TROFEO_VISION_11_3: Resolution = Resolution::new(1920, 400);
 
+/// Trofeo Vision 6.86 LCD, 1280x480 (HID family, 0416:5302).
+pub const TROFEO_VISION_6_86: Resolution = Resolution::new(1280, 480);
+
 /// A known panel model: it decides the size of the picture that is sent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Panel {
@@ -92,10 +96,12 @@ pub enum Panel {
     Trofeo9_16,
     /// Trofeo Vision 11.3 LCD, 1920x400.
     Trofeo11_3,
+    /// Trofeo Vision 6.86 LCD, 1280x480 (USB 0416:5302, HID family).
+    Trofeo6_86,
 }
 
 impl Panel {
-    pub const NAMES: &'static str = "trofeo-9.16 | trofeo-11.3";
+    pub const NAMES: &'static str = "trofeo-9.16 | trofeo-11.3 | trofeo-6.86";
 
     pub fn parse(s: &str) -> Option<Panel> {
         let t = s.trim().to_ascii_lowercase().replace(['_', ' '], "-");
@@ -103,6 +109,7 @@ impl Panel {
         match t.trim_end_matches("-lcd").trim_end_matches('"').trim_end_matches("in") {
             "9.16" | "916" | "9.16-argb" => Some(Panel::Trofeo9_16),
             "11.3" | "113" => Some(Panel::Trofeo11_3),
+            "6.86" | "686" => Some(Panel::Trofeo6_86),
             _ => None,
         }
     }
@@ -111,6 +118,7 @@ impl Panel {
         match self {
             Panel::Trofeo9_16 => TROFEO_VISION_9_16,
             Panel::Trofeo11_3 => TROFEO_VISION_11_3,
+            Panel::Trofeo6_86 => TROFEO_VISION_6_86,
         }
     }
 }
@@ -128,6 +136,19 @@ static DETECTED_PANEL: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8
 /// are not set, also after a hot reload).
 pub fn set_detected_panel(p: Option<Panel>) {
     DETECTED_PANEL.store(matches!(p, Some(Panel::Trofeo11_3)) as u8, std::sync::atomic::Ordering::Relaxed);
+}
+
+static DETECTED_RES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// Remember the picture size a screen of the HID family reported at the handshake.
+pub fn set_detected_resolution(r: Option<Resolution>) {
+    let v = r.map_or(0, |r| (r.width.min(0xFFFF) << 16) | r.height.min(0xFFFF));
+    DETECTED_RES.store(v, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn detected_resolution() -> Option<Resolution> {
+    let v = DETECTED_RES.load(std::sync::atomic::Ordering::Relaxed);
+    (v != 0).then(|| Resolution::new(v >> 16, v & 0xFFFF))
 }
 
 pub fn detected_panel() -> Option<Panel> {
@@ -150,8 +171,10 @@ pub fn parse_resolution(s: &str) -> Option<Resolution> {
 pub enum LcdError {
     #[error("USB error: {0}")]
     Usb(#[from] rusb::Error),
-    #[error("LY device (0416:5408 / 0416:5409) not found")]
+    #[error("Trofeo Vision LCD (0416:5408 / 0416:5409 / 0416:5302) not found")]
     NotFound,
+    #[error("HID error: {0}")]
+    Hid(String),
     #[error("handshake failed, invalid response: {0:02x?}")]
     BadHandshake(Vec<u8>),
     #[error("empty frame")]
@@ -167,6 +190,8 @@ pub type Result<T> = std::result::Result<T, LcdError>;
 /// LY family variant, auto-detected from the PID at `open()` time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Variant {
+    /// 0416:5302 — the HID family of the Trofeo Vision 6.86 (see [`hid2`]).
+    Hid2,
     /// 0416:5408 — chunk header byte[8]=1, chunk count rounded up to a multiple of 4.
     Ly,
     /// 0416:5409 — chunk header byte[8]=2, no chunk rounding.
@@ -178,6 +203,7 @@ impl Variant {
         match pid {
             PID_LY => Some(Variant::Ly),
             PID_LY1 => Some(Variant::Ly1),
+            hid2::PRODUCT_ID => Some(Variant::Hid2),
             _ => None,
         }
     }
@@ -186,13 +212,14 @@ impl Variant {
         match self {
             Variant::Ly => 1,
             Variant::Ly1 => 2,
+            Variant::Hid2 => 0,
         }
     }
 
     fn pad_multiple(self) -> usize {
         match self {
             Variant::Ly => 4,
-            Variant::Ly1 => 1,
+            Variant::Ly1 | Variant::Hid2 => 1,
         }
     }
 }
@@ -211,6 +238,14 @@ pub struct Handshake {
     /// Brightness 0-100 (100 = unchanged). The LY protocol has no known
     /// brightness command: the image is dimmed in software before sending.
     pub brightness: u8,
+    /// The picture size the screen itself reports (HID family only).
+    pub native: Option<Resolution>,
+    /// How the panel is mounted (HID family): applied after `rotation`. Set from the handshake
+    /// (`hid2::default_mount`) and overridden by `hid_mount`.
+    pub mount: Rotation,
+    /// HID family: write the panel's own size in the frame header instead of the size of the
+    /// picture actually sent (`hid_header = panel`).
+    pub header_panel_size: bool,
 }
 
 /// Screen resolution in pixels.
@@ -269,6 +304,11 @@ impl Rotation {
         Self::from_degrees(self.degrees() + 180).unwrap()
     }
 
+    /// This rotation followed by `other`.
+    pub fn plus(self, other: Rotation) -> Self {
+        Self::from_degrees(self.degrees() + other.degrees()).unwrap()
+    }
+
     /// True if the rotation swaps width/height (90 or 270).
     pub fn swaps_axes(self) -> bool {
         matches!(self, Rotation::R90 | Rotation::R270)
@@ -319,7 +359,10 @@ impl Orientation {
 
 /// Handle to an already-open LY LCD device.
 pub struct LyLcd {
-    handle: DeviceHandle<Context>,
+    /// USB handle of the LY family (`None` for the HID family).
+    handle: Option<DeviceHandle<Context>>,
+    /// HID device of the 0416:5302 family.
+    hid: Option<hidapi::HidDevice>,
     iface: u8,
     variant: Variant,
     /// Bulk OUT & IN endpoint addresses, auto-detected from the USB device
@@ -355,6 +398,9 @@ impl LyLcd {
             let Some(variant) = Variant::from_pid(desc.product_id()) else {
                 continue;
             };
+            if variant == Variant::Hid2 {
+                continue; // opened through hidapi below
+            }
 
             let handle = device.open()?;
             let config = device.active_config_descriptor()?;
@@ -388,14 +434,27 @@ impl LyLcd {
             handle.claim_interface(iface_num)?;
 
             return Ok(Self {
-                handle,
+                handle: Some(handle),
+                hid: None,
                 iface: iface_num,
                 variant,
                 ep_write,
                 ep_read,
             });
         }
-        Err(LcdError::NotFound)
+        Self::open_hid()
+    }
+
+    /// The HID family (0416:5302): the Trofeo Vision 6.86.
+    fn open_hid() -> Result<Self> {
+        let api = hidapi::HidApi::new().map_err(|e| LcdError::Hid(e.to_string()))?;
+        if !api.device_list().any(|d| d.vendor_id() == hid2::VENDOR_ID && d.product_id() == hid2::PRODUCT_ID) {
+            return Err(LcdError::NotFound);
+        }
+        let dev = api
+            .open(hid2::VENDOR_ID, hid2::PRODUCT_ID)
+            .map_err(|e| LcdError::Hid(format!("cannot open 0416:5302 ({e}). Close the vendor program (TRCC) if it is running; on Linux install the udev rule")))?;
+        Ok(Self { handle: None, hid: Some(dev), iface: 0, variant: Variant::Hid2, ep_write: 0, ep_read: 0 })
     }
 
     pub fn variant(&self) -> Variant {
@@ -438,14 +497,17 @@ impl LyLcd {
     /// Send the handshake payload (16 + 2032 bytes) and read+validate the 512-byte
     /// response, then extract PM/SUB — equivalent to `LyLcd._do_handshake` in Python.
     pub fn handshake(&self) -> Result<Handshake> {
+        if self.variant == Variant::Hid2 {
+            return self.handshake_hid();
+        }
+        let handle = self.handle.as_ref().expect("USB handle of the LY family");
         let mut payload = vec![0u8; 16 + 2032];
         payload[..16].copy_from_slice(&HANDSHAKE_HEADER);
 
-        self.handle
-            .write_bulk(self.ep_write, &payload, HANDSHAKE_TIMEOUT)?;
+        handle.write_bulk(self.ep_write, &payload, HANDSHAKE_TIMEOUT)?;
 
         let mut resp = vec![0u8; HANDSHAKE_READ_SIZE];
-        let n = self.handle.read_bulk(self.ep_read, &mut resp, HANDSHAKE_TIMEOUT)?;
+        let n = handle.read_bulk(self.ep_read, &mut resp, HANDSHAKE_TIMEOUT)?;
         resp.truncate(n);
 
         if resp.len() < 37 || resp[0] != 3 || resp[1] != 0xFF || resp[8] != 1 {
@@ -467,6 +529,7 @@ impl LyLcd {
                 let pm = 49 + resp[20];
                 (pm, raw_sub)
             }
+            Variant::Hid2 => unreachable!("handled by handshake_hid"),
         };
 
         // The old heuristic (SUB 3/5 -> 180°, SUB 4 -> 0°) PROVED WRONG on
@@ -484,7 +547,44 @@ impl LyLcd {
             rotate_180,
             rotation: Rotation::R0,
             brightness: 100,
+            native: None,
+            mount: Rotation::R0,
+            header_panel_size: false,
         })
+    }
+
+    /// HID family handshake: the request is retried a few times (the screen can still be
+    /// starting), the reply is checked and the model read from it.
+    fn handshake_hid(&self) -> Result<Handshake> {
+        let dev = self.hid.as_ref().expect("HID device");
+        let mut last = Vec::new();
+        for attempt in 0..4 {
+            if attempt > 0 {
+                std::thread::sleep(Duration::from_millis(500));
+            }
+            let mut out = vec![0u8]; // report id 0
+            out.extend_from_slice(&hid2::init_packet());
+            dev.write(&out).map_err(|e| LcdError::Hid(e.to_string()))?;
+            let mut buf = vec![0u8; hid2::REPORT_SIZE];
+            let n = dev.read_timeout(&mut buf, 1000).map_err(|e| LcdError::Hid(e.to_string()))?;
+            buf.truncate(n);
+            if let Some(id) = hid2::parse_reply(&buf) {
+                let native = hid2::resolution_for(id.pm, id.sub);
+                return Ok(Handshake {
+                    raw_response: buf,
+                    pm: id.pm,
+                    sub: id.sub,
+                    rotate_180: false,
+                    rotation: Rotation::R0,
+                    brightness: 100,
+                    native,
+                    mount: hid2::default_mount(id.pm, id.sub),
+                    header_panel_size: false,
+                });
+            }
+            last = buf;
+        }
+        Err(LcdError::BadHandshake(last))
     }
 
     /// Pack the raw payload (JPEG bytes) into a buffer of 512-byte chunks,
@@ -497,6 +597,7 @@ impl LyLcd {
     /// bytes for the last remainder on LY), then read the 512-byte ACK. Equivalent to
     /// `LyLcd._write_frame`, including the fixed `pos += 4096`.
     fn write_frame(&self, frame: &[u8]) -> Result<()> {
+        let handle = self.handle.as_ref().expect("USB handle of the LY family");
         let total_bytes = frame.len();
         let mut pos = 0usize;
         while pos < total_bytes {
@@ -508,19 +609,33 @@ impl LyLcd {
             } else {
                 remaining
             };
-            self.handle
-                .write_bulk(self.ep_write, &frame[pos..pos + write_size], WRITE_TIMEOUT)?;
+            handle.write_bulk(self.ep_write, &frame[pos..pos + write_size], WRITE_TIMEOUT)?;
             pos += USB_WRITE_SIZE;
         }
 
         let mut ack = [0u8; HANDSHAKE_READ_SIZE];
-        self.handle.read_bulk(self.ep_read, &mut ack, READ_TIMEOUT)?;
+        handle.read_bulk(self.ep_read, &mut ack, READ_TIMEOUT)?;
+        Ok(())
+    }
+
+    /// HID family: a frame goes out as 512-byte reports (report id 0 in front).
+    fn write_frame_hid(&self, frame: &[u8]) -> Result<()> {
+        let dev = self.hid.as_ref().expect("HID device");
+        let mut report = vec![0u8; 1 + hid2::REPORT_SIZE];
+        for chunk in frame.chunks(hid2::REPORT_SIZE) {
+            report[1..1 + chunk.len()].copy_from_slice(chunk);
+            report[1 + chunk.len()..].fill(0);
+            dev.write(&report).map_err(|e| LcdError::Hid(e.to_string()))?;
+        }
         Ok(())
     }
 
     /// Send a single frame. For this panel, `payload` must be already-encoded
     /// JPEG bytes (see [`Framebuffer::to_jpeg`]) — not raw RGB.
     pub fn send_frame(&self, payload: &[u8]) -> Result<()> {
+        if self.variant == Variant::Hid2 {
+            return Err(LcdError::Hid("the HID family takes a framebuffer (send_framebuffer), not a ready packet".into()));
+        }
         if payload.is_empty() {
             return Err(LcdError::EmptyFrame);
         }
@@ -531,14 +646,29 @@ impl LyLcd {
         self.write_frame(&frame)
     }
 
+    /// Send an encoded picture of `width`x`height` to a screen of the HID family.
+    fn send_hid(&self, handshake: &Handshake, width: u32, height: u32, jpeg: &[u8]) -> Result<()> {
+        if jpeg.is_empty() {
+            return Err(LcdError::EmptyFrame);
+        }
+        let (w, h) = match (handshake.header_panel_size, handshake.native) {
+            (true, Some(n)) => (n.width, n.height),
+            _ => (width, height),
+        };
+        self.write_frame_hid(&hid2::build_frame(w as u16, h as u16, jpeg))
+    }
+
     /// Full pipeline: encode the `Framebuffer` to JPEG (respecting `handshake.rotate_180`)
     /// then send it.
     pub fn send_framebuffer(&self, handshake: &Handshake, fb: &Framebuffer, quality: u8) -> Result<()> {
-        let rot = if handshake.rotate_180 {
+        let mut rot = if handshake.rotate_180 {
             handshake.rotation.plus_180()
         } else {
             handshake.rotation
         };
+        if self.variant == Variant::Hid2 {
+            rot = rot.plus(handshake.mount);
+        }
         let rotated;
         let src = if rot == Rotation::R0 {
             fb
@@ -558,6 +688,7 @@ impl LyLcd {
         let mut q = quality.clamp(1, 100);
         loop {
             match src.to_jpeg(q) {
+                Ok(jpeg) if self.variant == Variant::Hid2 => return self.send_hid(handshake, src.width(), src.height(), &jpeg),
                 Ok(jpeg) => return self.send_frame(&jpeg),
                 Err(LcdError::FrameTooLarge(_)) if q > 20 => q = q.saturating_sub(12).max(20),
                 Err(e) => return Err(e),
@@ -566,7 +697,9 @@ impl LyLcd {
     }
 
     pub fn release(self) -> Result<()> {
-        self.handle.release_interface(self.iface)?;
+        if let Some(h) = &self.handle {
+            h.release_interface(self.iface)?;
+        }
         Ok(())
     }
 }

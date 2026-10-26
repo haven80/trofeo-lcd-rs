@@ -10,14 +10,19 @@
 **A lightweight, open-source alternative to the official Thermalright TRCC
 software.** Audio visualizer + system info monitor for the
 **Thermalright Trofeo Vision 9.16 LCD** (USB `0416:5408`, "LY" protocol) and
-the **Trofeo Vision 11.3 LCD** (1920×400, same USB ID and protocol — see
-[Supported panels](#supported-panels)).
+the **Trofeo Vision 11.3 LCD** (1920×400, same USB ID and protocol) and, new and not yet verified
+on real hardware, the **Trofeo Vision 6.86 LCD** (1280×480, USB `0416:5302`) — see
+[Supported panels](#supported-panels).
 
 This project is a fork of [sukualam/trofeo-lcd](https://github.com/sukualam/trofeo-lcd),
 whose driver was rewritten byte-for-byte from
 [thermalright-trcc-linux](https://github.com/Lexonight1/thermalright-trcc-linux).
 See **[NOTICE.md](./NOTICE.md)** for the full provenance and a summary of
 what this fork adds on top of the original.
+
+**New in 2.1.0 — experimental support for the Trofeo Vision 6.86** (1280×480, USB `0416:5302`):
+see [Supported panels](#supported-panels). It has not been verified on real hardware yet, so it comes with a
+test pattern (`--lcd-test`) to find the right orientation.
 
 The display **adapts automatically to what your computer is doing** — no
 manual switching needed. The Trofeo LCD shows one of these views below
@@ -189,6 +194,7 @@ The table below covers just the handful of flags that only exist on the command 
 | `--no-deepcool` | Turn off DeepCool integration | enabled |
 | `--deepcool-update-ms` | DeepCool send interval (100–2000 ms) | `1000` |
 | `--openrgb-device <NAME>` | Sync color with an OpenRGB device | disabled |
+| `--lcd-test` | Trofeo Vision 6.86 only: shows 8 test pictures (5 s each) to find `hid_mount` / `hid_header`, then exits | off |
 | `--weather-city <NAME>` | Fixed city for the weather module | auto (IP-based) |
 | `--hide-console` | Hide the console window (Windows) | disabled |
 | `-k, --screenshot-key` | Global hotkey to save the current LCD frame as a lossless PNG screenshot (f1-f12, printscreen) | off |
@@ -200,6 +206,18 @@ The table below covers just the handful of flags that only exist on the command 
 |---|---|---|
 | Trofeo Vision 9.16 | 1920×462 | default |
 | Trofeo Vision 11.3 | 1920×400 | recognised automatically, or `panel = trofeo-11.3` |
+| Trofeo Vision 6.86 | 1280×480 | recognised automatically (USB `0416:5302`), or `panel = trofeo-6.86` |
+
+**Trofeo Vision 6.86 (new, to be tested).** It is a different device: USB ID `0416:5302` and the
+"HID Type 2" protocol (a 20-byte header plus a JPEG, sent in 512-byte reports), taken from the
+open-source [thermalright-trcc-linux](https://github.com/Lexonight1/thermalright-trcc-linux) project.
+It has **not been verified on real hardware by this project**. On the first run, close the vendor
+program (TRCC) and start `trofeo_lcd --lcd-test`: it shows eight test pictures, five seconds
+each, with the corners named. Note the number of the one that is upright and set its two values in
+`trofeo.conf` (`hid_mount = 0 | 90 | 180 | 270`, `hid_header = raster | panel`). The console prints what the screen
+answers (model bytes and size) — please paste it in an issue if something does not work. On Linux install
+`99-trofeo-lcd.rules` (it now includes the 6.86); the screens that need RGB565 pictures (the small
+320×240 ones) are not supported.
 
 The 11.3" panel uses the same USB ID (`0416:5408`) and the same handshake as the
 9.16", so it is **recognised automatically** from the handshake (byte 20 of the

@@ -11,6 +11,13 @@ orientation = landscape
 # true = an extra 180° rotation (if the image comes out upside down)
 flip = false
 
+# --- Trofeo Vision 6.86 (USB 0416:5302, 1280x480) ------------------------------
+# The 6.86" screen is recognised by itself (its size comes from the handshake). Not yet verified
+# on real hardware: run  trofeo_lcd --lcd-test  once. It shows 8 test pictures, 5 seconds each,
+# with the corners named; note the one that is upright and write its two values here.
+# hid_mount = auto        # auto | 0 | 90 | 180 | 270: turns the picture for the way the panel is mounted
+# hid_header = raster     # raster | panel: size written in the frame header (leave it unless the picture is partial)
+
 # --- Margins (pixels) --------------------------------------------------------
 # Pulls the interface away from the screen edges. "margin" applies to all sides,
 # then you can override a single side. To "lower" the image: margin_top.
