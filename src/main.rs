@@ -393,7 +393,7 @@ fn print_help() {
          \x20\x20--font-weight <auto|light|regular|medium>  Weight of the smooth font (default: by text size)\n\
          \x20\x20--pixel-game <true|false>  Pixel-art mini game under the clock on the default screen (default: true)\n\
          \x20\x20--pixel-game-hero <knight|cat|both>, --pixel-game-height <20-70>, --pixel-game-hud <true|false>\n\
-         \x20\x20--background-effect <plasma|aurora|lava|waves|matrix|rain|aquarium|sea|ink|network|globe|none>  Animated background instead of an image (default: none)\n\
+         \x20\x20--background-effect <plasma|aurora|lava|waves|matrix|rain|aquarium|sea|ink|veil|network|globe|none>  Animated background instead of an image (default: none)\n\
          \x20\x20--effect-palette <P>    pastel | fluo | neon | candy | sunset | ocean | aurora | fire | forest | ice | mono | rainbow |\n         \x20\x20                          matrix | amber | violet | crimson | snow (one-colour, for matrix/rain) |\n         \x20\x20                          lagoon | deep | tropical (for aquarium) | all\n\
          \x20\x20--effect-colors <C>     Own colors: 2+ colors, e.g. #FF0080,#00FFFF (used when --effect-palette is not set)\n\
          \x20\x20--effect-speed <0-100>, --effect-scale <25-400>, --effect-brightness <0-100>, --effect-fps <1-30>, --effect-level <0-100> (aquarium: how high the water is; network / globe: how many nodes)\n\
@@ -935,7 +935,7 @@ fn item_key(key: &str) -> Option<(usize, &str)> {
 }
 
 fn is_override_key(key: &str) -> bool {
-    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "clock_backdrop" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key.starts_with("hid_") || key == "deepcool_source" || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
+    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "clock_backdrop" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key == "console" || key.starts_with("console_") || key.starts_with("hid_") || key == "deepcool_source" || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
 }
 
 /// Style for a single item of the info block.
@@ -1278,6 +1278,9 @@ fn parse_effect(file: &ConfigFile) -> anyhow::Result<effect::Settings> {
             Some(effect::Style::Ink) => {
                 e.palettes = vec![effect::Palette::parse("sunset").expect("preset")];
             }
+            Some(effect::Style::Veil) => {
+                e.palettes = vec![effect::Palette::parse("midnight").expect("preset")];
+            }
             Some(effect::Style::Network | effect::Style::Globe) => {
                 e.palettes = vec![effect::Palette::parse("ice").expect("preset")];
             }
@@ -1305,7 +1308,7 @@ fn parse_effect(file: &ConfigFile) -> anyhow::Result<effect::Settings> {
     // variants need strong enough colors to stand out on white
     let default_brightness = match e.style {
         Some(effect::Style::Aquarium | effect::Style::Sea) => 65,
-        Some(effect::Style::Ink) => 70,
+        Some(effect::Style::Ink | effect::Style::Veil) => 70,
         Some(effect::Style::Matrix | effect::Style::Rain) if e.light => 65,
         Some(effect::Style::Network | effect::Style::Globe) => 70,
         _ => e.brightness,

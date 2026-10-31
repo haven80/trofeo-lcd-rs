@@ -64,6 +64,8 @@ pub enum Style {
     Sea,
     /// Clouds of coloured ink spreading and curling in water.
     Ink,
+    /// Slow veils of light over a deep night colour, with a few floating specks.
+    Veil,
     /// Nodes drifting about, joined by thin lines while they are near each other.
     Network,
     /// A slowly turning sphere of nodes and lines.
@@ -71,10 +73,10 @@ pub enum Style {
 }
 
 impl Style {
-    pub const NAMES: &'static str = "plasma | aurora | lava | waves | matrix | rain | aquarium | sea | ink | network | globe";
+    pub const NAMES: &'static str = "plasma | aurora | lava | waves | matrix | rain | aquarium | sea | ink | veil | network | globe";
     #[cfg(test)]
-    pub const ALL: [Style; 11] = [
-        Style::Plasma, Style::Aurora, Style::Lava, Style::Waves, Style::Matrix, Style::Rain, Style::Aquarium, Style::Sea, Style::Ink,
+    pub const ALL: [Style; 12] = [
+        Style::Plasma, Style::Aurora, Style::Lava, Style::Waves, Style::Matrix, Style::Rain, Style::Aquarium, Style::Sea, Style::Ink, Style::Veil,
         Style::Network, Style::Globe,
     ];
 
@@ -89,6 +91,7 @@ impl Style {
             "aquarium" | "acquario" | "water" | "acqua" | "tank" => Some(Style::Aquarium),
 "sea" | "mare" | "ocean-view" | "waves-sea" => Some(Style::Sea),
             "ink" | "inchiostro" | "smoke" | "fumo" => Some(Style::Ink),
+            "veil" | "velo" | "veli" | "drift" | "dashboard" => Some(Style::Veil),
             "network" | "net" | "rete" | "plexus" | "nodes" | "nodi" => Some(Style::Network),
             "globe" | "sphere" | "world" | "globo" | "sfera" | "mondo" => Some(Style::Globe),
             _ => None,
@@ -140,9 +143,17 @@ const SNOW: [Rgb; 1] = [(0xE6, 0xEB, 0xF0)];
 const LAGOON: [Rgb; 3] = [(0x7F, 0xF0, 0xE6), (0x10, 0xA8, 0xB8), (0x04, 0x4A, 0x6A)];
 const DEEP: [Rgb; 3] = [(0x4A, 0x90, 0xE0), (0x10, 0x40, 0x90), (0x02, 0x0C, 0x30)];
 const TROPICAL: [Rgb; 4] = [(0x8A, 0xFF, 0xC8), (0x20, 0xC0, 0xA0), (0x00, 0x70, 0x80), (0x00, 0x30, 0x50)];
+// Night palettes, made for the `veil` background and the `console` layout: a bright colour for the
+// light, then darker and darker ones down to an almost black tint for the background.
+const MIDNIGHT: [Rgb; 4] = [(0x7F, 0xB8, 0xFF), (0x2A, 0x5B, 0xD8), (0x0B, 0x1C, 0x5E), (0x03, 0x07, 0x20)];
+const DUSK: [Rgb; 4] = [(0xC9, 0x9B, 0xFF), (0x6A, 0x3C, 0xC8), (0x24, 0x10, 0x5E), (0x08, 0x04, 0x20)];
+const EMBER: [Rgb; 4] = [(0xFF, 0xB0, 0x70), (0xE0, 0x50, 0x30), (0x6A, 0x14, 0x1C), (0x1A, 0x04, 0x08)];
+const MINT: [Rgb; 4] = [(0xA8, 0xFF, 0xE0), (0x1F, 0xB8, 0x9A), (0x08, 0x4A, 0x52), (0x02, 0x14, 0x1C)];
+const ROSE: [Rgb; 4] = [(0xFF, 0xB0, 0xD8), (0xD0, 0x48, 0x98), (0x5A, 0x14, 0x50), (0x16, 0x04, 0x16)];
+const SLATE: [Rgb; 4] = [(0xC8, 0xD0, 0xE0), (0x6A, 0x74, 0x8C), (0x24, 0x2A, 0x3C), (0x08, 0x0A, 0x12)];
 
 /// Names of the built-in presets, in the order `all` / `rotate` goes through them.
-const PRESETS: [(&str, &[Rgb]); 20] = [
+const PRESETS: [(&str, &[Rgb]); 26] = [
     ("pastel", &PASTEL),
     ("fluo", &FLUO),
     ("neon", &NEON),
@@ -163,6 +174,12 @@ const PRESETS: [(&str, &[Rgb]); 20] = [
     ("lagoon", &LAGOON),
     ("deep", &DEEP),
     ("tropical", &TROPICAL),
+    ("midnight", &MIDNIGHT),
+    ("dusk", &DUSK),
+    ("ember", &EMBER),
+    ("mint", &MINT),
+    ("rose", &ROSE),
+    ("slate", &SLATE),
 ];
 /// How many of the presets are multi-colour (what `all` / `rotate` goes through).
 const MULTI_COLOUR_PRESETS: usize = 12;
@@ -194,7 +211,7 @@ fn hsv(h: f32, s: f32, v: f32) -> Rgb {
 
 impl Palette {
     pub const NAMES: &'static str =
-        "pastel | fluo | neon | candy | sunset | ocean | aurora | fire | forest | ice | mono | rainbow | matrix | amber | violet | crimson | snow | lagoon | deep | tropical";
+        "pastel | fluo | neon | candy | sunset | ocean | aurora | fire | forest | ice | mono | rainbow | matrix | amber | violet | crimson | snow | lagoon | deep | tropical | midnight | dusk | ember | mint | rose | slate";
 
     pub fn custom(stops: Vec<Rgb>) -> Palette {
         Palette { stops }
@@ -222,6 +239,12 @@ impl Palette {
             "lagoon" | "laguna" => "lagoon",
             "deep" | "profondo" | "abyss" => "deep",
             "tropical" | "tropicale" => "tropical",
+            "midnight" | "mezzanotte" | "navy" | "blu" | "blue" => "midnight",
+            "dusk" | "crepuscolo" | "twilight" => "dusk",
+            "ember" | "brace" | "braci" => "ember",
+            "mint" | "menta" => "mint",
+            "rose" | "rosa" | "pink" => "rose",
+            "slate" | "ardesia" | "graphite" | "grafite" => "slate",
             _ => return None,
         };
         PRESETS.iter().find(|(name, _)| *name == n).map(|(_, stops)| Palette {
@@ -378,8 +401,9 @@ pub struct Settings {
     pub brightness: u32,
     /// Frames per second the effect is refreshed at while nothing else needs more.
     pub fps: u32,
-    /// Aquarium: how high the water reaches, in % of the panel (0 = empty, 100 = full).
+    /// Aquarium and sea: how high the water reaches, in % of the panel (0 = empty, 100 = full).
     /// Network and globe: how many nodes there are (0 = few, 100 = many).
+    /// Veil: how many floating specks there are (0 = none, 100 = many).
     pub level: u32,
     /// Matrix, rain, aquarium, network and globe: a light (white) variant instead of the dark one.
     pub light: bool,
@@ -573,6 +597,13 @@ impl Effect {
             self.paint_sea(fb, level, s.scale, t, react);
             return;
         }
+        if style == Style::Veil {
+            let t = secs * (s.speed as f64 / 30.0);
+            let react = self.react(s);
+            let phase = if s.reactive { self.react_phase } else { 0.0 };
+            self.paint_veil(fb, s.level, s.scale, t, react, phase);
+            return;
+        }
         if style == Style::Ink {
             let t = secs * (s.speed as f64 / 30.0);
             let react = self.react(s);
@@ -752,7 +783,7 @@ impl Effect {
                 }
             }
             // The rain styles are not a smooth field: `render_at` paints them directly.
-            Style::Matrix | Style::Rain | Style::Aquarium | Style::Sea | Style::Ink | Style::Network | Style::Globe => {}
+            Style::Matrix | Style::Rain | Style::Aquarium | Style::Sea | Style::Ink | Style::Veil | Style::Network | Style::Globe => {}
             Style::Waves => {
                 let (p1, p2, p3) = (ph(0.21), ph(0.15), ph(0.25));
                 for r in 0..rows {
@@ -1651,8 +1682,8 @@ mod tests {
         // unless the palette itself does: with a smooth palette the biggest
         // horizontal step stays small.
         for style in Style::ALL {
-            if matches!(style, Style::Matrix | Style::Rain | Style::Aquarium | Style::Sea | Style::Ink | Style::Network | Style::Globe) {
-                continue; // glyphs, streaks and the water surface have hard edges by design
+            if matches!(style, Style::Matrix | Style::Rain | Style::Aquarium | Style::Sea | Style::Ink | Style::Veil | Style::Network | Style::Globe) {
+                continue; // glyphs, streaks, the water surface and the veil's specks have hard edges by design
             }
             let s = settings(style, "ocean");
             let mut f = fb(1920, 462);
@@ -1676,7 +1707,11 @@ mod tests {
         assert_eq!(Style::parse("matrix"), Some(Style::Matrix));
         assert_eq!(Style::parse("CODICE"), Some(Style::Matrix));
         assert_eq!(Style::parse("pioggia"), Some(Style::Rain));
-        assert_eq!(Style::ALL.len(), 11);
+        assert_eq!(Style::ALL.len(), 12);
+        assert_eq!(Style::parse("veil"), Some(Style::Veil));
+        for n in ["midnight", "dusk", "ember", "mint", "rose", "slate"] {
+            assert!(Palette::parse(n).is_some(), "{n}");
+        }
         for n in ["matrix", "green", "amber", "ambra", "violet", "crimson", "snow", "bianco", "neon"] {
             assert!(Palette::parse(n).is_some(), "{n}");
         }
@@ -1865,7 +1900,7 @@ mod tests {
         for n in ["ink", "inchiostro"] {
             assert_eq!(Style::parse(n), Some(Style::Ink), "{n}");
         }
-        for style in [Style::Sea, Style::Ink] {
+        for style in [Style::Sea, Style::Ink, Style::Veil] {
             for (w, h) in [(1920u32, 462u32), (480, 1280), (320, 240), (9, 7)] {
                 for pal in ["lagoon", "deep", "sunset", "neon", "snow"] {
                     for light in [false, true] {
@@ -1887,7 +1922,7 @@ mod tests {
 
     #[test]
     fn sea_and_ink_move_and_the_light_variant_is_light() {
-        for style in [Style::Sea, Style::Ink] {
+        for style in [Style::Sea, Style::Ink, Style::Veil] {
             let st = settings(style, "lagoon");
             let (mut a, mut b) = (fb(960, 231), fb(960, 231));
             Effect::new().render_at(&mut a, &st, style, 65, 5.0);
@@ -1899,6 +1934,9 @@ mod tests {
             Effect::new().render_at(&mut c, &still, style, 65, 5.0);
             Effect::new().render_at(&mut d, &still, style, 65, 9.0);
             assert!(c.as_bytes() == d.as_bytes(), "{style:?} moves at speed 0");
+            if style == Style::Veil {
+                continue; // always a night picture
+            }
             let mut l = st.clone();
             l.light = true;
             let mut lf = fb(960, 231);
@@ -1909,7 +1947,7 @@ mod tests {
 
     #[test]
     fn music_moves_the_liquids_only_when_reactive() {
-        for style in [Style::Aquarium, Style::Sea, Style::Ink] {
+        for style in [Style::Aquarium, Style::Sea, Style::Ink, Style::Veil] {
             let mut st = settings(style, "lagoon");
             let render = |st: &Settings, volume: f32| {
                 let mut e = Effect::new();
@@ -1972,7 +2010,7 @@ mod tests {
 
     #[test]
     fn sea_and_ink_frame_cost_is_small() {
-        for style in [Style::Sea, Style::Ink] {
+        for style in [Style::Sea, Style::Ink, Style::Veil] {
             let st = settings(style, "lagoon");
             let mut e = Effect::new();
             let mut f = fb(1920, 462);

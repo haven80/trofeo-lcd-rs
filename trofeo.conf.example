@@ -168,9 +168,10 @@ language = en
 #   cpu           CPU only, big
 #   gpu           GPU only, big
 #   tiles         rounded glass tiles (see the "Tiles" block below)
-#   deck          instrument columns: a gauge, a big value, a graph, four readings (see "Deck, Cards and Orbit")
-#   cards         colourful cards in a mosaic, each with a ghost graph (see "Deck, Cards and Orbit")
-#   orbit         concentric rings per device with the readings beside them (see "Deck, Cards and Orbit")
+#   deck          instrument columns: a gauge, a big value, a graph, four readings (see "Deck, Cards, Orbit and Console")
+#   cards         colourful cards in a mosaic, each with a ghost graph (see "Deck, Cards, Orbit and Console")
+#   orbit         concentric rings per device with the readings beside them (see "Deck, Cards, Orbit and Console")
+#   console       a bar with the names and the clock over a row of tiles, one in focus (see "Deck, Cards, Orbit and Console")
 #   frame         digital picture frame: a collage of a folder's pictures (see below)
 #   weather       Current weather, big: temperature, condition icon and city
 #   news          Latest headlines from ticker_source, scrolling
@@ -238,8 +239,8 @@ language = en
 # lhm_mb_temp = VRM
 # In the status line: hide = cpu_fan, case_fan, pump removes the fan speeds from the CPU line.
 
-# --- Deck, Cards and Orbit (layout = deck | cards | orbit) ------------------------------
-# Three more full screens, from the same readings as the tiles. Panels: cpu gpu ram fans net disk
+# --- Deck, Cards, Orbit and Console (layout = deck | cards | orbit | console) ------------
+# Four more full screens, from the same readings as the tiles. Panels: cpu gpu ram fans net disk
 # clock weather music (the clock panel also shows the weather and the track).
 # layout = deck
 # deck = cpu, gpu, ram, clock           # instrument columns (2-5)
@@ -252,8 +253,15 @@ language = en
 # orbit = cpu, gpu, ram                 # a cluster of concentric rings per device (1-4)
 # orbit_clock = true                    # the clock block on the right
 # orbit_legend = true                   # the names of the rings under each cluster
-# For all three:
-# dash_palette = default                # accent colours: default or a preset of the animated backgrounds
+# layout = console
+# console = cpu, gpu, ram, net, disk    # the tiles of the row (1-7)
+# console_focus = rotate                # rotate = the tiles take turns | load = the busiest one | none = no focus
+# console_interval = 6                  # seconds per tile with rotate (2-120)
+# console_bar = true                    # the strip on top with the names of the tiles and the clock
+#                                       # (the tile in focus is bigger, lit in its colour and shows graph and readings;
+#                                       # the others are small and dim; with none all tiles show their details)
+# For all of them:
+# dash_palette = default                # accent colours (try midnight, dusk, mint with the console layout): default or a preset of the animated backgrounds
 # dash_colors = #A76BFF, #38C6F4, #FF6FB1   # or your own colours (used instead of the preset)
 # dash_hero = temp                      # the big number of CPU and GPU: temp (default) | load
 # dash_font = smooth                    # smooth | pixel
@@ -327,22 +335,24 @@ language = en
 # A soft animated background instead of a picture: colors that blend and drift.
 # Very light on the CPU (the picture is calculated on a coarse grid and stretched).
 # It replaces "background" while it is on, and works with margins and panel_opacity.
-# background_effect = plasma   # plasma | aurora | lava | waves | matrix | rain | aquarium | sea | ink | network | globe | none
+# background_effect = plasma   # plasma | aurora | lava | waves | matrix | rain | aquarium | sea | ink | veil | network | globe | none
 #   matrix = minimal digital rain (characters), rain = thin streaks; green by default
 #   aquarium = side view of an aquarium: moving water surface, light rays, caustics, bubbles
 #   sea = a sunset sky over layers of waves with foam and the sun's glitter on the water
 #   ink = clouds of coloured ink spreading and curling in water
+#   veil = slow silky bands of light drifting over a deep night gradient, with a few floating specks
 #   network = nodes drifting about, joined by thin lines (no text, only lines and dots)
 #   globe = a slowly turning sphere of nodes and lines
-# effect_level = 50            # aquarium and sea: how high the water reaches; network / globe: how many nodes (0-100)
+# effect_level = 50            # aquarium and sea: how high the water reaches; veil: how many specks; network / globe: how many nodes (0-100)
 # effect_level_source = none   # aquarium / sea: none | cpu | gpu | ram - the water level follows that load
-# effect_reactive = false      # aquarium / sea / ink: the music moves them (taller waves, more ink); frame rate rises to 15
+# effect_reactive = false      # aquarium / sea / ink / veil: the music moves them (taller waves, more ink, wider bands); frame rate rises to 15
 # effect_flip = false          # aquarium upside down: the water hangs from the top of the panel
 # effect_theme = dark          # dark | light: matrix / rain / aquarium / network / globe on a white background
 #                              # (use a dark text_color / clock_color with light)
 # Colors: pastel | fluo | neon | candy | sunset | ocean | aurora | fire | forest | ice |
 # mono | rainbow | custom; for matrix / rain: matrix (green) | amber | violet | crimson | snow;
-# for aquarium: lagoon (default) | deep | tropical; network / globe use ice unless you choose
+# for aquarium: lagoon (default) | deep | tropical; for veil: midnight (default) | dusk | ember | mint | rose | slate
+# (night colours, they also work as dash_palette and everywhere else); network / globe use ice unless you choose
 # (a one-colour palette such as crimson gives grey lines with red nodes).
 # Several (comma-separated) or "all" rotate with a cross-fade.
 # effect_palette = neon

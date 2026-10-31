@@ -1,5 +1,5 @@
-//! Three more full screens built from the same pieces as the tiles (`layout = deck`,
-//! `cards`, `orbit`). They show the same readings (CPU, GPU, RAM, fans, network, disk, clock,
+//! Four more full screens built from the same pieces as the tiles (`layout = deck`,
+//! `cards`, `orbit`, `console`). They show the same readings (CPU, GPU, RAM, fans, network, disk, clock,
 //! weather, music), each in its own way:
 //!
 //! * `deck`  - instrument columns: a live gauge line on top of every column, a big light value,
@@ -10,6 +10,11 @@
 //!   its own history along the bottom.
 //! * `orbit` - one cluster of concentric rings per device, with the readings beside it and a
 //!   legend of what each ring means.
+//!
+//! * `console` - a row of tiles under a bar with the names of the tiles and the clock. One tile
+//!   is in focus: it grows, lights up in its colour and shows the details; the others stay small
+//!   and dim. The focus moves by itself (`rotate`), follows the busiest part (`load`) or there is
+//!   none (`none`, every tile equally detailed).
 //!
 //! Everything is chosen in the config (`deck = ...`, `cards = ...`, `orbit = ...`, `dash_*`).
 //! Like the tiles, the screen is painted on a transparent layer that is redrawn only when
@@ -25,6 +30,31 @@ pub enum Style {
     Deck,
     Cards,
     Orbit,
+    Console,
+}
+
+/// Which tile of the `console` layout is in focus.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Focus {
+    /// One after the other, every `console_interval` seconds.
+    Rotate,
+    /// The busiest one (CPU, GPU, RAM, network, disk by load).
+    Load,
+    /// None: every tile shows its details and they are all the same size.
+    None,
+}
+
+impl Focus {
+    pub const NAMES: &'static str = "rotate | load | none";
+
+    pub fn parse(s: &str) -> Option<Focus> {
+        Some(match s.trim().to_ascii_lowercase().as_str() {
+            "rotate" | "cycle" | "auto" | "ruota" => Focus::Rotate,
+            "load" | "busiest" | "follow" | "activity" | "carico" => Focus::Load,
+            "none" | "off" | "static" | "nessuno" => Focus::None,
+            _ => return None,
+        })
+    }
 }
 
 impl Style {
@@ -33,6 +63,7 @@ impl Style {
             "deck" => Some(Style::Deck),
             "cards" => Some(Style::Cards),
             "orbit" => Some(Style::Orbit),
+            "console" => Some(Style::Console),
             _ => None,
         }
     }
@@ -115,6 +146,12 @@ pub struct Settings {
     pub orbit: Vec<PKind>,
     pub orbit_clock: bool,
     pub orbit_legend: bool,
+    pub console: Vec<PKind>,
+    pub console_focus: Focus,
+    /// Seconds each tile stays in focus (`rotate`).
+    pub console_interval: u32,
+    /// The bar on top with the names of the tiles and the clock.
+    pub console_bar: bool,
 }
 
 pub const DEFAULT_COLORS: [Rgb; 5] = [
@@ -158,6 +195,10 @@ impl Default for Settings {
             orbit: vec![PKind::Cpu, PKind::Gpu, PKind::Ram],
             orbit_clock: true,
             orbit_legend: true,
+            console: vec![PKind::Cpu, PKind::Gpu, PKind::Ram, PKind::Net, PKind::Disk],
+            console_focus: Focus::Rotate,
+            console_interval: 6,
+            console_bar: true,
         }
     }
 }
@@ -315,6 +356,18 @@ pub fn parse(file: &ConfigFile) -> anyhow::Result<Settings> {
     }
     if let Some(v) = boolean("orbit_legend")? {
         s.orbit_legend = v;
+    }
+    if let Some(v) = file.get("console") {
+        s.console = parse_kinds("console", v, 7)?;
+    }
+    if let Some(v) = file.get("console_focus") {
+        s.console_focus = Focus::parse(v).ok_or_else(|| anyhow::anyhow!("console_focus: '{v}' not valid ({})", Focus::NAMES))?;
+    }
+    if let Some(v) = num("console_interval", 2, 120)? {
+        s.console_interval = v;
+    }
+    if let Some(v) = boolean("console_bar")? {
+        s.console_bar = v;
     }
     Ok(s)
 }
@@ -1202,6 +1255,210 @@ fn orbit_cluster(p: &mut Painter, c: &Ctx, panel: &Panel, color0: usize, (x, y, 
     }
 }
 
+// -- console
+
+/// The tiles of the `console` layout. `focus` is the tile in focus (`None`: no focus, all alike).
+fn draw_console(p: &mut Painter, c: &Ctx, panels: &[Panel], clock: Option<&Panel>, focus: Option<usize>, area: (f32, f32, f32, f32)) {
+    let (x, y, w, h) = area;
+    if panels.is_empty() {
+        return;
+    }
+    let side = (h * 0.025).clamp(4.0, 14.0);
+    let bar_h = if clock.is_some() { (h * 0.16).clamp(24.0, 64.0) } else { 0.0 };
+    let (acc0, text) = (accent(c.s, 0), c.text);
+    if let Some(cp) = clock {
+        // tabs on the left, the clock on the right
+        let cap = (bar_h * 0.46).clamp(9.0, 26.0);
+        let base = y + bar_h * 0.62;
+        let tw = if p.font == FontStyle::Smooth { W::Medium } else { W::Regular };
+        let time_cap = cap * 1.25;
+        let time_w = p.width(&cp.hero, time_cap, tw);
+        let date_cap = cap * 0.8;
+        let date_w = p.width(&cp.sub, date_cap, W::Regular);
+        let mut room = w - side - time_w - cap * 1.5;
+        let show_date = !cp.sub.is_empty() && date_w + cap * 3.0 < w * 0.3;
+        p.text(x + w - side - time_w, base + (time_cap - cap) * 0.45, &cp.hero, time_cap, tw, text, 255);
+        if show_date {
+            let dx = x + w - side - time_w - cap * 1.1 - date_w;
+            p.text(dx, base, &cp.sub, date_cap, W::Regular, text, 150);
+            room = dx - cap * 1.5 - (x + side);
+        } else {
+            room -= side;
+        }
+        let mut tx = x + side;
+        let gap = cap * 1.9;
+        for (i, panel) in panels.iter().enumerate() {
+            let name = panel.title.to_uppercase();
+            let nw = p.width(&name, cap, tw);
+            if tx + nw > x + side + room {
+                break;
+            }
+            let on = focus == Some(i);
+            p.text(tx, base, &name, cap, tw, text, if on { 255 } else if focus.is_some() { 120 } else { 200 });
+            if on {
+                p.layer.fill_rrect_solid((tx, base + cap * 0.45, nw, (cap * 0.2).max(2.0)), cap * 0.1, accent(c.s, i), 255);
+            }
+            tx += nw + gap;
+        }
+    }
+    let gap = (h * 0.03).clamp(8.0, 18.0);
+    let top = y + bar_h + if bar_h > 0.0 { side * 0.5 } else { 0.0 };
+    let th = (h - (top - y)).max(40.0);
+    let weights: Vec<f32> = panels
+        .iter()
+        .enumerate()
+        .map(|(i, panel)| match focus {
+            Some(f) if f == i => 2.4,
+            Some(_) => 1.0,
+            None => panel.kind.weight(),
+        })
+        .collect();
+    let slots = split(w as u32, gap as u32, &weights);
+    let _ = acc0;
+    for (i, (panel, (off, tw))) in panels.iter().zip(slots).enumerate() {
+        let on = focus == Some(i);
+        console_tile(p, c, panel, i, on, on || focus.is_none(), (x + off as f32, top, tw as f32, th));
+    }
+}
+
+fn console_tile(p: &mut Painter, c: &Ctx, panel: &Panel, idx: usize, focused: bool, detailed: bool, (x, y, w, h): (f32, f32, f32, f32)) {
+    if w < 50.0 || h < 50.0 {
+        return;
+    }
+    let radius = (h * 0.09).clamp(10.0, 30.0);
+    let light = is_light(c.s);
+    let (plate_rgb, _) = plate(c.s);
+    let plate_rgb = if c.s.plate_color.is_some() { plate_rgb } else if light { (0xFF, 0xFF, 0xFF) } else { (8, 10, 22) };
+    let col = accent(c.s, idx);
+    let col2 = accent(c.s, idx + 1);
+    let (line, _, _) = line_style(c.s);
+    let mut ink = c.text;
+    if focused {
+        // the tile in focus: its colour as a gradient on the plate, a glow around it
+        let (a, b) = if light {
+            // one hue, from a soft tone to a paler one: mixing two deepened accents turns muddy on white
+            (lerp_rgb(plate_rgb, col, 0.5), lerp_rgb(plate_rgb, col, 0.2))
+        } else {
+            (lerp_rgb(plate_rgb, col, 0.5), lerp_rgb(plate_rgb, col2, 0.18))
+        };
+        for k in (1..=4).rev() {
+            let kf = k as f32 * 1.6;
+            p.layer.stroke_rrect((x - kf, y - kf, w + 2.0 * kf, h + 2.0 * kf), radius + kf, 2.0, col, (16 - 3 * k as i32).max(3) as u8);
+        }
+        p.layer.fill_rrect((x, y, w, h), radius, &move |t| lerp_rgb(a, b, t), 238);
+        p.layer.stroke_rrect((x, y, w, h), radius, 2.0, lerp_rgb(col, (255, 255, 255), 0.35), 235);
+        if luma(lerp_rgb(a, b, 0.5)) > 150.0 && c.s.text.is_none() {
+            ink = (0x13, 0x15, 0x22);
+        }
+    } else if detailed {
+        let a = lerp_rgb(plate_rgb, col, if light { 0.3 } else { 0.22 });
+        p.layer.fill_rrect((x, y, w, h), radius, &move |t| lerp_rgb(a, plate_rgb, t * 0.6), if light { 215 } else { 200 });
+        p.layer.stroke_rrect((x, y, w, h), radius, 1.4, col, 120);
+    } else {
+        p.layer.fill_rrect_solid((x, y, w, h), radius, plate_rgb, if light { 120 } else { 105 });
+        p.layer.stroke_rrect((x, y, w, h), radius, 1.2, line, 34);
+    }
+    let pad = (h.min(w * 0.7) * 0.09).clamp(9.0, 26.0);
+    let inner = w - 2.0 * pad;
+    let lcap = (h * 0.07).clamp(9.0, 20.0);
+    let lw = if p.font == FontStyle::Smooth { W::Medium } else { W::Regular };
+    let tw = lw;
+    let dim = if detailed { 215 } else { 150 };
+    // title, and for the detailed tiles the sub-title at the right
+    let head = if detailed { panel.sub.as_str() } else { "" };
+    let sub_w = if head.is_empty() { 0.0 } else { p.width(head, lcap * 0.9, W::Regular) };
+    let show_sub = !head.is_empty() && sub_w + pad < inner * 0.55 && panel.kind != PKind::Clock;
+    let title_w = inner - if show_sub { sub_w + pad } else { 0.0 };
+    p.text(x + pad, y + pad + lcap, &clip(p, &panel.title, lcap, title_w, lw), lcap, lw, ink, dim);
+    if show_sub {
+        p.text(x + w - pad - sub_w, y + pad + lcap, head, lcap * 0.9, W::Regular, ink, 160);
+    }
+    let body_top = y + pad + lcap * 2.0;
+    if panel.text {
+        // a title (the music): up to two lines
+        let cap = if detailed { (h * 0.085).clamp(11.0, 26.0) } else { (h * 0.065).clamp(10.0, 18.0) };
+        let mut base = body_top + cap * 1.3;
+        for part in wrap2(p, &panel.hero, cap, inner) {
+            p.text(x + pad, base, &part, cap, W::Regular, ink, 245);
+            base += cap * 1.4;
+        }
+        return;
+    }
+    if !detailed {
+        // small tile: the value in the middle, a bar for the share at the bottom
+        let bar_h = (h * 0.028).clamp(3.0, 7.0);
+        let avail = h - (body_top - y) - pad - bar_h * 2.5;
+        let cap = fit_vu(p, &panel.hero, &panel.unit, (avail * 0.55).clamp(12.0, h * 0.26), inner, tw);
+        let base = body_top + (avail + cap) / 2.0;
+        value_unit(p, x + pad, base, &panel.hero, &panel.unit, cap, tw, ink, 255, 150);
+        if let Some(f) = panel.frac {
+            let by = y + h - pad - bar_h;
+            p.layer.fill_rrect_solid((x + pad, by, inner, bar_h), bar_h / 2.0, ink, 40);
+            if f > 0.0 {
+                p.layer.fill_rrect((x + pad, by, (inner * f).max(bar_h), bar_h), bar_h / 2.0, &move |t| lerp_rgb(col, lerp_rgb(col, (255, 255, 255), 0.4), t), 255);
+            }
+        }
+        return;
+    }
+    // the tile in focus (or any tile when there is no focus): value, graph, readings
+    let compact = h < 190.0;
+    let stats: Vec<&Stat> = panel.stats.iter().take(3).collect();
+    let stats_h = if stats.is_empty() || compact { 0.0 } else { h * 0.2 };
+    let hero_cap = (h * if focused { 0.3 } else { 0.24 }).min(h - (body_top - y) - pad - stats_h);
+    let cap = fit_vu(p, &panel.hero, &panel.unit, hero_cap.max(12.0), inner, tw);
+    let base = body_top + cap;
+    value_unit(p, x + pad, base, &panel.hero, &panel.unit, cap, tw, ink, 255, 160);
+    let rest_top = base + pad * 0.5;
+    let rest_bottom = y + h - pad - stats_h;
+    if let Some((data, span)) = graph_data(c, panel) {
+        let gh = (rest_bottom - rest_top).min(h * 0.28);
+        if gh >= 14.0 {
+            p.layer.spark((x + pad, rest_top, inner, gh), &data, span, ink, if focused { 1.8 } else { 1.3 }, 70, 215, focused);
+        }
+    } else if stats.is_empty() {
+        let sc = lcap * 0.95;
+        let mut ly = rest_top + sc * 1.4;
+        for line in &panel.lines {
+            if ly > y + h - pad * 0.5 {
+                break;
+            }
+            p.text(x + pad, ly, &clip(p, line, sc, inner, W::Regular), sc, W::Regular, ink, 200);
+            ly += sc * 1.8;
+        }
+    }
+    if stats_h > 0.0 {
+        let n = stats.len();
+        let cell = (inner - pad * (n as f32 - 1.0)) / n as f32;
+        let vcap = (stats_h * 0.46).clamp(9.0, 28.0);
+        for (i, st) in stats.iter().copied().enumerate() {
+            stat_cell(p, c, x + pad + i as f32 * (cell + pad), y + h - pad - stats_h * 0.95, cell, st, vcap, ink, 160);
+        }
+    }
+}
+
+/// A text on at most two lines (split at spaces), the last one cut with "..." when it is still too long.
+fn wrap2(p: &Painter, text: &str, cap: f32, max_w: f32) -> Vec<String> {
+    if p.width(text, cap, W::Regular) <= max_w {
+        return vec![text.to_string()];
+    }
+    let mut first = String::new();
+    let mut rest: Vec<&str> = Vec::new();
+    for (i, word) in text.split_whitespace().enumerate() {
+        let candidate = if first.is_empty() { word.to_string() } else { format!("{first} {word}") };
+        if rest.is_empty() && (first.is_empty() || p.width(&candidate, cap, W::Regular) <= max_w) {
+            first = candidate;
+        } else {
+            rest.push(word);
+        }
+        let _ = i;
+    }
+    let first = clip(p, &first, cap, max_w, W::Regular);
+    if rest.is_empty() {
+        return vec![first];
+    }
+    vec![first, clip(p, &rest.join(" "), cap, max_w, W::Regular)]
+}
+
 // ---------------------------------------------------------------------- screen
 
 pub struct DashScreen {
@@ -1212,11 +1469,51 @@ pub struct DashScreen {
     /// Paints the background (the same engine as the tiles).
     bg: TilesScreen,
     pub redraws: u32,
+    /// The tile in focus of the `console` layout and since when (for `console_focus = load`).
+    focus: usize,
+    focus_since: f64,
 }
 
 impl DashScreen {
     pub fn new() -> Self {
-        DashScreen { started: std::time::Instant::now(), layer: Layer::new(1, 1), sig: String::new(), hist: History::new(), bg: TilesScreen::new(), redraws: 0 }
+        DashScreen { started: std::time::Instant::now(), layer: Layer::new(1, 1), sig: String::new(), hist: History::new(), bg: TilesScreen::new(), redraws: 0, focus: 0, focus_since: f64::NEG_INFINITY }
+    }
+
+    /// The tile of the `console` layout in focus, `None` when there is no focus.
+    fn pick_focus(&mut self, kinds: &[PKind], data: &WidgetData, ram_pct: f32, s: &Settings, secs: f64) -> Option<usize> {
+        let n = kinds.len();
+        if n == 0 {
+            return None;
+        }
+        match s.console_focus {
+            Focus::None => None,
+            Focus::Rotate => Some(((secs.max(0.0) / s.console_interval.max(1) as f64) as usize) % n),
+            Focus::Load => {
+                let net = (data.net_kb.0 + data.net_kb.1) / (s.net_max as f64 * 1024.0) * 100.0;
+                let disk = (data.disk_mb.0 + data.disk_mb.1) / 200.0 * 100.0;
+                let score = |k: PKind| -> f32 {
+                    match k {
+                        PKind::Cpu => data.cpu_pct,
+                        PKind::Gpu => data.gpu_pct.unwrap_or(0.0),
+                        PKind::Ram => ram_pct,
+                        PKind::Net => net.clamp(0.0, 100.0) as f32,
+                        PKind::Disk => disk.clamp(0.0, 100.0) as f32,
+                        _ => 0.0,
+                    }
+                };
+                let scores: Vec<f32> = kinds.iter().map(|k| score(*k)).collect();
+                let best = (0..n).fold(0, |b, i| if scores[i] > scores[b] { i } else { b });
+                if self.focus >= n {
+                    self.focus = best;
+                    self.focus_since = secs;
+                } else if best != self.focus && scores[best] >= scores[self.focus] + 10.0 && secs - self.focus_since >= 3.0 {
+                    // a clear lead for a few seconds: the focus moves (no flicker between two close ones)
+                    self.focus = best;
+                    self.focus_since = secs;
+                }
+                Some(self.focus)
+            }
+        }
     }
 
     /// Frames per second the screen wants: the graphs move once a second, a background effect
@@ -1265,9 +1562,11 @@ impl DashScreen {
             Style::Deck => (s.deck.clone(), None),
             Style::Cards => (s.cards.iter().flatten().copied().collect(), None),
             Style::Orbit => (s.orbit.clone(), s.orbit_clock.then(|| mk(PKind::Clock))),
+            Style::Console => (s.console.clone(), s.console_bar.then(|| mk(PKind::Clock))),
         };
+        let focus = if style == Style::Console { self.pick_focus(&kinds_flat, data, ram_pct, s, secs) } else { None };
         let panels: Vec<Panel> = kinds_flat.iter().map(|k| mk(*k)).collect();
-        let sig = format!("{style:?}|{s:?}|{area:?}|{panels:?}|{clock_panel:?}|{}|{:?}", self.hist.rev, color_mode);
+        let sig = format!("{style:?}|{s:?}|{area:?}|{panels:?}|{clock_panel:?}|{}|{:?}|{focus:?}", self.hist.rev, color_mode);
         if sig != self.sig {
             if self.layer.w != aw as usize || self.layer.h != ah as usize {
                 self.layer = Layer::new(aw, ah);
@@ -1285,6 +1584,7 @@ impl DashScreen {
                     draw_cards(&mut painter, &ctx, &s.cards, &grouped, rect);
                 }
                 Style::Orbit => draw_orbit(&mut painter, &ctx, &panels, clock_panel.as_ref(), rect),
+                Style::Console => draw_console(&mut painter, &ctx, &panels, clock_panel.as_ref(), focus, rect),
             }
             self.sig = sig;
             self.redraws += 1;
@@ -1324,6 +1624,41 @@ mod tests {
         assert!(parse_cfg("dash_theme = grey\n").is_err());
         assert!(parse_cfg("cards_opacity = 101\n").is_err());
         assert!(parse_cfg("dash_plate_color = default\n").is_err());
+        let c = parse_cfg("console = gpu, cpu, clock\nconsole_focus = load\nconsole_interval = 10\nconsole_bar = false\n").unwrap();
+        assert_eq!(c.console, vec![PKind::Gpu, PKind::Cpu, PKind::Clock]);
+        assert_eq!((c.console_focus, c.console_interval, c.console_bar), (Focus::Load, 10, false));
+        assert_eq!(parse_cfg("console_focus = none\n").unwrap().console_focus, Focus::None);
+        assert!(parse_cfg("console_focus = sometimes\n").is_err());
+        assert!(parse_cfg("console_interval = 1\n").is_err());
+        assert!(parse_cfg("console = cpu, gpu, ram, fans, net, disk, music, weather\n").is_err());
+        assert_eq!(Style::from_layout("console"), Some(Style::Console));
+    }
+
+    #[test]
+    fn the_console_focus_rotates_follows_the_load_or_stays_off() {
+        let kinds = [PKind::Cpu, PKind::Gpu, PKind::Ram, PKind::Clock];
+        let mut d = data();
+        d.cpu_pct = 10.0;
+        d.gpu_pct = Some(20.0);
+        let mut screen = DashScreen::new();
+        let mut s = parse_cfg("console_interval = 5\n").unwrap();
+        // rotate: one tile after the other, back to the first
+        let picks: Vec<_> = [0.0, 4.9, 5.0, 10.0, 15.0, 19.9, 20.0].iter().map(|t| screen.pick_focus(&kinds, &d, 30.0, &s, *t)).collect();
+        assert_eq!(picks, vec![Some(0), Some(0), Some(1), Some(2), Some(3), Some(3), Some(0)]);
+        // none: no focus at all
+        s.console_focus = Focus::None;
+        assert_eq!(screen.pick_focus(&kinds, &d, 30.0, &s, 7.0), None);
+        // load: the busiest, but it does not flicker between two close ones
+        s.console_focus = Focus::Load;
+        let mut screen = DashScreen::new();
+        assert_eq!(screen.pick_focus(&kinds, &d, 30.0, &s, 0.0), Some(2)); // RAM 30 %
+        d.gpu_pct = Some(35.0);
+        assert_eq!(screen.pick_focus(&kinds, &d, 30.0, &s, 10.0), Some(2)); // only 5 points ahead
+        d.gpu_pct = Some(90.0);
+        assert_eq!(screen.pick_focus(&kinds, &d, 30.0, &s, 11.0), Some(1)); // a clear lead: it moves
+        d.cpu_pct = 100.0;
+        assert_eq!(screen.pick_focus(&kinds, &d, 30.0, &s, 12.0), Some(1)); // but not again within 3 seconds
+        assert_eq!(screen.pick_focus(&kinds, &d, 30.0, &s, 15.0), Some(0));
     }
 
     #[test]
@@ -1362,12 +1697,12 @@ mod tests {
         let env = Env { fps: 30.0, ffmpeg: None, effect: &eff, secs: Some(0.0) };
         let ts = tiles::Settings::default();
         let all = "cpu, gpu, ram, fans, net";
-        let mut s = parse_cfg(&format!("deck = {all}\norbit = cpu, gpu, ram, fans\ncards = clock | cpu, gpu, ram | fans, net, disk | weather, music\n")).unwrap();
+        let mut s = parse_cfg(&format!("deck = {all}\norbit = cpu, gpu, ram, fans\ncards = clock | cpu, gpu, ram | fans, net, disk | weather, music\nconsole = cpu, gpu, ram, fans, net, disk, music\n")).unwrap();
         for (font, theme) in [(FontStyle::Smooth, Theme::Dark), (FontStyle::Pixel, Theme::Light), (FontStyle::Smooth, Theme::Light)] {
             s.font = font;
             s.theme = theme;
             for (w, h) in [(1920u32, 462u32), (462, 1920), (1280, 480), (480, 480), (800, 600)] {
-                for style in [Style::Deck, Style::Cards, Style::Orbit] {
+                for style in [Style::Deck, Style::Cards, Style::Orbit, Style::Console] {
                     for lhm_on in [false, true] {
                         lhm::set_current(if lhm_on { lhm::Readings::sample() } else { lhm::Readings::default() });
                         for full in [true, false] {

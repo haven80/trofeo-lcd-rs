@@ -151,6 +151,13 @@ pub const LAYOUTS: &[LayoutDef] = &[
         rows: &[],
     },
     LayoutDef {
+        name: "console",
+        description: "A bar with the names and the clock over a row of tiles; the one in focus grows and shows the details (choose the tiles with `console = ...`, the focus with `console_focus`)",
+        standard: false,
+        cols: 1,
+        rows: &[],
+    },
+    LayoutDef {
         name: "frame",
         description: "Digital picture frame: a collage of the pictures of a folder (`frame_folder`), with system info at the sides",
         standard: false,

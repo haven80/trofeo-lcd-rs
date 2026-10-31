@@ -820,7 +820,7 @@ fn panels_widget(ui: &mut egui::Ui, ed: &mut Ed, f: &Field, columns: bool, l: La
     if !columns && cols.len() > 1 {
         cols = vec![cols.into_iter().flatten().collect()];
     }
-    let max_items = if columns { 3 } else if f.key == "orbit" { 4 } else { 5 };
+    let max_items = if columns { 3 } else if f.key == "orbit" { 4 } else if f.key == "console" { 7 } else { 5 };
     let mut changed = false;
     let mut remove_col = None;
     ui.vertical(|ui| {

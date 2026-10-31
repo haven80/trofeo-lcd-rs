@@ -114,7 +114,7 @@ pub const SECTIONS: &[(&str, &str, &str)] = &[
     ("effect", "Animated background", "Sfondo animato"),
     ("layouts", "Screens (layouts)", "Schermate (layout)"),
     ("tiles", "Tiles", "Tiles"),
-    ("dash", "Deck, Cards and Orbit", "Deck, Cards e Orbit"),
+    ("dash", "Deck, Cards, Orbit and Console", "Deck, Cards, Orbit e Console"),
     ("frame", "Digital frame", "Cornice digitale"),
     ("lhm", "Fans and sensors (LibreHardwareMonitor)", "Ventole e sensori (LibreHardwareMonitor)"),
     ("show", "What to show", "Cosa mostrare"),
@@ -130,10 +130,10 @@ pub const SECTIONS: &[(&str, &str, &str)] = &[
 pub const POSITIONS: &[&str] =
     &["top-left", "top", "top-right", "center-left", "center", "center-right", "bottom-left", "bottom", "bottom-right"];
 pub const LANGUAGES: &[&str] = &["en", "it", "de", "es", "fr", "pt"];
-pub const EFFECTS: &[&str] = &["none", "plasma", "aurora", "lava", "waves", "matrix", "rain", "aquarium", "sea", "ink", "network", "globe"];
+pub const EFFECTS: &[&str] = &["none", "plasma", "aurora", "lava", "waves", "matrix", "rain", "aquarium", "sea", "ink", "veil", "network", "globe"];
 pub const EFFECT_PALETTES: &[&str] = &[
     "pastel", "fluo", "neon", "candy", "sunset", "ocean", "aurora", "fire", "forest", "ice", "mono", "rainbow", "matrix", "amber",
-    "violet", "crimson", "snow", "lagoon", "deep", "tropical", "custom", "all",
+    "violet", "crimson", "snow", "lagoon", "deep", "tropical", "midnight", "dusk", "ember", "mint", "rose", "slate", "custom", "all",
 ];
 pub const SHOW_ITEMS: &[&str] = &[
     "cpu", "gpu", "uptime", "time", "date", "mem", "net", "disk", "volume", "nowplaying", "weather", "spectrum", "ticker", "clock",
@@ -153,7 +153,7 @@ pub const FRAME_STYLES: &[&str] = &["mosaic", "polaroid"];
 pub const FRAME_BG: &[&str] = &["blur", "dark", "global"];
 pub const DASH_PALETTES: &[&str] = &[
     "default", "pastel", "fluo", "neon", "candy", "sunset", "ocean", "aurora", "fire", "forest", "ice", "mono", "rainbow", "matrix", "amber",
-    "violet", "crimson", "snow", "lagoon", "deep", "tropical",
+    "violet", "crimson", "snow", "lagoon", "deep", "tropical", "midnight", "dusk", "ember", "mint", "rose", "slate",
 ];
 pub const TILES_BG: &[&str] = &["global", "color", "gradient", "effect", "image"];
 
@@ -187,9 +187,10 @@ pub const LAYOUT_NAMES: &[(&str, &str, &str)] = &[
     ("cpu", "CPU only, big", "Solo CPU, grande"),
     ("gpu", "GPU only, big", "Solo GPU, grande"),
     ("tiles", "Glass tiles (choose them in the Tiles section)", "Tiles di vetro (si scelgono nella sezione Tiles)"),
-    ("deck", "Instrument columns with graphs (choose them in the Deck, Cards and Orbit section)", "Colonne strumento con grafici (si scelgono nella sezione Deck, Cards e Orbit)"),
-    ("cards", "Colourful cards in a mosaic (see the Deck, Cards and Orbit section)", "Card colorate a mosaico (vedi la sezione Deck, Cards e Orbit)"),
-    ("orbit", "Concentric rings per device (see the Deck, Cards and Orbit section)", "Anelli concentrici per dispositivo (vedi la sezione Deck, Cards e Orbit)"),
+    ("deck", "Instrument columns with graphs (choose them in the Deck, Cards, Orbit and Console section)", "Colonne strumento con grafici (si scelgono nella sezione Deck, Cards, Orbit e Console)"),
+    ("cards", "Colourful cards in a mosaic (see the Deck, Cards, Orbit and Console section)", "Card colorate a mosaico (vedi la sezione Deck, Cards, Orbit e Console)"),
+    ("orbit", "Concentric rings per device (see the Deck, Cards, Orbit and Console section)", "Anelli concentrici per dispositivo (vedi la sezione Deck, Cards, Orbit e Console)"),
+    ("console", "Console: a bar and a row of tiles, one in focus (see the Deck, Cards, Orbit and Console section)", "Console: una barra e una fila di tile, uno in primo piano (vedi la sezione Deck, Cards, Orbit e Console)"),
     ("frame", "Digital picture frame (the folder is set in the Digital frame section)", "Cornice digitale (la cartella si sceglie nella sezione Cornice digitale)"),
     ("weather", "Weather, big", "Meteo, grande"),
     ("news", "News headlines, scrolling", "Notizie scorrevoli"),
@@ -317,7 +318,7 @@ fn int(min: i64, max: i64) -> Kind {
 /// Every setting of the editor, in the order they are shown.
 pub fn fields() -> Vec<Field> {
     use Kind::*;
-    let on_effect: &[&str] = &["plasma", "aurora", "lava", "waves", "matrix", "rain", "aquarium", "sea", "ink", "network", "globe"];
+    let on_effect: &[&str] = &["plasma", "aurora", "lava", "waves", "matrix", "rain", "aquarium", "sea", "ink", "veil", "network", "globe"];
     let themed: &[&str] = &["matrix", "rain", "aquarium", "sea", "ink", "network", "globe"];
     let music_on: &[&str] = &["true"];
     let mut v: Vec<Field> = Vec::new();
@@ -388,15 +389,15 @@ pub fn fields() -> Vec<Field> {
         .help("light = a white background (matrix, rain, aquarium, sea, ink, network, globe)", "light = sfondo bianco (matrix, rain, acquario, mare, inchiostro, network, globe)"));
     add(Field::new("effect_level", "effect", "Water level / number of nodes", "Livello dell'acqua / numero di nodi", int(0, 100))
         .def("50")
-        .when("background_effect", &["aquarium", "sea", "network", "globe"])
-        .help("Aquarium and sea: how much of the panel is water. Network and globe: how many nodes", "Acquario e mare: quanta parte del pannello è acqua. Network e globe: quanti nodi"));
+        .when("background_effect", &["aquarium", "sea", "veil", "network", "globe"])
+        .help("Aquarium and sea: how much of the panel is water. Veil: how many specks of light. Network and globe: how many nodes", "Acquario e mare: quanta parte del pannello è acqua. Veil: quanti puntini di luce. Network e globe: quanti nodi"));
     add(Field::new("effect_level_source", "effect", "Water level follows", "Il livello segue", Choice(&["none", "cpu", "gpu", "ram"]))
         .def("none")
         .when("background_effect", &["aquarium", "sea"])
         .help("The water rises and falls with the load of the CPU, the graphics card or the RAM (the level above is then not used)", "L'acqua sale e scende con il carico di CPU, scheda video o RAM (il livello sopra non viene usato)"));
     add(Field::new("effect_reactive", "effect", "Moves with the music", "Si muove con la musica", Bool)
         .def("false")
-        .when("background_effect", &["aquarium", "sea", "ink"])
+        .when("background_effect", &["aquarium", "sea", "ink", "veil"])
         .help("Taller waves, more light and more ink with the bass (the frame rate goes up to 15)", "Onde più alte, più luce e più inchiostro con i bassi (i fotogrammi salgono a 15)"));
     add(Field::new("effect_flip", "effect", "Upside down", "Sottosopra", Bool)
         .def("false")
@@ -404,7 +405,7 @@ pub fn fields() -> Vec<Field> {
         .help("The water hangs from the top of the panel; the light and the bubbles go the other way", "L'acqua è appesa in alto; la luce e le bolle vanno nel verso opposto"));
     add(Field::new("effect_palette", "effect", "Colors", "Colori", Multi(EFFECT_PALETTES))
         .def("neon")
-        .style_def(&[("matrix", "matrix"), ("rain", "matrix"), ("aquarium", "lagoon"), ("sea", "lagoon"), ("ink", "sunset"), ("network", "ice"), ("globe", "ice")])
+        .style_def(&[("matrix", "matrix"), ("rain", "matrix"), ("aquarium", "lagoon"), ("sea", "lagoon"), ("ink", "sunset"), ("veil", "midnight"), ("network", "ice"), ("globe", "ice")])
         .when("background_effect", on_effect)
         .help("Several = they rotate. matrix/amber/violet/crimson/snow are for matrix and rain; lagoon/deep/tropical for the aquarium and the sea; network and globe use ice unless you choose", "Più di uno = ruotano. matrix/amber/violet/crimson/snow per matrix e rain; lagoon/deep/tropical per l'acquario; network e globe usano ice se non scegli"));
     add(Field::new("effect_colors", "effect", "Own colors", "Colori personalizzati", ColorList)
@@ -414,7 +415,7 @@ pub fn fields() -> Vec<Field> {
     add(Field::new("effect_scale", "effect", "Size of the shapes (%)", "Dimensione delle forme (%)", int(25, 400)).def("100").when("background_effect", on_effect));
     add(Field::new("effect_brightness", "effect", "Brightness", "Luminosità", int(0, 100))
         .def("40")
-        .style_def(&[("aquarium", "65"), ("sea", "65"), ("ink", "70"), ("network", "70"), ("globe", "70")])
+        .style_def(&[("aquarium", "65"), ("sea", "65"), ("ink", "70"), ("veil", "70"), ("network", "70"), ("globe", "70")])
         .when("background_effect", on_effect)
         .help("Lower = text easier to read. Unset: 65 for the aquarium and the light variants, 70 for network and globe", "Più basso = testo più leggibile. Non impostato: 65 per l'acquario e le varianti chiare, 70 per network e globe"));
     add(Field::new("effect_fps", "effect", "Frames per second", "Fotogrammi al secondo", int(1, 30))
@@ -516,10 +517,33 @@ pub fn fields() -> Vec<Field> {
         .help("Layout \"orbit\": a cluster of concentric rings for each (up to 4)", "Layout \"orbit\": un gruppo di anelli concentrici per ognuno (fino a 4)"));
     add(Field::new("orbit_clock", "dash", "Clock block on the right", "Blocco orologio a destra", Bool).def("true").group("orbit"));
     add(Field::new("orbit_legend", "dash", "Legend under the rings", "Legenda sotto gli anelli", Bool).def("true").group("orbit"));
+    add(Field::new("console", "dash", "Tiles", "Tile", Panels { columns: false })
+        .def("cpu, gpu, ram, net, disk")
+        .group("console")
+        .help(
+            "Layout \"console\": a row of tiles (up to 7); the one in focus grows and shows the details",
+            "Layout \"console\": una fila di tile (fino a 7); quello in primo piano si ingrandisce e mostra i dettagli",
+        ));
+    add(Field::new("console_focus", "dash", "Focus", "Primo piano", Choice(&["rotate", "load", "none"]))
+        .def("rotate")
+        .group("console")
+        .help(
+            "rotate = the tiles take turns; load = the busiest one (CPU, GPU, RAM, network, disk); none = no focus, all tiles show their details",
+            "rotate = i tile si alternano; load = quello più impegnato (CPU, GPU, RAM, rete, disco); none = nessun primo piano, tutti i tile mostrano i dettagli",
+        ));
+    add(Field::new("console_interval", "dash", "Seconds per tile", "Secondi per tile", int(2, 120))
+        .def("6")
+        .when("console_focus", &["rotate"])
+        .group("console")
+        .help("How long each tile stays in focus", "Quanto resta in primo piano ogni tile"));
+    add(Field::new("console_bar", "dash", "Bar with names and clock", "Barra con nomi e orologio", Bool)
+        .def("true")
+        .group("console")
+        .help("The strip on top: the names of the tiles (the one in focus underlined) and the clock", "La striscia in alto: i nomi dei tile (quello in primo piano sottolineato) e l'orologio"));
     add(Field::new("dash_palette", "dash", "Colors from a preset", "Colori da un preset", Choice(DASH_PALETTES))
         .def("default")
         .group("look")
-        .help("The accent colors of the rings, cards and graphs (the same presets as the animated backgrounds)", "I colori di anelli, card e grafici (gli stessi preset degli sfondi animati)"));
+        .help("The accent colors of the rings, cards, tiles and graphs (the same presets as the animated backgrounds)", "I colori di anelli, card e grafici (gli stessi preset degli sfondi animati)"));
     add(Field::new("dash_colors", "dash", "Own colors", "Colori propri", ColorList)
         .group("look")
         .help("One or more colors, used instead of the preset", "Uno o più colori, usati al posto del preset"));

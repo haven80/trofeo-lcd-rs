@@ -317,3 +317,120 @@ impl Effect {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Veil: slow veils of light over a deep night colour
+// ---------------------------------------------------------------------------
+
+/// Pixels between two samples of the veil field.
+const VEIL_CELL: usize = 10;
+/// Bands of light.
+const VEIL_BANDS: usize = 5;
+
+impl Effect {
+    /// A deep night colour with a few broad bands of light that sway slowly, each lit by a
+    /// soft gradient, and some specks of light floating up. The palette is read as a depth
+    /// table: its darkest colour is the background, its lightest the crest of a band.
+    /// `level` is the number of specks (0-100), `react` (0-1) the music: wider, brighter bands.
+    /// Stateless: a pure function of `t` (and `phase`, which the music winds forward).
+    pub(super) fn paint_veil(&mut self, fb: &mut Framebuffer, level: u32, scale: u32, t: f64, react: f32, phase: f32) {
+        let (w, h) = (fb.width() as usize, fb.height() as usize);
+        let g = scale.clamp(25, 400) as f32 / 100.0;
+        let tf = (t % 10_000.0) as f32 + phase * 2.0;
+        let (cols, rows) = (w / VEIL_CELL + 2, h / VEIL_CELL + 2);
+        // the field: 0 (background) .. 1 (the crest of a band)
+        let mut field = vec![0.0f32; cols * rows];
+        let bands: Vec<(f32, f32, f32, f32, f32, f32)> = (0..VEIL_BANDS)
+            .map(|k| {
+                let kf = k as f32;
+                // (centre, sway, speed, width, weight, wavelength) in units of the panel height
+                (0.18 + 0.17 * kf, 0.10 + 0.02 * kf, 0.16 + 0.05 * kf, (0.10 + 0.035 * kf) * (1.0 + 0.4 * react), 0.62 - 0.05 * kf, 1.4 + 0.35 * kf)
+            })
+            .collect();
+        let hf = h as f32;
+        let unitv = hf * g;
+        for r in 0..rows {
+            let y = (r * VEIL_CELL) as f32 / hf;
+            for c in 0..cols {
+                let x = (c * VEIL_CELL) as f32 / unitv;
+                let mut sum = 0.0f32;
+                for (k, &(centre, sway, speed, width, weight, wl)) in bands.iter().enumerate() {
+                    let kf = k as f32;
+                    let cy = centre
+                        + sway * (x / wl * 2.2 + tf * speed + kf * 1.7).sin()
+                        + 0.5 * sway * (x / wl * 4.7 - tf * speed * 1.4 + kf * 0.9).sin();
+                    let d = (y - cy) / width;
+                    sum += weight * (-d * d).exp();
+                }
+                // a soft lift towards the bottom, like light coming up from below
+                let base = 0.06 + 0.2 * y * y;
+                let lit = 1.0 - (-(sum * (1.0 + 0.9 * react)) * 1.3).exp();
+                field[r * cols + c] = (base + 0.85 * lit).clamp(0.0, 1.0);
+            }
+        }
+        // colours: the depth table of the palette, light at the top of the range
+        let wl = &self.water_lut;
+        let px = fb.as_bytes_mut();
+        let xi: Vec<(usize, f32)> = (0..w).map(|x| (x / VEIL_CELL, (x % VEIL_CELL) as f32 / VEIL_CELL as f32)).collect();
+        let mut row = vec![0.0f32; cols];
+        const BAYER: [f32; 16] = [0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0];
+        for y in 0..h {
+            let (r, wy) = (y / VEIL_CELL, (y % VEIL_CELL) as f32 / VEIL_CELL as f32);
+            let (a, b) = (r * cols, (r + 1) * cols);
+            for c in 0..cols {
+                row[c] = field[a + c] + (field[b + c] - field[a + c]) * wy;
+            }
+            let out = &mut px[y * w * 3..(y + 1) * w * 3];
+            for (x, p) in out.chunks_exact_mut(3).enumerate() {
+                let (c, wx) = xi[x];
+                let v = row[c] + (row[c + 1] - row[c]) * wx;
+                // ordered dither: dark gradients would show steps on a small screen otherwise
+                let dither = (BAYER[(y & 3) * 4 + (x & 3)] + 0.5) / 16.0;
+                let idx = (((1.0 - v) * (WATER_N - 1) as f32 + dither - 0.5).max(0.0) as usize).min(WATER_N - 1);
+                let col = wl[idx];
+                p[0] = col[0];
+                p[1] = col[1];
+                p[2] = col[2];
+            }
+        }
+        // the specks
+        let amount = level.min(100) as f32 / 100.0;
+        let n = (amount * (w * h) as f32 / 11_000.0) as u64;
+        let bright = wl[0];
+        let tint = [
+            (bright[0] as u32 * 3 / 4 + 64).min(255) as f32,
+            (bright[1] as u32 * 3 / 4 + 64).min(255) as f32,
+            (bright[2] as u32 * 3 / 4 + 64).min(255) as f32,
+        ];
+        let (wi, hi) = (w as i32, h as i32);
+        for i in 0..n {
+            let speed = (6.0 + 14.0 * unit(mix(i, 3))) * g.sqrt();
+            let y = (unit(mix(i, 2)) * hf - tf * speed).rem_euclid(hf);
+            let x = unit(mix(i, 1)) * w as f32 + 12.0 * (tf * 0.3 + i as f32).sin();
+            let r = 0.8 + 1.7 * unit(mix(i, 4));
+            let twinkle = 0.55 + 0.45 * (tf * (0.6 + unit(mix(i, 5))) + unit(mix(i, 6)) * 6.28).sin();
+            // fade near the top and the bottom edge
+            let edge = (y / (0.12 * hf)).min(1.0).min(((hf - y) / (0.12 * hf)).min(1.0));
+            let alpha = (0.75 * twinkle * edge * (1.0 + 0.5 * react)).clamp(0.0, 1.0);
+            if alpha <= 0.01 {
+                continue;
+            }
+            let (x0, x1) = ((x - r - 1.0).floor().max(0.0) as i32, ((x + r + 1.0).ceil() as i32).min(wi - 1));
+            let (y0, y1) = ((y - r - 1.0).floor().max(0.0) as i32, ((y + r + 1.0).ceil() as i32).min(hi - 1));
+            for yy in y0..=y1 {
+                for xx in x0..=x1 {
+                    let d = ((xx as f32 + 0.5 - x).powi(2) + (yy as f32 + 0.5 - y).powi(2)).sqrt();
+                    let a = ((r + 0.7 - d) / 1.4).clamp(0.0, 1.0) * alpha;
+                    if a <= 0.0 {
+                        continue;
+                    }
+                    let o = ((yy * wi + xx) * 3) as usize;
+                    for k in 0..3 {
+                        let v = px[o + k] as f32;
+                        px[o + k] = (v + (tint[k] - v) * a) as u8;
+                    }
+                }
+            }
+        }
+    }
+}

@@ -20,7 +20,11 @@ whose driver was rewritten byte-for-byte from
 See **[NOTICE.md](./NOTICE.md)** for the full provenance and a summary of
 what this fork adds on top of the original.
 
-**New in 2.7.0 — two new liquid backgrounds, and the water can follow your PC and your music.** `background_effect = sea` is a sunset over layers of waves with foam and the sun's glitter, `ink` is clouds of coloured ink curling in water. The aquarium and the sea can **rise and fall with the CPU, GPU or RAM load** (`effect_level_source`), and the aquarium, sea and ink can **move with the music** (`effect_reactive`). See [Animated background](#backgrounds-solid-color-and-animated-effects).
+**New in 2.8.0 — a PlayStation-style look: a new background and a new layout.** `background_effect = veil` is slow, silky bands of light drifting over a deep night gradient with a few floating specks (six new night palettes: `midnight`, `dusk`, `ember`, `mint`, `rose`, `slate`). `layout = console` is a bar with the names and the clock over a row of tiles: the tile in focus grows, lights up in its colour and shows a graph and its readings, the others stay small and dim. The focus can **rotate** by itself, **follow the busiest part of the PC** or be **off**, and the colours come from the same presets as the other layouts. See [Veil](#backgrounds-solid-color-and-animated-effects) and [Console](#deck-cards-orbit-and-console).
+
+**2.7.1 — fixes for Radeon cards:** the **GPU usage** now comes from the Radeon driver (what the Radeon software shows) instead of the Windows counter, which only sees the 3D engine and could read about 40 % lower; and the **GPU hot spot** now shows in the `deck`, `cards` and `orbit` layouts on cards that do not report their power (such as the RX 9070 XT). See [Which sensors you need](#which-sensors-you-need-and-what-to-install).
+
+**2.7.0 — two new liquid backgrounds, and the water can follow your PC and your music.** `background_effect = sea` is a sunset over layers of waves with foam and the sun's glitter, `ink` is clouds of coloured ink curling in water. The aquarium and the sea can **rise and fall with the CPU, GPU or RAM load** (`effect_level_source`), and the aquarium, sea and ink can **move with the music** (`effect_reactive`). See [Animated background](#backgrounds-solid-color-and-animated-effects).
 
 **2.6.1 — the aquarium can be turned upside down** (`effect_flip = true`, or *Upside down* in the editor): the water hangs from the top of the panel.
 
@@ -89,9 +93,9 @@ option, and a live preview of the display drawn by the real program.
   RPM of the CPU fan, the case fans, the pump and the GPU on the tiles, in the status line and on
   the **DeepCool case display** (frequency and RPM in turn, `deepcool_mode = alternate`) — see
   [Fans and sensors](#fans-and-sensors-librehardwaremonitor).
-- **Deck, Cards and Orbit**: three more full screens with graphs of the last minutes —
-  instrument columns, colourful cards and concentric rings (see
-  [Deck, Cards and Orbit](#deck-cards-and-orbit)).
+- **Deck, Cards, Orbit and Console**: four more full screens with graphs of the last minutes —
+  instrument columns, colourful cards, concentric rings and a console-style row of tiles with a
+  focus that moves (see [Deck, Cards, Orbit and Console](#deck-cards-orbit-and-console)).
 - **Digital picture frame**: `layout = frame` turns the LCD into a photo frame — a collage of
   the pictures of a folder, either a tidy **mosaic** or scattered **polaroid** prints, one
   picture changing at a time over a blurred copy of the photo, with slim glass tiles (clock,
@@ -142,7 +146,7 @@ hardware. If a value shows `N/A`, stays empty, or a tile never appears, find it 
 |---|---|---|
 | CPU load, frequency, RAM, network, disk, clock, weather, music | nothing | nothing |
 | **NVIDIA** graphics card (temperature, load, power, fan, memory) | the NVIDIA driver | the normal NVIDIA driver (it contains `nvml.dll`) |
-| **AMD Radeon** graphics card (temperature, load, power, fan, hot spot) | the Radeon driver | the normal AMD Adrenalin driver |
+| **AMD Radeon** graphics card (temperature, load, power, fan, hot spot) | the Radeon driver | the normal AMD Adrenalin driver. The usage % is the driver's own figure; `gpu_usage_source = windows` goes back to the Windows counter. Some cards (the RX 9070 XT) do not report their power: the power tile stays empty, the rest works |
 | **AMD Ryzen** CPU temperature and power | PawnIO + Administrator | [PawnIO](https://github.com/namazso/PawnIO), then start the program **as administrator** |
 | **Intel** CPU temperature and power | LibreHardwareMonitor | see below |
 | Fans (CPU, case, pump), motherboard and disk temperature, GPU hot spot | LibreHardwareMonitor | see below |
@@ -172,7 +176,7 @@ plus the fans, motherboard and disk temperature and the GPU hot spot.
 
 **If a value is still missing:**
 
-- `trofeo_lcd --diag` prints what the program's own sensors find: the NVIDIA card, the Radeon card and the CPU sensor it picked (`Sensor chosen: none` on an Intel CPU, which is normal and means LibreHardwareMonitor is needed).
+- `trofeo_lcd --diag` prints what the program's own sensors find (on Windows also the GPU usage from the driver and from the Windows counter, and which GPU engines are busy): the NVIDIA card, the Radeon card and the CPU sensor it picked (`Sensor chosen: none` on an Intel CPU, which is normal and means LibreHardwareMonitor is needed).
 - `trofeo_lcd --lhm-list` prints everything LibreHardwareMonitor reports and which sensor each
   role uses. If the list is empty, the web server is not running (step 3) or is on another port.
   If your board names a sensor differently, point the role at it with `lhm_cpu_fan = "Fan #2"`
@@ -346,7 +350,7 @@ Also settable in `trofeo.conf` (see `trofeo.conf.example`), in the [settings edi
 - `background_color = black | #0B1D3A | …`: a **solid color** instead of a picture — a name
   (`black`, `white`, `pink`, `navy`, `teal`, …) or a hex code. See
   [Backgrounds](#backgrounds-solid-color-and-animated-effects).
-- `background_effect = plasma | aurora | lava | waves | matrix | rain | aquarium | sea | ink | network | globe`: an
+- `background_effect = plasma | aurora | lava | waves | matrix | rain | aquarium | sea | ink | veil | network | globe`: an
   **animated background** with no file needed — see
   [Backgrounds](#backgrounds-solid-color-and-animated-effects).
   It replaces `background` while it is on.
@@ -503,6 +507,16 @@ makes the swirls larger or smaller. Both the sea and the ink do a little more wo
 
 ![Ink with the neon palette](img/background-ink-neon.png)
 
+**Veil.** `background_effect = veil` is slow, silky bands of light that sway over a deep night gradient, with a few specks
+floating up like dust in a beam of light — calm, dark and easy to read text on. The palettes made for it are
+`midnight` (the default, blue), `dusk` (violet), `ember` (red-orange), `mint`, `rose` and `slate`; any other
+palette works too. `effect_level` is how many specks float about (`0` = none), `effect_scale` the width of the bands,
+`effect_reactive = true` lets the music widen the bands and brighten the specks. It costs only about 4 ms a frame.
+
+![Veil, midnight](img/background-veil.png)
+
+![Veil, ember](img/background-veil-ember.png)
+
 **Network and globe.** `background_effect = network` is a web of points drifting slowly,
 joined by thin lines while they are near each other, so the net keeps changing shape (a few nodes
 carry a ring). `globe` is the same on a sphere that turns and tilts slowly, the near side clearer
@@ -547,7 +561,7 @@ It is built to be light: the picture is only calculated on a coarse grid and
 stretched through a color table (about a millisecond per frame; the aquarium, a few
 milliseconds), and `effect_fps` (default 8) keeps the number of frames low — see
 [Performance](#performance). Details and every key in the
-**[Options guide](./OPTIONS_GUIDE.md#animated-background-effect-plasma-aurora-lava-waves-matrix-rain-aquarium-sea-ink-network-globe)**.
+**[Options guide](./OPTIONS_GUIDE.md#animated-background-effect-plasma-aurora-lava-waves-matrix-rain-aquarium-sea-ink-veil-network-globe)**.
 
 ### Brightness, DeepCool, FPS
 
@@ -619,7 +633,7 @@ and more examples (combining feeds and files, styling the chyron, etc.).
 
 ### Preset layouts
 
-`layout = default | cpu-gpu | temps | overview | grid6 | clock-center | io | music | gaming | cpu | gpu | weather | news | tiles | deck | cards | orbit | frame`
+`layout = default | cpu-gpu | temps | overview | grid6 | clock-center | io | music | gaming | cpu | gpu | weather | news | tiles | deck | cards | orbit | console | frame`
 (`--layout list` prints them). All of them, shown here over a sample background
 (`background = img/sample_background.jpg`, `panel_opacity = 60`):
 
@@ -723,7 +737,7 @@ What you get:
   each, and `mb_temp` (motherboard) and `disk_temp`;
 - `fan 1240rpm case 780rpm pump 2650rpm` in the CPU line of the status screens (`hide = cpu_fan,
   case_fan, pump` removes them);
-- the fans in the [Deck, Cards and Orbit](#deck-cards-and-orbit) screens;
+- the fans in the [Deck, Cards, Orbit and Console](#deck-cards-orbit-and-console) screens;
 - the **DeepCool case display** (see [Brightness, DeepCool, FPS](#brightness-deepcool-fps));
 - the GPU fan on cards that the driver reports no fan for, and the CPU temperature and power on
   CPUs the built-in sensor does not know.
@@ -743,10 +757,10 @@ tiles_rpm = true
 tiles_fan_max = 2500             # the RPM that fills a bar
 ```
 
-### Deck, Cards and Orbit
+### Deck, Cards, Orbit and Console
 
-Three more full screens from the same readings as the tiles, each with its own character and all
-of them chosen from the config (and from the *Deck, Cards and Orbit* section of the settings editor).
+Four more full screens from the same readings as the tiles, each with its own character and all
+of them chosen from the config (and from the *Deck, Cards, Orbit and Console* section of the settings editor).
 They draw a **graph of the last minutes** for the main reading, and take their accent colors from the
 presets of the animated backgrounds (`dash_palette`) or from your own list (`dash_colors`).
 
@@ -767,6 +781,35 @@ weather and track on the right.
 
 ![orbit](img/layout-orbit.png)
 
+**`layout = console`**: a bar on top with the names of the tiles and the clock, and under it a row of
+tiles (up to 7). **One tile is in focus**: it grows, lights up in its colour with a soft glow and shows a graph of
+the last minutes and its readings; the others stay small and dim, with the value and a bar. Where the focus goes is
+your choice with `console_focus`: `rotate` (the tiles take turns, `console_interval` seconds each), `load` (the focus
+follows the busiest of CPU, GPU, RAM, network and disk — it only moves when another one is clearly ahead for a few
+seconds, so it does not flicker) or `none` (no focus: all the tiles show their details, side by side). The colours
+are the usual `dash_palette` / `dash_colors` / `dash_theme`, so the same layout can be midnight blue, violet,
+ember, mint or a light pastel one. The screen is redrawn about once a second, so the focus changes at that pace.
+
+![console, focus on the CPU, over the veil background](img/layout-console.png)
+
+![console, no focus: all the tiles with their details](img/layout-console-all.png)
+
+![console, the focus follows the load (here the GPU), ember colours](img/layout-console-load.png)
+
+![console, light theme](img/layout-console-light.png)
+
+```ini
+layout = console
+console = cpu, gpu, ram, net, disk   # 1-7 of: cpu gpu ram fans net disk clock weather music
+console_focus = rotate               # rotate | load | none
+console_interval = 6                 # seconds per tile with rotate
+console_bar = true                   # the bar with the names and the clock
+dash_palette = midnight              # midnight dusk ember mint rose slate pastel ocean ...
+dash_bg = effect                     # the animated background behind it
+background_effect = veil
+effect_palette = midnight
+```
+
 ```ini
 layout = deck
 deck = cpu, gpu, ram, clock          # 2-5 of: cpu gpu ram fans net disk clock weather music
@@ -775,6 +818,9 @@ cards = clock | cpu | gpu | ram, disk | music, net    # "|" = next column, "," =
 # layout = orbit
 orbit = cpu, gpu, ram                # 1-4 devices
 orbit_clock = true
+# layout = console
+console = cpu, gpu, ram, net, disk   # 1-7 tiles, the one in focus shows the details
+console_focus = rotate               # rotate | load | none
 dash_palette = sunset                # default | any preset of the animated backgrounds
 # dash_colors = #A76BFF, #38C6F4, #FF6FB1
 dash_graph = true
@@ -818,7 +864,7 @@ dash_plate = 35          # opacity of the panel, 0-100
 ```
 
 The screens are redrawn about once a second (the graphs move that often) and only when something
-changed. All the keys are in the [options guide](./OPTIONS_GUIDE.md#deck-cards-and-orbit).
+changed. All the keys are in the [options guide](./OPTIONS_GUIDE.md#deck-cards-orbit-and-console).
 
 ### Digital frame (picture collage)
 

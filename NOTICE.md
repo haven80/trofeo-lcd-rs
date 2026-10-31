@@ -86,7 +86,7 @@ Starting from the `sukualam/trofeo-lcd` codebase, this fork has:
   (MPL-2.0; only its web server is used, nothing of its code): CPU, case, pump and GPU RPM on the tiles, the
   status line, the new screens and the DeepCool case display (`deepcool_mode`), with a small JSON reader of
   our own.
-- Added three more screens, **deck**, **cards** and **orbit** (`layout = deck | cards | orbit`), with
+- Added four more screens, **deck**, **cards**, **orbit** and **console** (`layout = deck | cards | orbit | console`), with
   graphs of the last minutes, drawn with the same pieces as the tiles.
 - Added a **graphical settings editor** (`trofeo_config`, built with egui): a separate
   small program that only creates and edits `trofeo.conf` (comments preserved), with a live

@@ -185,7 +185,7 @@ Video backgrounds need ffmpeg; `background_dim` darkens the image so text
 stays readable over it. With an animated background (GIF or video) the idle
 FPS is automatically raised to the active FPS, so the animation stays smooth
 even while nothing else is happening. For a soft moving background that needs
-no file at all see [Animated background effect](#animated-background-effect-plasma-aurora-lava-waves-matrix-rain-aquarium-sea-ink-network-globe).
+no file at all see [Animated background effect](#animated-background-effect-plasma-aurora-lava-waves-matrix-rain-aquarium-sea-ink-veil-network-globe).
 
 ```ini
 background = C:\Pictures\space.mp4
@@ -198,18 +198,18 @@ ffmpeg = C:\ffmpeg\bin\ffmpeg.exe
 # background_color = #0B1D3A      # ... or a hex code
 ```
 
-## Animated background effect (plasma, aurora, lava, waves, matrix, rain, aquarium, sea, ink, network, globe)
+## Animated background effect (plasma, aurora, lava, waves, matrix, rain, aquarium, sea, ink, veil, network, globe)
 
 Instead of a picture, the background can be a slow, soft effect whose colors
 blend into each other and drift: a plasma, curtains of aurora, a lava lamp or
-silk-like waves — a minimal **digital rain** (`matrix`, `rain`) an **aquarium** seen from the side, a **sea** at sunset, clouds of **ink** in water, a **network** of nodes and lines or a turning **globe**. It is drawn behind everything (clock, status lines, spectrum,
+silk-like waves — a minimal **digital rain** (`matrix`, `rain`) an **aquarium** seen from the side, a **sea** at sunset, clouds of **ink** in water, silky bands of light (**veil**), a **network** of nodes and lines or a turning **globe**. It is drawn behind everything (clock, status lines, spectrum,
 the pixel game, layouts), costs almost no CPU, and you choose the colors, the
 speed and the brightness.
 
 | Key | CLI | Values | Default |
 |---|---|---|---|
-| `background_effect` | `--background-effect` | `plasma` / `aurora` / `lava` / `waves` / `matrix` / `rain` / `aquarium` / `sea` / `ink` / `network` / `globe` / `none` | `none` |
-| `effect_palette` | `--effect-palette` | `pastel` / `fluo` / `neon` / `candy` / `sunset` / `ocean` / `aurora` / `fire` / `forest` / `ice` / `mono` / `rainbow` / `custom`; for `matrix` / `rain` also `matrix` (green) / `amber` / `violet` / `crimson` / `snow` (white); for `aquarium` and `sea` also `lagoon` / `deep` / `tropical`; `ink` uses `sunset` unless you choose; `network` and `globe` use `ice` unless you choose; several (comma-separated) or `all` rotate | `neon` |
+| `background_effect` | `--background-effect` | `plasma` / `aurora` / `lava` / `waves` / `matrix` / `rain` / `aquarium` / `sea` / `ink` / `veil` / `network` / `globe` / `none` | `none` |
+| `effect_palette` | `--effect-palette` | `pastel` / `fluo` / `neon` / `candy` / `sunset` / `ocean` / `aurora` / `fire` / `forest` / `ice` / `mono` / `rainbow` / `custom`; for `matrix` / `rain` also `matrix` (green) / `amber` / `violet` / `crimson` / `snow` (white); for `aquarium` and `sea` also `lagoon` / `deep` / `tropical`; `ink` uses `sunset` unless you choose; `veil` uses `midnight` unless you choose (night palettes: `midnight` / `dusk` / `ember` / `mint` / `rose` / `slate`, they work in every other place that takes a palette too); `network` and `globe` use `ice` unless you choose; several (comma-separated) or `all` rotate | `neon` |
 | `effect_colors` | `--effect-colors` | 2 or more colors, e.g. `#FF0080, #00FFFF` | — |
 | `effect_palette_interval` | `--effect-palette-interval` | `5`-`3600` seconds (rotation period) | `60` |
 | `effect_speed` | `--effect-speed` | `0` (frozen) - `100` (fast) | `30` |
@@ -219,8 +219,8 @@ speed and the brightness.
 | `effect_theme` | `--effect-theme` | `dark` / `light` (`matrix`, `rain`, `aquarium`, `sea`, `ink`, `network` and `globe`: a white background instead of a dark one; the other styles ignore it) | `dark` |
 | `effect_flip` | `--effect-flip` | `true` / `false` (`aquarium` only: upside down, the water hangs from the top of the panel, the light rays and the bubbles go the other way; `effect_level` is then measured from the top) | `false` |
 | `effect_level_source` | `--effect-level-source` | `none` / `cpu` / `gpu` / `ram` (`aquarium` and `sea`: the water level follows that load, smoothly, never below 5 %; `effect_level` is then not used; if the reading is missing the level of `effect_level` is used) | `none` |
-| `effect_reactive` | `--effect-reactive` | `true` / `false` (`aquarium`, `sea`, `ink`: the music moves them: taller waves and brighter light with the bass, more and faster ink; the frame rate rises to at least 15, a load-driven level to at least 10) | `false` |
-| `effect_level` | `--effect-level` | `0`-`100` % (`aquarium` and `sea`: how high the water reaches, `0` empty, `100` full; `network` and `globe`: how many nodes, `0` few, `100` many) | `50` |
+| `effect_reactive` | `--effect-reactive` | `true` / `false` (`aquarium`, `sea`, `ink`, `veil`: the music moves them: taller waves and brighter light with the bass, more and faster ink, wider bands; the frame rate rises to at least 15, a load-driven level to at least 10) | `false` |
+| `effect_level` | `--effect-level` | `0`-`100` % (`aquarium` and `sea`: how high the water reaches, `0` empty, `100` full; `veil`: how many specks float about, `0` none; `network` and `globe`: how many nodes, `0` few, `100` many) | `50` |
 
 - **Styles** (`background_effect`): `plasma` is the classic demoscene look (a
   sum of waves and a moving ring); `aurora` is undulating bands of light; `lava`
@@ -243,6 +243,12 @@ speed and the brightness.
   water (dark ink on white paper in the light variant), made of a warped fractal noise. The
   colors come from the palette (`sunset` unless you choose, `neon`, `ocean`, `fire`,
   `rainbow` look good) and drift along it; `effect_scale` is the size of the swirls.
+- **Veil** (`background_effect = veil`): five slow bands of light swaying over a deep night
+  gradient, drawn on a coarse grid and smoothed (with a light dither so the dark gradient has
+  no steps), and a few specks drifting upwards. The colours are the palette's depth table:
+  `midnight` (default), `dusk`, `ember`, `mint`, `rose` and `slate` are made for it.
+  `effect_level` is the number of specks, `effect_scale` the width of the bands, `effect_speed`
+  their speed. About 4 ms a frame on a large screen.
 - **Water as a gauge and with the music** (aquarium, sea, ink): `effect_level_source` makes the
   water level follow the load of the CPU, the GPU or the RAM (a full tank = a busy PC), and
   `effect_reactive = true` lets the music move the picture: taller surface waves and brighter
@@ -560,7 +566,7 @@ spectrum at the bottom. When the music stops the normal screen/layout comes back
   - `solid` — one flat color of your choice, `music_bg_color` (`#RRGGBB`, `R,G,B`
     or a name), the same for every track.
   - `none` — keep whatever is behind (solid color, your `background` image or the
-    [background effect](#animated-background-effect-plasma-aurora-lava-waves-matrix-rain-aquarium-sea-ink-network-globe));
+    [background effect](#animated-background-effect-plasma-aurora-lava-waves-matrix-rain-aquarium-sea-ink-veil-network-globe));
     the cover and text are drawn on top.
   - `effect` — the animated background effect (plasma, aurora, lava, waves, matrix, rain, aquarium, network or globe, with
     the style, palette, speed and size you set in its section; plasma if you set none),
@@ -1103,7 +1109,7 @@ quotes: `lhm_cpu_fan = "Fan #2"`.
 
 Where the readings show up: the `cpu_fan`, `case_fan`, `pump`, `gpu_fan`, `fans`, `mb_temp` and
 `disk_temp` [tiles](#tiles-layout), the `tiles_rpm` line on the CPU tiles, the CPU line of the status
-screens (`hide = cpu_fan, case_fan, pump`), [Deck, Cards and Orbit](#deck-cards-and-orbit), and the
+screens (`hide = cpu_fan, case_fan, pump`), [Deck, Cards, Orbit and Console](#deck-cards-orbit-and-console), and the
 [DeepCool display](#deepcool-integration-restart-required). The GPU fan fills in when the driver does
 not report one, and the CPU temperature and power when the built-in sensor does not know the CPU.
 
@@ -1144,9 +1150,9 @@ happens. In the editor: *System → New version notice*.
 `trofeo_lcd --update-demo` shows the banner at once with a made-up version, to see how it looks (it works even
 with `update_check = false`).
 
-## Deck, Cards and Orbit
+## Deck, Cards, Orbit and Console
 
-Three more full screens (`layout = deck`, `cards`, `orbit`). Every key can also be a command-line
+Four more full screens (`layout = deck`, `cards`, `orbit`, `console`). Every key can also be a command-line
 flag and all of them apply live. Panels: `cpu gpu ram fans net disk clock weather music` (`clock` also shows
 the weather and the playing track). `fans` needs [LibreHardwareMonitor](#fans-and-sensors-librehardwaremonitor).
 
@@ -1160,7 +1166,11 @@ the weather and the playing track). `fans` needs [LibreHardwareMonitor](#fans-an
 | `orbit` | 1 to 4 devices, one cluster of rings each | `cpu, gpu, ram` |
 | `orbit_clock` | the clock block on the right | `true` |
 | `orbit_legend` | the names of the rings under each cluster | `true` |
-| `dash_palette` | `default` or a preset of the animated backgrounds (`pastel`, `ocean`, `sunset`, ...) | `default` |
+| `console` | 1 to 7 tiles in a row | `cpu, gpu, ram, net, disk` |
+| `console_focus` | which tile is in focus (bigger, lit, with graph and readings): `rotate` (they take turns) \| `load` (the busiest of CPU, GPU, RAM, network and disk; it moves only when another one is ahead by 10 points for 3 seconds) \| `none` (no focus, all tiles detailed and equal) | `rotate` |
+| `console_interval` | seconds each tile stays in focus with `rotate`, `2`-`120` | `6` |
+| `console_bar` | the bar on top with the names of the tiles (the one in focus underlined) and the clock | `true` |
+| `dash_palette` | `default` or a preset of the animated backgrounds (`pastel`, `ocean`, `sunset`, `midnight`, `dusk`, `mint`, ...) | `default` |
 | `dash_colors` | your own accent colors (used instead of the preset) | |
 | `dash_hero` | the big number of the CPU and GPU: `temp` (temperature) \| `load` (usage); the other one becomes a small reading and the graph follows | `temp` |
 | `cards_fan` | the fan RPM at the top right of the CPU and GPU cards (needs [LibreHardwareMonitor](#fans-and-sensors-librehardwaremonitor)) | `true` |
@@ -1176,7 +1186,9 @@ the weather and the playing track). `fans` needs [LibreHardwareMonitor](#fans-an
 | `dash_bg` | `global` \| `color` \| `gradient` \| `effect` \| `image` | `global` |
 | `dash_bg_color` / `dash_bg_image` / `dash_bg_dim` | for `color`/`gradient`, for `image`, darkening `0`-`100` | |
 
-The maxima of watts and fan speed are the ones of the tiles (`tiles_cpu_watt_max`, `tiles_gpu_watt_max`,
+The accent colours of `console` go one per tile, in order, so `dash_palette` / `dash_colors` / `dash_theme` are its
+colour themes (`dash_theme = light` gives white tiles with a pastel focus). The focus changes at the pace of the
+screen redraw (about once a second). The maxima of watts and fan speed are the ones of the tiles (`tiles_cpu_watt_max`, `tiles_gpu_watt_max`,
 `tiles_fan_max`) and the seconds on the clock `tiles_clock_seconds`. The rings of `orbit` are: CPU load /
 temperature / power, GPU load / temperature / power, RAM / disk / network, one per fan for `fans`. Each cluster
 takes its own run of colors from the palette. A reading that does not exist (no temperature sensor, no
