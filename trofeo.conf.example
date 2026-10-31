@@ -259,7 +259,8 @@ language = en
 # console_interval = 6                  # seconds per tile with rotate (2-120)
 # console_bar = true                    # the strip on top with the names of the tiles and the clock
 #                                       # (the tile in focus is bigger, lit in its colour and shows graph and readings;
-#                                       # the others are small and dim; with none all tiles show their details)
+#                                       # the others are small and dim; with none all tiles show their details;
+#                                       # in portrait the tiles are stacked in a column)
 # For all of them:
 # dash_palette = default                # accent colours (try midnight, dusk, mint with the console layout): default or a preset of the animated backgrounds
 # dash_colors = #A76BFF, #38C6F4, #FF6FB1   # or your own colours (used instead of the preset)

@@ -20,7 +20,7 @@ whose driver was rewritten byte-for-byte from
 See **[NOTICE.md](./NOTICE.md)** for the full provenance and a summary of
 what this fork adds on top of the original.
 
-**New in 2.8.0 — a PlayStation-style look: a new background and a new layout.** `background_effect = veil` is slow, silky bands of light drifting over a deep night gradient with a few floating specks (six new night palettes: `midnight`, `dusk`, `ember`, `mint`, `rose`, `slate`). `layout = console` is a bar with the names and the clock over a row of tiles: the tile in focus grows, lights up in its colour and shows a graph and its readings, the others stay small and dim. The focus can **rotate** by itself, **follow the busiest part of the PC** or be **off**, and the colours come from the same presets as the other layouts. See [Veil](#backgrounds-solid-color-and-animated-effects) and [Console](#deck-cards-orbit-and-console).
+**New in 2.9.0 — a console-style look: a new background and a new layout, and `deck`, `cards` and `orbit` finally work in portrait.** `background_effect = veil` is slow, silky bands of light drifting over a deep night gradient with a few floating specks (six new night palettes: `midnight`, `dusk`, `ember`, `mint`, `rose`, `slate`). `layout = console` is a bar with the names and the clock over a row of tiles: the tile in focus grows, lights up in its colour and shows a graph and its readings, the others stay small and dim. The focus can **rotate** by itself, **follow the busiest part of the PC** or be **off**, and the colours come from the same presets as the other layouts. In portrait, `deck`, `cards`, `orbit` and `console` now stack their parts in a column (before, `deck`, `cards` and `orbit` were squeezed into thin strips). See [Veil](#backgrounds-solid-color-and-animated-effects), [Console](#deck-cards-orbit-and-console) and [Orientation](#orientation-landscape--portrait).
 
 **2.7.1 — fixes for Radeon cards:** the **GPU usage** now comes from the Radeon driver (what the Radeon software shows) instead of the Windows counter, which only sees the 3D engine and could read about 40 % lower; and the **GPU hot spot** now shows in the `deck`, `cards` and `orbit` layouts on cards that do not report their power (such as the RX 9070 XT). See [Which sensors you need](#which-sensors-you-need-and-what-to-install).
 
@@ -329,7 +329,7 @@ config file. In `trofeo_screen` portrait mode the virtual display must be
 **462×1920** (auto-detected by `--list-displays`).
 
 **Every layout works in portrait.** The classic layouts and `tiles` stack their panels in a column, and
-`deck`, `cards`, `orbit` and `console` (from 2.8.0) turn their columns and clusters into rows: `deck` gives each
+`deck`, `cards`, `orbit` and `console` (from 2.9.0) turn their columns and clusters into rows: `deck` gives each
 device a row, `cards` puts the cards one under the other (the groups of `cards = a | b, c` are read in order),
 `orbit` stacks the rings with the clock block last, and `console` stacks its tiles with the one in focus taller.
 The screenshots below are the preview of each layout on a 462×1920 panel (`orientation = portrait`).

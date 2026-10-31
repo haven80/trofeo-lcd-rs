@@ -906,11 +906,18 @@ fn stat_cell(p: &mut Painter, c: &Ctx, x: f32, y: f32, max_w: f32, st: &Stat, vc
     value_unit(p, x, base, &st.value, &st.unit, vcap, W::Regular, ink, 255, label_alpha)
 }
 
+/// A panel taller than it is wide (the LCD turned to portrait): the screens stack their parts in a
+/// column instead of standing them side by side.
+fn is_portrait((_, _, w, h): (f32, f32, f32, f32)) -> bool {
+    h > w * 1.1
+}
+
 // -- deck
 
 fn draw_deck(p: &mut Painter, c: &Ctx, panels: &[Panel], area: (f32, f32, f32, f32)) {
     let (x, y, w, h) = area;
-    let radius = (h * 0.06).clamp(10.0, 26.0);
+    let portrait = is_portrait(area);
+    let radius = (h.min(w) * 0.06).clamp(10.0, 26.0);
     let (plate_rgb, plate_alpha) = plate(c.s);
     let (line, outline_a, hair_a) = line_style(c.s);
     if plate_alpha > 0 {
@@ -918,6 +925,17 @@ fn draw_deck(p: &mut Painter, c: &Ctx, panels: &[Panel], area: (f32, f32, f32, f
     }
     p.layer.stroke_rrect(area, radius, 1.5, line, outline_a);
     let weights: Vec<f32> = panels.iter().map(|q| q.kind.weight()).collect();
+    if portrait {
+        // rows instead of columns
+        for (i, (panel, (off, rh))) in panels.iter().zip(split(h as u32, 0, &weights)).enumerate() {
+            let ry = y + off as f32;
+            if i > 0 {
+                p.layer.fill_rrect_solid((x + w * 0.06, ry.round(), w * 0.88, 1.0), 0.0, line, hair_a);
+            }
+            deck_column(p, c, panel, accent(c.s, i), (x, ry, w, rh as f32));
+        }
+        return;
+    }
     let cols = split(w as u32, 0, &weights);
     for (i, (panel, (off, cw))) in panels.iter().zip(cols).enumerate() {
         let cx = x + off as f32;
@@ -1029,6 +1047,15 @@ fn deck_clock(p: &mut Painter, c: &Ctx, panel: &Panel, acc: Rgb, (x, y, w, h): (
 fn draw_cards(p: &mut Painter, c: &Ctx, cols: &[Vec<PKind>], panels: &[Vec<Panel>], area: (f32, f32, f32, f32)) {
     let (x, y, w, h) = area;
     let gap = c.s.cards_gap;
+    if is_portrait(area) {
+        // one card under the other (the columns of the config are read one after the other)
+        let flat: Vec<&Panel> = panels.iter().flatten().collect();
+        let weights: Vec<f32> = flat.iter().map(|q| if q.kind == PKind::Clock { 1.1 } else { 1.0 }).collect();
+        for (idx, (panel, (off, ch))) in flat.into_iter().zip(split(h as u32, gap, &weights)).enumerate() {
+            card(p, c, panel, idx, (x, y + off as f32, w, ch as f32));
+        }
+        return;
+    }
     let weights: Vec<f32> = cols.iter().map(|col| if col.len() == 1 { col[0].weight() * 1.15 } else { 1.0 }).collect();
     let xs = split(w as u32, gap, &weights);
     let mut idx = 0usize;
@@ -1149,7 +1176,7 @@ fn card(p: &mut Painter, c: &Ctx, panel: &Panel, idx: usize, (x, y, w, h): (f32,
 
 fn draw_orbit(p: &mut Painter, c: &Ctx, panels: &[Panel], clock: Option<&Panel>, area: (f32, f32, f32, f32)) {
     let (x, y, w, h) = area;
-    let radius = (h * 0.06).clamp(10.0, 26.0);
+    let radius = (h.min(w) * 0.06).clamp(10.0, 26.0);
     let (plate_rgb, plate_alpha) = plate(c.s);
     let (line, outline_a, hair_a) = line_style(c.s);
     if plate_alpha > 0 {
@@ -1157,6 +1184,32 @@ fn draw_orbit(p: &mut Painter, c: &Ctx, panels: &[Panel], clock: Option<&Panel>,
     }
     p.layer.stroke_rrect(area, radius, 1.5, line, outline_a);
     let mut weights: Vec<f32> = vec![1.0; panels.len()];
+    if is_portrait(area) {
+        // the clusters one under the other, the clock block last
+        if clock.is_some() {
+            weights.push(0.6);
+        }
+        let slots = split(h as u32, 0, &weights);
+        let mut ring_color = 0usize;
+        for (i, (panel, (off, sh))) in panels.iter().zip(slots.iter()).enumerate() {
+            if i > 0 {
+                p.layer.fill_rrect_solid((x + w * 0.08, y + *off as f32, w * 0.84, 1.0), 0.0, line, hair_a);
+            }
+            orbit_cluster(p, c, panel, ring_color, (x, y + *off as f32, w, *sh as f32));
+            ring_color += panel.rings.len().max(1);
+        }
+        if let (Some(cp), Some((off, sh))) = (clock, slots.last()) {
+            if !panels.is_empty() {
+                p.layer.fill_rrect_solid((x + w * 0.08, y + *off as f32, w * 0.84, 1.0), 0.0, line, hair_a);
+            }
+            let (sy, sh) = (y + *off as f32, *sh as f32);
+            let pad = (sh * 0.12).clamp(9.0, 26.0);
+            let lcap = (sh * 0.09).clamp(8.0, 17.0);
+            deck_clock_title(p, c, cp, (x, sy, w, sh), pad, sy + pad + lcap + 4.0);
+            deck_clock(p, c, cp, accent(c.s, ring_color), (x, sy, w, sh), pad, sy + pad + lcap + 4.0);
+        }
+        return;
+    }
     if clock.is_some() {
         weights.push(0.72);
     }
@@ -1263,8 +1316,14 @@ fn draw_console(p: &mut Painter, c: &Ctx, panels: &[Panel], clock: Option<&Panel
     if panels.is_empty() {
         return;
     }
-    let side = (h * 0.025).clamp(4.0, 14.0);
-    let bar_h = if clock.is_some() { (h * 0.16).clamp(24.0, 64.0) } else { 0.0 };
+    // a portrait panel: the tiles are stacked in a column instead of standing side by side
+    let vertical = h > w * 1.1;
+    let side = if vertical { (w * 0.03).clamp(4.0, 14.0) } else { (h * 0.025).clamp(4.0, 14.0) };
+    let bar_h = match clock {
+        Some(_) if vertical => (w * 0.13).clamp(24.0, 64.0),
+        Some(_) => (h * 0.16).clamp(24.0, 64.0),
+        None => 0.0,
+    };
     let (acc0, text) = (accent(c.s, 0), c.text);
     if let Some(cp) = clock {
         // tabs on the left, the clock on the right
@@ -1287,7 +1346,12 @@ fn draw_console(p: &mut Painter, c: &Ctx, panels: &[Panel], clock: Option<&Panel
         }
         let mut tx = x + side;
         let gap = cap * 1.9;
-        for (i, panel) in panels.iter().enumerate() {
+        // portrait: every tile is on the screen anyway, so the bar only has the date and the clock
+        if vertical {
+            let date = clip(p, &cp.sub, date_cap, (x + w - side - time_w - cap * 1.2) - tx, W::Regular);
+            p.text(tx, base, &date, date_cap, W::Regular, text, 170);
+        }
+        for (i, panel) in panels.iter().enumerate().filter(|_| !vertical) {
             let name = panel.title.to_uppercase();
             let nw = p.width(&name, cap, tw);
             if tx + nw > x + side + room {
@@ -1301,7 +1365,7 @@ fn draw_console(p: &mut Painter, c: &Ctx, panels: &[Panel], clock: Option<&Panel
             tx += nw + gap;
         }
     }
-    let gap = (h * 0.03).clamp(8.0, 18.0);
+    let gap = (if vertical { w * 0.03 } else { h * 0.03 }).clamp(8.0, 18.0);
     let top = y + bar_h + if bar_h > 0.0 { side * 0.5 } else { 0.0 };
     let th = (h - (top - y)).max(40.0);
     let weights: Vec<f32> = panels
@@ -1313,8 +1377,16 @@ fn draw_console(p: &mut Painter, c: &Ctx, panels: &[Panel], clock: Option<&Panel
             None => panel.kind.weight(),
         })
         .collect();
-    let slots = split(w as u32, gap as u32, &weights);
     let _ = acc0;
+    if vertical {
+        let weights: Vec<f32> = weights.iter().map(|wt| if focus.is_some() { *wt } else { 1.0 }).collect();
+        for (i, (panel, (off, len))) in panels.iter().zip(split(th as u32, gap as u32, &weights)).enumerate() {
+            let on = focus == Some(i);
+            console_tile(p, c, panel, i, on, on || focus.is_none(), (x, top + off as f32, w, len as f32));
+        }
+        return;
+    }
+    let slots = split(w as u32, gap as u32, &weights);
     for (i, (panel, (off, tw))) in panels.iter().zip(slots).enumerate() {
         let on = focus == Some(i);
         console_tile(p, c, panel, i, on, on || focus.is_none(), (x + off as f32, top, tw as f32, th));
@@ -1725,6 +1797,52 @@ mod tests {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn the_console_stacks_its_tiles_on_a_portrait_panel() {
+        let eff = effect::Settings::default();
+        let env = Env { fps: 30.0, ffmpeg: None, effect: &eff, secs: Some(0.0) };
+        let ts = tiles::Settings::default();
+        let s = parse_cfg("console = cpu, gpu, ram, fans, net, disk, music\n").unwrap();
+        for focus in ["rotate", "none"] {
+            let mut s = s.clone();
+            s.console_focus = Focus::parse(focus).unwrap();
+            let (w, h) = (462u32, 1920u32);
+            let mut fb = Framebuffer::new(trofeo_lcd::Resolution::new(w, h));
+            fb.clear(8, 8, 16);
+            DashScreen::new().draw(&mut fb, (0, 0, w, h), Style::Console, &data(), ColorMode::Default, &s, &ts, &env);
+            // seven tiles in a column: every seventh of the height has something in it, and the
+            // tiles are as wide as the panel (side by side they would be a few pixels wide)
+            let b = fb.as_bytes();
+            for k in 0..7usize {
+                let rows = (k * h as usize / 7)..((k + 1) * h as usize / 7);
+                let n = rows.map(|y| b[y * w as usize * 3..(y + 1) * w as usize * 3].chunks_exact(3).filter(|p| p[0] != 8 || p[1] != 8 || p[2] != 16).count()).sum::<usize>();
+                assert!(n > (w as usize * h as usize / 7) / 6, "{focus}: nothing in slice {k}");
+            }
+        }
+    }
+
+    #[test]
+    fn deck_cards_and_orbit_stack_their_parts_on_a_portrait_panel() {
+        let eff = effect::Settings::default();
+        let env = Env { fps: 30.0, ffmpeg: None, effect: &eff, secs: Some(0.0) };
+        let ts = tiles::Settings::default();
+        let s = parse_cfg("deck = cpu, gpu, ram, clock\norbit = cpu, gpu, ram\n").unwrap();
+        let (w, h) = (462u32, 1920u32);
+        for style in [Style::Deck, Style::Cards, Style::Orbit] {
+            let mut fb = Framebuffer::new(trofeo_lcd::Resolution::new(w, h));
+            fb.clear(8, 8, 16);
+            DashScreen::new().draw(&mut fb, (0, 0, w, h), style, &data(), ColorMode::Default, &s, &ts, &env);
+            // side by side the parts would be a few pixels wide and the lower part of the panel
+            // empty: every third of the height must hold real content (text, arcs, graphs)
+            let b = fb.as_bytes();
+            for k in 0..3usize {
+                let rows = (k * h as usize / 3)..((k + 1) * h as usize / 3);
+                let bright = rows.map(|y| b[y * w as usize * 3..(y + 1) * w as usize * 3].chunks_exact(3).filter(|p| p[0] as u32 + p[1] as u32 + p[2] as u32 > 450).count()).sum::<usize>();
+                assert!(bright > 1500, "{style:?}: only {bright} bright pixels in third {k}");
             }
         }
     }
