@@ -328,6 +328,20 @@ executable, or pass `--config <FILE>`) or on the command line:
 config file. In `trofeo_screen` portrait mode the virtual display must be
 **462×1920** (auto-detected by `--list-displays`).
 
+**Every layout works in portrait.** The classic layouts and `tiles` stack their panels in a column, and
+`deck`, `cards`, `orbit` and `console` (from 2.8.0) turn their columns and clusters into rows: `deck` gives each
+device a row, `cards` puts the cards one under the other (the groups of `cards = a | b, c` are read in order),
+`orbit` stacks the rings with the clock block last, and `console` stacks its tiles with the one in focus taller.
+The screenshots below are the preview of each layout on a 462×1920 panel (`orientation = portrait`).
+
+![Portrait: default, cpu-gpu, temps, overview, grid6](img/portrait-1.png)
+
+![Portrait: clock-center, io, music, gaming, cpu](img/portrait-2.png)
+
+![Portrait: gpu, weather, news, tiles, frame](img/portrait-3.png)
+
+![Portrait: deck, cards, orbit, console](img/portrait-4.png)
+
 ## Margins, language, background
 
 Also settable in `trofeo.conf` (see `trofeo.conf.example`), in the [settings editor](#settings-editor-trofeo_config), or via CLI:
@@ -797,6 +811,11 @@ ember, mint or a light pastel one. The screen is redrawn about once a second, so
 ![console, the focus follows the load (here the GPU), ember colours](img/layout-console-load.png)
 
 ![console, light theme](img/layout-console-light.png)
+
+**In portrait** (`orientation = portrait`) the tiles are stacked in a column instead of standing side by side: the
+tile in focus is the tall one, the bar on top keeps only the date and the clock.
+
+![console, portrait, no focus](img/layout-console-portrait.png)
 
 ```ini
 layout = console

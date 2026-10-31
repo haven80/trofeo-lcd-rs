@@ -1152,7 +1152,7 @@ with `update_check = false`).
 
 ## Deck, Cards, Orbit and Console
 
-Four more full screens (`layout = deck`, `cards`, `orbit`, `console`). Every key can also be a command-line
+Four more full screens (`layout = deck`, `cards`, `orbit`, `console`). On a portrait panel (`orientation = portrait`) they stack their parts in a column: one row per device in `deck` and `orbit`, one card under the other in `cards` (the `|` groups are read in order), one tile under the other in `console`. Every key can also be a command-line
 flag and all of them apply live. Panels: `cpu gpu ram fans net disk clock weather music` (`clock` also shows
 the weather and the playing track). `fans` needs [LibreHardwareMonitor](#fans-and-sensors-librehardwaremonitor).
 
@@ -1187,7 +1187,7 @@ the weather and the playing track). `fans` needs [LibreHardwareMonitor](#fans-an
 | `dash_bg_color` / `dash_bg_image` / `dash_bg_dim` | for `color`/`gradient`, for `image`, darkening `0`-`100` | |
 
 The accent colours of `console` go one per tile, in order, so `dash_palette` / `dash_colors` / `dash_theme` are its
-colour themes (`dash_theme = light` gives white tiles with a pastel focus). The focus changes at the pace of the
+colour themes (`dash_theme = light` gives white tiles with a pastel focus). In portrait the tiles are stacked in a column (the one in focus is the tall one) and the bar shows only the date and the clock. The focus changes at the pace of the
 screen redraw (about once a second). The maxima of watts and fan speed are the ones of the tiles (`tiles_cpu_watt_max`, `tiles_gpu_watt_max`,
 `tiles_fan_max`) and the seconds on the clock `tiles_clock_seconds`. The rings of `orbit` are: CPU load /
 temperature / power, GPU load / temperature / power, RAM / disk / network, one per fan for `fans`. Each cluster
