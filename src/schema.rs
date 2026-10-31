@@ -710,6 +710,9 @@ pub fn fields() -> Vec<Field> {
         .def("0.005")
         .help("Lower = the spectrum reacts to quieter sound", "Più basso = lo spettro reagisce a suoni più bassi"));
     add(Field::new("silence_timeout_ms", "system", "Quiet time before idle (ms)", "Silenzio prima dello stato di riposo (ms)", int(0, 60000)).def("800"));
+    add(Field::new("gpu_usage_source", "system", "GPU usage from", "Carico GPU da", Choice(&["auto", "windows"]))
+        .def("auto")
+        .help("auto = the Radeon driver's own figure (what the Radeon software shows), else the Windows counter; windows = always the Windows counter (3D engines only)", "auto = il valore del driver Radeon (quello del software Radeon), altrimenti il contatore di Windows; windows = sempre il contatore di Windows (solo motori 3D)"));
     add(Field::new("update_check", "system", "Tell me when a new version is out", "Avvisami quando esce una nuova versione", Bool)
         .def("false")
         .restart()

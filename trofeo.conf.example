@@ -119,6 +119,12 @@ language = en
 # ticker_backdrop = true         # a panel behind the ticker line (default: text_backdrop)
 # ticker_width = 100             # % of the canvas the ticker line can use
 
+# --- GPU usage ------------------------------------------------------------------
+# Where the GPU usage % comes from. On a Radeon card the Windows counter only sees the 3D engine and
+# can be far lower than the Radeon software's figure (60 % against 100 %), so by default the driver's own
+# figure is used when it gives one. "trofeo_lcd --diag" prints both, and the busy engines.
+# gpu_usage_source = auto        # auto | windows (always the Windows counter, as before 2.7.1)
+
 # --- New version notice ----------------------------------------------------------
 # Off by default. When on, the program looks on GitHub at start-up (one small request, nothing about
 # your computer is sent, nothing is downloaded) and, if a newer version exists, shows a banner at the

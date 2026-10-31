@@ -235,6 +235,9 @@ struct Config {
     ticker_source: Option<String>,
     /// How often to re-fetch the ticker sources, in minutes. Restart-required.
     ticker_refresh_min: u32,
+    /// Where the GPU usage comes from (`gpu_usage_source`, applies live): the driver's own
+    /// figure on Radeon cards (default), or always the Windows counter.
+    gpu_usage_source: gpu::UsageSource,
     /// "New version available" notice (`update_check`, off by default). The three keys
     /// below are read at start-up (restart required): they decide whether the background
     /// check runs, how often it repeats (0 = only at start-up) and how long the banner stays.
@@ -347,6 +350,8 @@ fn print_help() {
          \x20\x20                          Requires a restart, like --weather-city.\n\
          \x20\x20ticker_refresh_min <N>   (config-file only) How often to re-fetch, in minutes\n\
          \x20\x20                          (default: 10). Requires a restart.\n\
+         \x20\x20gpu_usage_source <S>   (config-file only) GPU usage: auto (default: the Radeon driver's own\n\
+         \x20\x20                          figure, else the Windows counter) | windows (always the counter)\n\
          \x20\x20update_check <BOOL>     (config-file only) Look on GitHub, once at start-up, whether\n\
          \x20\x20                          a newer version exists and show a banner at the bottom of\n\
          \x20\x20                          the screen if so (default: false). Requires a restart.\n\
@@ -798,6 +803,11 @@ fn parse_args() -> anyhow::Result<Config> {
     if !(1..=1440).contains(&ticker_refresh_min) {
         anyhow::bail!("ticker_refresh_min: must be between 1 and 1440 (minutes)");
     }
+    let gpu_usage_source = match file.get("gpu_usage_source") {
+        None => gpu::UsageSource::Auto,
+        Some(v) => gpu::UsageSource::parse(v)
+            .ok_or_else(|| anyhow::anyhow!("gpu_usage_source: '{v}' not valid ({})", gpu::UsageSource::NAMES))?,
+    };
     let update_check = file.get_bool("update_check").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(false);
     let update_check_hours = file.get_u32("update_check_hours").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(0);
     if update_check_hours > 720 {
@@ -813,6 +823,7 @@ fn parse_args() -> anyhow::Result<Config> {
         weather_city,
         ticker_source,
         ticker_refresh_min,
+        gpu_usage_source,
         update_check,
         update_check_hours,
         update_notice_secs,
@@ -1777,7 +1788,25 @@ fn main() -> anyhow::Result<()> {
         println!("=== NVIDIA GPU Diagnostics ===");
         print!("{}", gpu_nvml::diag());
         let amd = gpu_amd::GpuAmdSensor::new().sample();
-        println!("ADL (AMD): temp={:?} power={:?}", amd.temp_edge_c, amd.power_w);
+        println!(
+            "ADL (AMD): temp={:?} hotspot={:?} power={:?} fan={:?} activity={:?}",
+            amd.temp_edge_c, amd.temp_hotspot_c, amd.power_w, amd.fan_rpm, amd.activity_pct
+        );
+        println!("  (activity = the driver's GPU usage; power=None just means this card does not report it)");
+        if let Some(mut g) = gpu::GpuMonitor::new().ok().filter(|_| cfg!(windows)) {
+            let _ = g.sample();
+            std::thread::sleep(Duration::from_secs(1));
+            let win = g.sample().ok();
+            println!("Windows GPU Engine counter (3D only): {win:?}");
+            let _ = g.engine_totals();
+            std::thread::sleep(Duration::from_secs(1));
+            let engines = g.engine_totals();
+            if !engines.is_empty() {
+                let list: Vec<String> = engines.iter().map(|(k, v)| format!("{k} {v:.1}%")).collect();
+                println!("  engines busy in the last second: {}", list.join(", "));
+            }
+            println!("  GPU usage shown: {:?}", gpu::pick_usage(config.gpu_usage_source, win, amd.activity_pct));
+        }
         if let Some(n) = gpu_nvml::NvSensor::new() {
             std::thread::sleep(Duration::from_secs(2));
             println!("Sensor chosen: {} -> {:?}", n.describe(), n.sample());
@@ -2293,6 +2322,7 @@ fn main() -> anyhow::Result<()> {
                 let (t, w, c) = n.sample();
                 if t.is_some() || w.is_some() {
                     latest_gpu_data.temp_hotspot_c = None; // the AMD value would be the iGPU's
+                    latest_gpu_data.activity_pct = None;
                     latest_gpu_data.temp_edge_c = t;
                     latest_gpu_data.power_w = w;
                     latest_gpu_data.clock_mhz = c;
@@ -2307,6 +2337,10 @@ fn main() -> anyhow::Result<()> {
                 Some(r) => lhm_now.gpu_fan = Some(r.max(0) as u32),
                 None => latest_gpu_data.fan_rpm = lhm_now.gpu_fan.map(|r| r as i32),
             }
+            // The GPU usage: a Radeon's own figure (the Windows counter only sees the 3D engine
+            // and can be far lower), unless the Windows counter is asked for. With an NVIDIA
+            // card the AMD figure (an iGPU's) was cleared above.
+            latest_gpu_percent = gpu::pick_usage(config.gpu_usage_source, latest_gpu_percent, latest_gpu_data.activity_pct);
             lhm::set_current(lhm_now);
             deepcool::set_gpu(deepcool::GpuSample {
                 temp_c: latest_gpu_data.temp_edge_c,
@@ -4688,7 +4722,7 @@ mod layout_tests {
         }
         // every key of the editor is one the program reads from the config file
         let from_cli_or_file = |k: &str| is_override_key(k) || ["orientation", "flip", "panel_size", "background", "background_dim", "ffmpeg", "language",
-            "hid_mount", "hid_header", "color", "silence_threshold", "silence_timeout_ms", "weather_city", "ticker_source", "ticker_refresh_min", "update_check", "update_check_hours", "update_notice_secs", "margin", "margin_top", "margin_bottom", "margin_left", "margin_right"].contains(&k);
+            "hid_mount", "hid_header", "color", "silence_threshold", "silence_timeout_ms", "weather_city", "ticker_source", "ticker_refresh_min", "gpu_usage_source", "update_check", "update_check_hours", "update_notice_secs", "margin", "margin_top", "margin_bottom", "margin_left", "margin_right"].contains(&k);
         for f in fields() {
             assert!(from_cli_or_file(&f.key), "{} is not a key of the program", f.key);
         }

@@ -530,12 +530,14 @@ fn panel(kind: PKind, d: &WidgetData, hw: &lhm::Readings, s: &Settings, ts: &til
             if let Some(t) = d.gpu_temp {
                 p.rings.push(Ring { label: "TEMP".into(), frac: t as f32 / 100.0 });
             }
+            // Not every card reports its power (the RX 9070 XT's driver does not): the hot spot
+            // must not depend on it.
             if let Some(w) = d.gpu_power {
                 p.stats.push(stat("POWER", w.to_string(), "W"));
-                if let Some(h) = d.gpu_hotspot {
-                    p.stats.push(stat("HOTSPOT", h.to_string(), deg));
-                }
                 p.rings.push(Ring { label: "POWER".into(), frac: w as f32 / ts.gpu_watt_max as f32 });
+            }
+            if let Some(h) = d.gpu_hotspot {
+                p.stats.push(stat("HOTSPOT", h.to_string(), deg));
             }
             if let Some(r) = hw.gpu_fan {
                 p.stats.push(stat("FAN", r.to_string(), "RPM"));
@@ -1437,6 +1439,25 @@ mod tests {
         assert_eq!(screen.redraws, 2);
         screen.draw(&mut fb, (0, 0, 1920, 462), Style::Orbit, &d, ColorMode::Default, &s, &ts, &env);
         assert_eq!(screen.redraws, 3, "another style is another picture");
+    }
+
+    #[test]
+    fn the_gpu_panel_shows_the_hotspot_even_without_a_power_reading() {
+        let (s, ts) = (Settings::default(), tiles::Settings::default());
+        let now = Local::now();
+        let hw = lhm::Readings::default();
+        let mut d = data();
+        d.gpu_hotspot = Some(79);
+        for power in [Some(245), None] {
+            d.gpu_power = power;
+            let p = panel(PKind::Gpu, &d, &hw, &s, &ts, &now);
+            assert!(p.stats.iter().any(|x| x.label == "HOTSPOT" && x.value == "79"), "power {power:?}");
+            assert_eq!(p.stats.iter().any(|x| x.label == "POWER"), power.is_some(), "power {power:?}");
+            assert_eq!(p.rings.iter().any(|r| r.label == "POWER"), power.is_some(), "power {power:?}");
+        }
+        d.gpu_hotspot = None;
+        let p = panel(PKind::Gpu, &d, &hw, &s, &ts, &now);
+        assert!(p.stats.iter().all(|x| x.label != "HOTSPOT"));
     }
 
     #[test]

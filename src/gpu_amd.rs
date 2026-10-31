@@ -99,6 +99,11 @@ mod imp {
     pub(super) const PMLOG_TEMPERATURE_HOTSPOT: usize = 27;
     pub(super) const PMLOG_FAN_RPM: usize = 14;
     pub(super) const PMLOG_ASIC_POWER: usize = 23;
+    // ADL_PMLOG_INFO_ACTIVITY_GFX: the graphics activity of the whole GPU, the "GPU utilization"
+    // that the Radeon software shows. From the enum order of adl_structures.h (it sits between
+    // SOC_CURRENT = 18 and INFO_ACTIVITY_MEM = 20); not yet confirmed with a probe on hardware:
+    // `trofeo_lcd --diag` prints it so that it can be checked.
+    pub(super) const PMLOG_INFO_ACTIVITY_GFX: usize = 19;
 
     // === Function pointer types, resolved from the DLL ===
 
@@ -304,6 +309,7 @@ mod imp {
                 fan_rpm: get(PMLOG_FAN_RPM),
                 fps,
                 clock_mhz: None,
+                activity_pct: get(PMLOG_INFO_ACTIVITY_GFX).filter(|v| (0..=100).contains(v)),
             }
         }
     }
@@ -364,6 +370,8 @@ mod imp {
                 fan_rpm: self.fan_path.as_deref().and_then(read_i64).map(|v| v as i32),
                 fps: None,
                 clock_mhz: None,
+                // amdgpu already gives the busy percentage straight to `gpu.rs`
+                activity_pct: None,
             }
         }
     }
@@ -450,6 +458,10 @@ pub struct GpuAmdData {
     pub fps: Option<i32>,
     /// GPU core clock (MHz), from NVML/nvidia-smi.
     pub clock_mhz: Option<i32>,
+    /// Graphics activity of the whole GPU (%), as the driver reports it (ADL PMLog on Windows).
+    /// The Windows "GPU Engine" counter, which `gpu.rs` reads, only sees the 3D engine and can
+    /// be far lower on Radeon cards (about 60 % where the Radeon software says 100 %).
+    pub activity_pct: Option<i32>,
 }
 
 #[cfg(windows)]

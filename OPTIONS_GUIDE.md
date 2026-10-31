@@ -1113,6 +1113,21 @@ lhm_pump = AIO
 tiles = clock:tall, cpu_temp, fans | ram:ring, cpu:ring, cpu_fan:ring, mb_temp
 ```
 
+## GPU usage source
+
+On a Radeon card the Windows "GPU Engine" counter (the Task Manager's source) only sees the 3D engine
+and can read far lower than the Radeon software (about 60 % where the overlay says 100 %). So, by default,
+the usage shown in the tiles, status lines and layouts is the **driver's own figure** when it gives one;
+otherwise (NVIDIA cards, Linux, drivers that do not report it) the Windows counter is used as before.
+Applies live.
+
+| Key | Values | Default |
+|---|---|---|
+| `gpu_usage_source` | `auto` (the Radeon driver's figure, else the Windows counter) \| `windows` (always the Windows counter) | `auto` |
+
+`trofeo_lcd --diag` prints the driver's figure (`activity`), the Windows counter and the engines that are busy,
+to compare them.
+
 ## New version notice *(restart required)*
 
 When switched on, the program looks on GitHub **once at start-up** (one HTTPS request, nothing is sent about
