@@ -892,6 +892,13 @@ pub fn fields() -> Vec<Field> {
         .def("true")
         .restart()
         .help("Needs the program started as administrator", "Richiede il programma avviato come amministratore"));
+    add(Field::new("fps_source", "system", "FPS from", "FPS da", Choice(&["auto", "etw", "driver"]))
+        .def("auto")
+        .when("fps_monitor", &["true"])
+        .help(
+            "auto = the frames counted through Windows events (like PresentMon), else the Radeon driver's figure; etw = only the first; driver = only the Radeon driver's (exclusive fullscreen games). If the number is wrong, run trofeo_lcd.exe --fps-diag as administrator while the game is in front and send the output",
+            "auto = i frame contati dagli eventi di Windows (come PresentMon), altrimenti il valore del driver Radeon; etw = solo i primi; driver = solo il driver Radeon (giochi a schermo intero esclusivo). Se il numero e sbagliato, avvia trofeo_lcd.exe --fps-diag come amministratore con il gioco in primo piano e invia il risultato",
+        ));
     v
 }
 

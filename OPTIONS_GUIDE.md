@@ -767,10 +767,17 @@ deepcool_alternate = 8
 | Key | CLI | Values | Default |
 |---|---|---|---|
 | `fps_monitor` | `--fps-monitor` | `true`/`false` | `true` |
+| `fps_source` | config file only, applies live | `auto` (the frames counted through ETW, else the Radeon driver's figure), `etw` (only the first), `driver` (only the Radeon driver's: exclusive-fullscreen games) | `auto` |
 
 Measures FPS for any DirectX 9-12 game via ETW. **Requires running as
 Administrator** — without it, FPS just won't populate (nothing else breaks).
-Vulkan/OpenGL-native games aren't covered. The dashboard itself (FPS + GPU +
+Native Vulkan/OpenGL games usually aren't covered (some drivers route their presents through DXGI, and then they are).
+On Radeon cards the driver also reports an FPS of its own; before 2.10.1 that figure was shown first, now the ETW count is.
+
+**If the number is wrong** (for example exactly double): close `trofeo_lcd`, start `trofeo_lcd.exe --fps-diag` as
+administrator, put the game in front for the 20 seconds it runs, and send the output. It prints, once a second, the
+events the program receives for the game (raw `Present_Start`s, the frames left after nested calls are merged,
+the ETW result, and the driver's figure), which shows which source is off. The dashboard itself (FPS + GPU +
 CPU + RAM while a game is in the foreground) is controlled by the `dashboard`
 element in `show`/`hide`, independent of whether `fps_monitor` succeeds.
 

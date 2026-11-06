@@ -9,8 +9,11 @@
 //! Honest notes:
 //! - The program needs to run **as administrator** (real-time ETW).
 //! - Covers DirectX 9/10/11/12 (anything that goes through DXGI). Native
-//!   Vulkan / OpenGL games don't generate these events and will be left
-//!   without FPS.
+//!   Vulkan / OpenGL games usually don't generate these events and are left
+//!   without FPS (some drivers do route them through DXGI).
+//! - A Present can raise the event more than once (a runtime calling `Present` from inside
+//!   `Present1`, a layer or an overlay in between): like PresentMon, only the outermost call
+//!   of a thread counts (see [`PresentFilter`]).
 //! - Windows only; on other systems `start()` returns an error.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,9 +76,131 @@ impl PresentWindow {
     }
 }
 
+/// Where the FPS comes from (`fps_source`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum FpsSource {
+    /// The Presents seen through ETW (what PresentMon counts) when there are any, else the
+    /// Radeon driver's own figure.
+    #[default]
+    Auto,
+    /// Only the ETW Presents.
+    Etw,
+    /// Only the Radeon driver's figure (exclusive fullscreen games).
+    Driver,
+}
+
+impl FpsSource {
+    pub const NAMES: &'static str = "auto | etw | driver";
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "" | "auto" | "automatic" | "automatico" => Some(FpsSource::Auto),
+            "etw" | "presents" | "presentmon" => Some(FpsSource::Etw),
+            "driver" | "adl" | "radeon" | "amd" => Some(FpsSource::Driver),
+            _ => None,
+        }
+    }
+}
+
+/// The FPS to show: `driver` is the Radeon driver's figure, `etw` the one counted from the Presents.
+pub fn pick_fps(source: FpsSource, driver: Option<i32>, etw: Option<u32>) -> Option<i32> {
+    let etw = etw.map(|f| f as i32);
+    match source {
+        FpsSource::Auto => etw.or(driver),
+        FpsSource::Etw => etw,
+        FpsSource::Driver => driver,
+    }
+}
+
+/// One `Present_Start` (`start`) or `Present_Stop` event of the DXGI provider.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(windows), allow(dead_code))]
+pub struct PresentEvent {
+    pub ts: i64,
+    pub pid: u32,
+    pub tid: u32,
+    pub start: bool,
+}
+
+/// Counts every frame once, however many times the DXGI provider reports it.
+///
+/// A single `Present` can raise `Present_Start` twice in a row on one thread (the runtime calls
+/// the inner `Present` from the outer one; a layer, an overlay or a driver can add one more), and
+/// every one of them was counted, which reads exactly twice the real rate. PresentMon avoids it by
+/// following the calls of each thread: a `Present_Start` that arrives while the thread is still
+/// inside an earlier one is the same frame. Same here, with a depth per thread.
+///
+/// The events of a batch are not always in time order, so they are held for a quarter of a second
+/// and handled sorted by their timestamps. If no `Present_Stop` has ever been seen (a system that
+/// does not emit them) every start counts, as it did before.
+#[derive(Default, Debug)]
+#[cfg_attr(not(windows), allow(dead_code))]
+pub struct PresentFilter {
+    pending: Vec<PresentEvent>,
+    newest: i64,
+    /// Per thread: how many Presents it is inside, and the time of its last event.
+    threads: std::collections::HashMap<u32, (u32, i64)>,
+    stops_seen: bool,
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+impl PresentFilter {
+    /// Takes an event; returns the frames (process, time) that are now known to be real.
+    pub fn feed(&mut self, e: PresentEvent, freq: i64) -> Vec<(u32, i64)> {
+        self.newest = self.newest.max(e.ts);
+        // known as soon as it arrives, so the very first frame is already judged with it
+        if !e.start {
+            self.stops_seen = true;
+        }
+        let at = self.pending.partition_point(|x| x.ts <= e.ts);
+        self.pending.insert(at, e);
+        let limit = self.newest - freq / 4;
+        let n = self.pending.partition_point(|x| x.ts <= limit);
+        let ready: Vec<PresentEvent> = self.pending.drain(..n).collect();
+        let mut out = Vec::new();
+        for ev in ready {
+            if self.step(ev, freq) {
+                out.push((ev.pid, ev.ts));
+            }
+        }
+        out
+    }
+
+    /// Whether this event is a new frame.
+    fn step(&mut self, e: PresentEvent, freq: i64) -> bool {
+        let st = self.threads.entry(e.tid).or_insert((0, e.ts));
+        // a Stop that never came (a thread that ended inside a Present): do not stay "inside" forever
+        if st.0 > 0 && e.ts - st.1 > freq {
+            st.0 = 0;
+        }
+        st.1 = e.ts;
+        if e.start {
+            let counts = st.0 == 0 || !self.stops_seen;
+            st.0 += 1;
+            counts
+        } else {
+            st.0 = st.0.saturating_sub(1);
+            false
+        }
+    }
+}
+
+/// What the DXGI provider reported about one process (`--fps-diag`).
+#[derive(Default, Clone, Debug)]
+#[cfg_attr(not(windows), allow(dead_code))]
+pub struct DiagRow {
+    /// Event id -> how many (42 = Present_Start, 43 = Present_Stop).
+    pub ids: std::collections::BTreeMap<u16, u32>,
+    pub threads: std::collections::BTreeSet<u32>,
+    pub chains: std::collections::BTreeSet<u64>,
+    pub raw_starts: u32,
+    /// Frames left after the nested calls were removed.
+    pub counted: u32,
+}
+
 #[cfg(windows)]
 mod imp {
-    use super::{PresentWindow, Status};
+    use super::{DiagRow, PresentEvent, PresentFilter, PresentWindow, Status};
     use std::collections::HashMap;
     use std::sync::atomic::{AtomicU8, Ordering};
     use std::sync::{Mutex, OnceLock};
@@ -88,8 +213,11 @@ mod imp {
     /// Microsoft-Windows-DXGI
     const DXGI_PROVIDER: GUID = GUID::from_u128(0xCA11C036_0102_4A2D_A6AD_F03CFED5D3C9);
     const DXGI_PRESENT_START: u16 = 42;
+    const DXGI_PRESENT_STOP: u16 = 43;
 
     static PRESENTS: OnceLock<Mutex<HashMap<u32, PresentWindow>>> = OnceLock::new();
+    static FILTER: OnceLock<Mutex<PresentFilter>> = OnceLock::new();
+    static DIAG: OnceLock<Mutex<Option<HashMap<u32, DiagRow>>>> = OnceLock::new();
     static STATUS: AtomicU8 = AtomicU8::new(0);
     static FREQ: OnceLock<i64> = OnceLock::new();
 
@@ -129,14 +257,66 @@ mod imp {
         if rec.is_null() {
             return;
         }
-        let h = &(*rec).EventHeader;
-        if h.ProviderId != DXGI_PROVIDER || h.EventDescriptor.Id != DXGI_PRESENT_START {
+        let r = &*rec;
+        let h = &r.EventHeader;
+        if h.ProviderId != DXGI_PROVIDER {
+            return;
+        }
+        let id = h.EventDescriptor.Id;
+        // for `--fps-diag`: everything the provider says, by process
+        if let Some(Ok(mut d)) = DIAG.get().map(|m| m.lock()) {
+            if let Some(map) = d.as_mut() {
+                let row = map.entry(h.ProcessId).or_default();
+                *row.ids.entry(id).or_insert(0) += 1;
+                row.threads.insert(h.ThreadId);
+                if id == DXGI_PRESENT_START {
+                    row.raw_starts += 1;
+                    // the first field of the payload is the swap chain (a pointer)
+                    if !r.UserData.is_null() && r.UserDataLength >= 8 {
+                        let p = r.UserData as *const u8;
+                        let mut b = [0u8; 8];
+                        std::ptr::copy_nonoverlapping(p, b.as_mut_ptr(), 8);
+                        row.chains.insert(u64::from_le_bytes(b));
+                    }
+                }
+            }
+        }
+        if id != DXGI_PRESENT_START && id != DXGI_PRESENT_STOP {
             return;
         }
         // the time the Present happened (the trace is set up with the performance counter as its
         // clock), not the time this callback runs: the events come in batches
+        let ev = PresentEvent { ts: h.TimeStamp, pid: h.ProcessId, tid: h.ThreadId, start: id == DXGI_PRESENT_START };
+        let frames = match FILTER.get_or_init(Default::default).lock() {
+            Ok(mut f) => f.feed(ev, freq()),
+            Err(_) => return,
+        };
+        if frames.is_empty() {
+            return;
+        }
         if let Ok(mut map) = presents().lock() {
-            map.entry(h.ProcessId).or_default().push(h.TimeStamp, freq());
+            for (pid, ts) in &frames {
+                map.entry(*pid).or_default().push(*ts, freq());
+            }
+        }
+        if let Some(Ok(mut d)) = DIAG.get().map(|m| m.lock()) {
+            if let Some(map) = d.as_mut() {
+                for (pid, _) in &frames {
+                    map.entry(*pid).or_default().counted += 1;
+                }
+            }
+        }
+    }
+
+    /// Starts collecting what the provider reports (for `--fps-diag`).
+    pub fn diag_begin() {
+        *DIAG.get_or_init(Default::default).lock().unwrap() = Some(HashMap::new());
+    }
+
+    pub fn diag_snapshot() -> Vec<(u32, DiagRow)> {
+        match DIAG.get().and_then(|m| m.lock().ok()) {
+            Some(d) => d.as_ref().map(|m| m.iter().map(|(k, v)| (*k, v.clone())).collect()).unwrap_or_default(),
+            None => Vec::new(),
         }
     }
 
@@ -247,9 +427,13 @@ mod imp {
     pub fn fps_for_pid(_pid: u32) -> Option<u32> {
         None
     }
+    pub fn diag_begin() {}
+    pub fn diag_snapshot() -> Vec<(u32, super::DiagRow)> {
+        Vec::new()
+    }
 }
 
-pub use imp::{fps_for_pid, start, status};
+pub use imp::{diag_begin, diag_snapshot, fps_for_pid, start, status};
 
 #[cfg(test)]
 mod tests {
@@ -327,5 +511,97 @@ mod tests {
         }
         let got = w.fps(2 * FREQ, FREQ).unwrap() as i64;
         assert!((got - 100).abs() <= 1, "read {got}");
+    }
+
+    use super::{pick_fps, FpsSource, PresentEvent, PresentFilter};
+
+    fn ev(ts: i64, tid: u32, start: bool) -> PresentEvent {
+        PresentEvent { ts, pid: 7, tid, start }
+    }
+
+    /// Runs events through a filter, then flushes it with a late event; returns the frames' times.
+    fn frames_of(events: Vec<PresentEvent>) -> Vec<i64> {
+        let mut f = PresentFilter::default();
+        let mut out = Vec::new();
+        for e in events {
+            out.extend(f.feed(e, FREQ).into_iter().map(|(_, t)| t));
+        }
+        // an event far in the future releases everything held before it
+        out.extend(f.feed(ev(1_000 * FREQ, 999, true), FREQ).into_iter().map(|(_, t)| t));
+        out
+    }
+
+    #[test]
+    fn a_present_that_reports_twice_counts_once() {
+        // 100 frames at 100 fps; each: start, nested start, nested stop, stop
+        let mut v = Vec::new();
+        for i in 0..100i64 {
+            let t = i * FREQ / 100;
+            v.extend([ev(t, 1, true), ev(t + 10, 1, true), ev(t + 500, 1, false), ev(t + 900, 1, false)]);
+        }
+        let frames = frames_of(v);
+        assert_eq!(frames.len(), 100);
+        let mut w = PresentWindow::default();
+        for t in frames {
+            w.push(t, FREQ);
+        }
+        assert_eq!(w.fps(FREQ, FREQ), Some(100));
+    }
+
+    #[test]
+    fn plain_frames_and_two_threads_all_count() {
+        let mut v = Vec::new();
+        for i in 0..60i64 {
+            let t = i * FREQ / 60;
+            v.extend([ev(t, 1, true), ev(t + 100, 1, false)]);
+        }
+        // a second thread presenting on its own (two swap chains): its frames count too
+        for i in 0..30i64 {
+            let t = i * FREQ / 30 + 5;
+            v.extend([ev(t, 2, true), ev(t + 100, 2, false)]);
+        }
+        v.sort_by_key(|e| e.ts);
+        assert_eq!(frames_of(v).len(), 90);
+    }
+
+    #[test]
+    fn events_out_of_order_are_put_in_order_first() {
+        // a Stop that reaches the program before its own Start, and a nested Start after it
+        let v = vec![ev(100, 1, true), ev(400, 1, false), ev(FREQ, 1, true), ev(FREQ + 5, 1, true), ev(FREQ + 300, 1, false), ev(FREQ + 400, 1, false)];
+        let mut shuffled = v.clone();
+        shuffled.swap(0, 1);
+        shuffled.swap(4, 5);
+        assert_eq!(frames_of(v).len(), 2);
+        assert_eq!(frames_of(shuffled).len(), 2);
+    }
+
+    #[test]
+    fn without_any_stop_every_start_counts_as_before() {
+        let v: Vec<PresentEvent> = (0..50i64).map(|i| ev(i * FREQ / 50, 1, true)).collect();
+        assert_eq!(frames_of(v).len(), 50);
+    }
+
+    #[test]
+    fn a_lost_stop_does_not_silence_the_thread_for_good() {
+        // frame 1 never gets its Stop; a stop has been seen elsewhere, so nesting is on
+        let mut v = vec![ev(0, 2, true), ev(10, 2, false), ev(100, 1, true)];
+        // one second later the thread presents again, with Stops
+        for i in 0..20i64 {
+            let t = 3 * FREQ + i * FREQ / 20;
+            v.extend([ev(t, 1, true), ev(t + 50, 1, false)]);
+        }
+        let n = frames_of(v).len();
+        assert_eq!(n, 22, "the lost-stop frame, the other thread's frame and the 20 later ones");
+    }
+
+    #[test]
+    fn the_source_decides_which_figure_is_shown() {
+        assert_eq!(pick_fps(FpsSource::Auto, Some(288), Some(144)), Some(144));
+        assert_eq!(pick_fps(FpsSource::Auto, Some(90), None), Some(90));
+        assert_eq!(pick_fps(FpsSource::Etw, Some(288), None), None);
+        assert_eq!(pick_fps(FpsSource::Driver, Some(288), Some(144)), Some(288));
+        assert_eq!(FpsSource::parse("ETW"), Some(FpsSource::Etw));
+        assert_eq!(FpsSource::parse("adl"), Some(FpsSource::Driver));
+        assert_eq!(FpsSource::parse("x"), None);
     }
 }

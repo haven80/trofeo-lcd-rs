@@ -240,6 +240,9 @@ struct Config {
     /// Where the GPU usage comes from (`gpu_usage_source`, applies live): the driver's own
     /// figure on Radeon cards (default), or always the Windows counter.
     gpu_usage_source: gpu::UsageSource,
+    /// Where the FPS comes from (`fps_source`, applies live): the Presents counted through ETW,
+    /// the Radeon driver's own figure, or ETW first (default).
+    fps_source: fps_etw::FpsSource,
     /// "New version available" notice (`update_check`, off by default). The three keys
     /// below are read at start-up (restart required): they decide whether the background
     /// check runs, how often it repeats (0 = only at start-up) and how long the banner stays.
@@ -356,6 +359,9 @@ fn print_help() {
          \x20\x20                          (default: 10). Requires a restart.\n\
          \x20\x20gpu_usage_source <S>   (config-file only) GPU usage: auto (default: the Radeon driver's own\n\
          \x20\x20                          figure, else the Windows counter) | windows (always the counter)\n\
+         \x20\x20fps_source <S>         (config-file only) Where the FPS comes from: auto (default: the\n\
+         \x20\x20                          Presents seen through ETW, else the Radeon driver's figure) |\n\
+         \x20\x20                          etw | driver. '--fps-diag' prints what each one reads.\n\
          \x20\x20gaming_screen <BOOL>    Switch to the in-game dashboard by itself while the GPU is\n\
          \x20\x20                          busy (default: true; false keeps your own screen)\n\
          \x20\x20gaming_gpu_percent <N>  GPU usage (%) that counts as gaming (1-100, default 50)\n\
@@ -641,6 +647,9 @@ fn parse_args() -> anyhow::Result<Config> {
             "--lhm-list" => {
                 // Handled in `main()` after parsing (needs the lhm_* settings).
             }
+            "--fps-diag" => {
+                // Handled in `main()`.
+            }
             "--lcd-test" | "--lcd-test-loop" => {
                 // Handled in `main()` after the handshake.
             }
@@ -818,6 +827,11 @@ fn parse_args() -> anyhow::Result<Config> {
         Some(v) => gpu::UsageSource::parse(v)
             .ok_or_else(|| anyhow::anyhow!("gpu_usage_source: '{v}' not valid ({})", gpu::UsageSource::NAMES))?,
     };
+    let fps_source = match file.get("fps_source") {
+        None => fps_etw::FpsSource::Auto,
+        Some(v) => fps_etw::FpsSource::parse(v)
+            .ok_or_else(|| anyhow::anyhow!("fps_source: '{v}' not valid ({})", fps_etw::FpsSource::NAMES))?,
+    };
     let update_check = file.get_bool("update_check").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(false);
     let update_check_hours = file.get_u32("update_check_hours").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(0);
     if update_check_hours > 720 {
@@ -834,6 +848,7 @@ fn parse_args() -> anyhow::Result<Config> {
         ticker_source,
         ticker_refresh_min,
         gpu_usage_source,
+        fps_source,
         update_check,
         update_check_hours,
         update_notice_secs,
@@ -1862,6 +1877,60 @@ fn run_lcd_test(
     }
 }
 
+/// `--fps-diag`: for 20 seconds shows, once a second, what each FPS source reads for the program in the
+/// foreground, to find out where a wrong number comes from.
+fn fps_diag_run(secs: u64) {
+    println!("=== FPS diagnostics ({secs} s) ===");
+    if !cfg!(windows) {
+        println!("FPS is measured on Windows only.");
+        return;
+    }
+    println!("Close trofeo_lcd first (it uses the same trace), run this as administrator, start the game and keep it in front.");
+    if let Err(e) = fps_etw::start() {
+        println!("ETW could not start: {e}");
+        return;
+    }
+    fps_etw::diag_begin();
+    let amd = gpu_amd::GpuAmdSensor::new();
+    println!("{:>3}  {:<28} {:>5}  {:>10} {:>10} {:>9}  {:>7} {:>6}  {}", "s", "foreground program", "pid", "raw starts", "no nesting", "ETW fps", "threads", "chains", "driver fps (Radeon)");
+    let mut last: std::collections::HashMap<u32, (u32, u32)> = std::collections::HashMap::new();
+    for t in 1..=secs {
+        std::thread::sleep(Duration::from_secs(1));
+        let win = foreground::window_info();
+        let snap = fps_etw::diag_snapshot();
+        let driver = amd.sample().fps;
+        let Some(w) = win else {
+            println!("{t:>3}  (no foreground window)");
+            continue;
+        };
+        let name = w.exe.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let row = snap.iter().find(|(p, _)| *p == w.pid).map(|(_, r)| r.clone()).unwrap_or_default();
+        let before = last.insert(w.pid, (row.raw_starts, row.counted)).unwrap_or((row.raw_starts, row.counted));
+        let etw = fps_etw::fps_for_pid(w.pid);
+        println!(
+            "{t:>3}  {:<28} {:>5}  {:>10} {:>10} {:>9}  {:>7} {:>6}  {}",
+            name.chars().take(28).collect::<String>(),
+            w.pid,
+            row.raw_starts.saturating_sub(before.0),
+            row.counted.saturating_sub(before.1),
+            etw.map_or("-".to_string(), |f| f.to_string()),
+            row.threads.len(),
+            row.chains.len(),
+            driver.map_or("-".to_string(), |f| f.to_string()),
+        );
+    }
+    println!();
+    println!("Per process, everything the DXGI provider reported (event 42 = Present_Start, 43 = Present_Stop):");
+    let mut rows = fps_etw::diag_snapshot();
+    rows.sort_by_key(|(_, r)| std::cmp::Reverse(r.raw_starts));
+    for (pid, r) in rows.iter().take(6) {
+        let ids: Vec<String> = r.ids.iter().map(|(i, n)| format!("{i}:{n}")).collect();
+        println!("  pid {pid}: starts {} -> frames {}; threads {}; swap chains {}; events [{}]", r.raw_starts, r.counted, r.threads.len(), r.chains.len(), ids.join(" "));
+    }
+    println!();
+    println!("Please send this whole output with the game, its graphics API and what the in-game counter shows.");
+}
+
 fn main() -> anyhow::Result<()> {
     let diag_mode = std::env::args().any(|a| a == "--diag");
     let lcd_test = std::env::args().any(|a| a == "--lcd-test");
@@ -1871,7 +1940,12 @@ fn main() -> anyhow::Result<()> {
         v.iter().position(|a| a == "--lcd-test-out").and_then(|i| v.get(i + 1)).map(std::path::PathBuf::from)
     };
     let lhm_list = std::env::args().any(|a| a == "--lhm-list");
+    let fps_diag = std::env::args().any(|a| a == "--fps-diag");
     let mut config = parse_args()?;
+    if fps_diag {
+        fps_diag_run(20);
+        return Ok(());
+    }
     if lhm_list {
         let ok = lhm::diag(&config.ui.lhm.url, &config.ui.lhm.filters);
         std::process::exit(if ok { 0 } else { 1 });
@@ -2479,12 +2553,18 @@ fn main() -> anyhow::Result<()> {
                 usage_pct: latest_gpu_percent,
                 clock_mhz: latest_gpu_data.clock_mhz,
             });
-            if latest_gpu_data.fps.is_none() {
-                #[cfg(windows)]
+            // The FPS: the Presents counted through ETW (what PresentMon counts), the Radeon
+            // driver's figure, or ETW first and the driver's as a fallback (`fps_source`).
+            let driver_fps = latest_gpu_data.fps;
+            #[allow(unused_mut)]
+            let mut etw_fps: Option<u32> = None;
+            #[cfg(windows)]
+            if config.fps_source != fps_etw::FpsSource::Driver {
                 if let Some(pid) = foreground::foreground_pid() {
-                    latest_gpu_data.fps = fps_etw::fps_for_pid(pid).map(|f| f as i32);
+                    etw_fps = fps_etw::fps_for_pid(pid);
                 }
             }
+            latest_gpu_data.fps = fps_etw::pick_fps(config.fps_source, driver_fps, etw_fps);
         }
         // "Gaming" mode detection (`gaming_active`: GPU usage above `gaming_gpu_percent`). Used for two things:
         // swap the "NOW PLAYING" content for the foreground exe name, AND replace the
@@ -4961,7 +5041,7 @@ mod layout_tests {
         }
         // every key of the editor is one the program reads from the config file
         let from_cli_or_file = |k: &str| is_override_key(k) || ["orientation", "flip", "panel_size", "background", "background_dim", "ffmpeg", "language",
-            "hid_mount", "hid_header", "color", "silence_threshold", "silence_timeout_ms", "weather_city", "ticker_source", "ticker_refresh_min", "gpu_usage_source", "update_check", "update_check_hours", "update_notice_secs", "margin", "margin_top", "margin_bottom", "margin_left", "margin_right"].contains(&k);
+            "hid_mount", "hid_header", "color", "silence_threshold", "silence_timeout_ms", "weather_city", "ticker_source", "ticker_refresh_min", "gpu_usage_source", "fps_source", "update_check", "update_check_hours", "update_notice_secs", "margin", "margin_top", "margin_bottom", "margin_left", "margin_right"].contains(&k);
         for f in fields() {
             assert!(from_cli_or_file(&f.key), "{} is not a key of the program", f.key);
         }

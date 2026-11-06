@@ -154,6 +154,9 @@ language = en
 # Measures the FPS of any DirectX 9-12 game (NVIDIA/AMD/Intel) via ETW.
 # Requires starting the program AS ADMINISTRATOR.
 # fps_monitor = true
+# fps_source = auto              # auto | etw | driver: where the number comes from (see OPTIONS_GUIDE).
+#                                # auto = frames counted through Windows events, else the Radeon driver's figure
+# If the number is wrong: run  trofeo_lcd.exe --fps-diag  as administrator with the game in front and send the output.
 
 # --- Preset layouts ----------------------------------------------------------
 # Big panels instead of the clock. List: trofeo_lcd.exe --layout list
