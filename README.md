@@ -20,7 +20,9 @@ whose driver was rewritten byte-for-byte from
 See **[NOTICE.md](./NOTICE.md)** for the full provenance and a summary of
 what this fork adds on top of the original.
 
-**New in 2.9.1 — the gaming screen can be switched off.** `gaming_screen = false` (a checkbox in the settings editor) keeps your own screen while you play instead of switching to the in-game dashboard, and the switch now waits for the GPU to stay busy for a few seconds (`gaming_delay`), so a one-second spike on the desktop no longer flashes it. The README also explains how to run the autostart scripts when Windows blocks them. See [the gaming screen](./OPTIONS_GUIDE.md#the-automatic-gaming-screen-applies-live).
+**New in 2.9.3 — fixes for the Windows autostart and the settings editor.** The autostart script no longer fails with *"Cannot bind argument to parameter 'Path' because it is an empty string"* and finds `trofeo_lcd.exe` by itself (also one folder up, where the release zip puts it); the README explains it step by step, including the quotes needed around folders with spaces. The settings editor now **remembers its language** instead of always starting in Italian, and no longer stops with *"The requested operation requires elevation (os error 740)"* when `trofeo_lcd.exe` is set to run as administrator. See [Autostart on Windows](#autostart-on-windows).
+
+**2.9.1 — the gaming screen can be switched off.** `gaming_screen = false` (a checkbox in the settings editor) keeps your own screen while you play instead of switching to the in-game dashboard, and the switch now waits for the GPU to stay busy for a few seconds (`gaming_delay`), so a one-second spike on the desktop no longer flashes it. The README also explains how to run the autostart scripts when Windows blocks them. See [the gaming screen](./OPTIONS_GUIDE.md#the-automatic-gaming-screen-applies-live).
 
 **2.9.0 — a console-style look: a new background and a new layout, and `deck`, `cards` and `orbit` finally work in portrait.** `background_effect = veil` is slow, silky bands of light drifting over a deep night gradient with a few floating specks (six new night palettes: `midnight`, `dusk`, `ember`, `mint`, `rose`, `slate`). `layout = console` is a bar with the names and the clock over a row of tiles: the tile in focus grows, lights up in its colour and shows a graph and its readings, the others stay small and dim. The focus can **rotate** by itself, **follow the busiest part of the PC** or be **off**, and the colours come from the same presets as the other layouts. In portrait, `deck`, `cards`, `orbit` and `console` now stack their parts in a column (before, `deck`, `cards` and `orbit` were squeezed into thin strips). See [Veil](#backgrounds-solid-color-and-animated-effects), [Console](#deck-cards-orbit-and-console) and [Orientation](#orientation-landscape--portrait).
 
@@ -223,7 +225,7 @@ system, plus a *Raw file* view for anything else.
 - **Not resident.** The editor is a separate program that only reads and writes the file:
   close it when you are done, `trofeo_lcd` does not need it.
 - Needs `trofeo_lcd.exe` in the same folder for the preview (the rest works without it).
-  The window is in Italian or English (switch at the top right). On Linux the *Open / Save as*
+  The window is in English or Italian: switch at the top right and the editor remembers your choice (it is saved in `trofeo_config.ini` next to the program); the first time it starts in the language of `language` in your `trofeo.conf` (Italian if that is `it`), otherwise in the language of the system, otherwise in English. On Linux the *Open / Save as*
   dialogs are replaced by a box where you type the path.
 
 Details in the **[Options guide](./OPTIONS_GUIDE.md#settings-editor-trofeo_config)**.
@@ -985,11 +987,34 @@ language of `language`. To see how it looks without waiting for a release, start
 
 ### Autostart on Windows
 
-`scripts/install-autostart.ps1` (included in the Windows release zip) adds
+`scripts/install-autostart.ps1` (included in the Windows release zip, in the `scripts` folder next to the exe) adds
 `trofeo_lcd.exe` to Windows startup. By default it registers a **Scheduled
 Task** that runs at logon with elevated ("Run as administrator")
 privileges and no UAC prompt on every login — needed if you use
-`fps_monitor` or PawnIO (AMD sensors). Run it from the folder with the exe:
+`fps_monitor` or PawnIO (AMD sensors). The script finds `trofeo_lcd.exe` by itself (next to the script, or one
+folder up, or in the folder you are in).
+
+The simplest way, step by step:
+
+1. Open PowerShell **as administrator** (right-click Start, *Terminal (Admin)* or *Windows PowerShell (Admin)*).
+2. Run the script through PowerShell with the execution policy bypassed for that one command. **Put the path in
+   quotes**, always when a folder has a space in its name (`Sensor Panel`), or PowerShell stops at the space:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "D:\Sensor Panel\trofeo-lcd-windows\scripts\install-autostart.ps1"
+```
+
+That is all: it prints `Done. Scheduled task 'TrofeoLCD' will start ... at every logon`. You do not need to open
+PowerShell in a particular folder, and you do not need to mark `trofeo_lcd.exe` as *Run as administrator* yourself:
+the task already starts it elevated. If the script cannot find the exe (for example you moved it away from the
+scripts), give its path:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "D:\Sensor Panel\trofeo-lcd-windows\scripts\install-autostart.ps1" -Exe "D:\Sensor Panel\trofeo-lcd-windows\trofeo_lcd.exe"
+```
+
+Other ways, from PowerShell opened in the folder of the exe (add the `powershell.exe -NoProfile -ExecutionPolicy Bypass -File`
+prefix if Windows says that running scripts is disabled):
 
 ```powershell
 .\scripts\install-autostart.ps1                              # elevated task, --hide-console
@@ -997,19 +1022,13 @@ privileges and no UAC prompt on every login — needed if you use
 .\scripts\install-autostart.ps1 -Method Shortcut              # simple Startup-folder shortcut, no admin needed, not elevated
 ```
 
-**If Windows says that running scripts is disabled** on your system (the default policy blocks `.ps1` files), start
-the script through PowerShell with the policy bypassed for that one command. For the default (Scheduled Task)
-method open PowerShell **as administrator** in the folder of the exe and run:
+Remove it with `.\scripts\uninstall-autostart.ps1` (same quotes and `-ExecutionPolicy Bypass` rules; removing the elevated
+task needs PowerShell as administrator; it removes whichever method was used). See the comments at the top of each
+script (or `Get-Help .\scripts\install-autostart.ps1 -Full`) for every option.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-autostart.ps1
-powershell -ExecutionPolicy Bypass -File .\scripts\install-autostart.ps1 -Method Shortcut   # no admin needed
-powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-autostart.ps1
-```
-
-Remove it with `.\scripts\uninstall-autostart.ps1` (removes whichever
-method was used). See the comments at the top of each script (or
-`Get-Help .\scripts\install-autostart.ps1 -Full`) for every option.
+**If you mark `trofeo_lcd.exe` as "Run as administrator" yourself** (Properties, Compatibility) Windows will not let
+a normal program start it. From 2.9.3 the settings editor works around that for the preview, but if it still says
+*"The requested operation requires elevation (os error 740)"* open `trofeo_config.exe` as administrator too.
 Only `trofeo_lcd.exe` is started at logon: the settings editor is opened by hand when you want it.
 
 ## Second monitor mode

@@ -8,7 +8,7 @@
     -Method Task     (default, recommended) Registers a Scheduled Task that
                       starts the program at logon. This lets it start
                       already ELEVATED ("Run as administrator") without a
-                      UAC prompt at every login — needed for the in-game
+                      UAC prompt at every login - needed for the in-game
                       FPS dashboard (fps_monitor) and AMD sensors (PawnIO).
                       A plain Startup-folder shortcut can't do this: it
                       would either fail silently or prompt UAC every time.
@@ -20,8 +20,10 @@
                       or PawnIO).
 
 .PARAMETER Exe
-  Path to trofeo_lcd.exe (or trofeo_screen.exe). Defaults to
-  trofeo_lcd.exe next to this script.
+  Path to trofeo_lcd.exe (or trofeo_screen.exe). If you leave it out the
+  script looks for trofeo_lcd.exe next to itself, then one folder up (the
+  release zip keeps the scripts in a "scripts" folder beside the exe), then
+  in the folder you are in. Put the path in "quotes" if it has spaces.
 
 .PARAMETER Arguments
   Extra command-line arguments passed to the program at startup, e.g.
@@ -39,7 +41,7 @@
 
 .EXAMPLE
   # From the folder with trofeo_lcd.exe (a UAC prompt will appear once):
-  .\install-autostart.ps1
+  .\scripts\install-autostart.ps1
 
 .EXAMPLE
   .\install-autostart.ps1 -Exe "C:\Tools\trofeo_lcd\trofeo_lcd.exe" -Arguments "--hide-console"
@@ -51,7 +53,7 @@
 
 [CmdletBinding()]
 param(
-    [string]$Exe = (Join-Path $PSScriptRoot "trofeo_lcd.exe"),
+    [string]$Exe = "",
     [string]$Arguments = "--hide-console",
     [ValidateSet("Task", "Shortcut")]
     [string]$Method = "Task",
@@ -61,11 +63,31 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-if (-not (Test-Path $Exe)) {
-    Write-Error "Executable not found: $Exe`nPass -Exe <path> or run this script from the folder that contains trofeo_lcd.exe."
+# Where this script is. $PSScriptRoot can come out empty in some hosts and ways of starting a
+# script (it made "Join-Path" fail on an empty path in version 2.9.x), so it is never used
+# in the parameter defaults and there are fallbacks here.
+$ScriptPath = $PSCommandPath
+if (-not $ScriptPath) { $ScriptPath = $MyInvocation.MyCommand.Path }
+$ScriptDir = $PSScriptRoot
+if (-not $ScriptDir -and $ScriptPath) { $ScriptDir = Split-Path -Parent $ScriptPath }
+if (-not $ScriptDir) { $ScriptDir = (Get-Location).Path }
+
+if (-not $Exe) {
+    $places = @($ScriptDir)
+    $parent = Split-Path -Parent $ScriptDir
+    if ($parent) { $places += $parent }
+    $places += (Get-Location).Path
+    foreach ($place in $places) {
+        $candidate = Join-Path $place "trofeo_lcd.exe"
+        if (Test-Path -LiteralPath $candidate) { $Exe = $candidate; break }
+    }
+}
+if (-not $Exe -or -not (Test-Path -LiteralPath $Exe)) {
+    Write-Host "trofeo_lcd.exe not found (looked next to this script, one folder up and in the current folder)." -ForegroundColor Red
+    Write-Host "Pass its path:  -Exe `"C:\path\to\trofeo_lcd.exe`"   (in quotes if the path has spaces)"
     exit 1
 }
-$Exe = (Resolve-Path $Exe).Path
+$Exe = (Resolve-Path -LiteralPath $Exe).Path
 $WorkDir = Split-Path $Exe -Parent
 
 function Test-IsAdmin {
@@ -78,7 +100,7 @@ if ($Method -eq "Task") {
     if ($Elevated -and -not (Test-IsAdmin)) {
         Write-Warning "Registering an elevated task requires Administrator rights: relaunching this script elevated (a UAC prompt will appear once, only now)."
         $psArgs = @(
-            "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`"",
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$ScriptPath`"",
             "-Exe", "`"$Exe`"", "-Arguments", "`"$Arguments`"",
             "-Method", "Task", "-Elevated", "$Elevated", "-TaskName", "`"$TaskName`""
         )

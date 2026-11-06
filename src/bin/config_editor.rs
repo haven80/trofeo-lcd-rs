@@ -65,7 +65,11 @@ impl LcdTest {
             self.message = Some((format!("cannot write the temporary file: {e}"), true));
             return;
         }
+        let build = |invoker: bool| {
         let mut cmd = std::process::Command::new(exe);
+        if invoker {
+            run_as_invoker(&mut cmd);
+        }
         cmd.arg("--config").arg(&conf).arg("--lcd-test-loop").stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
         if workdir.is_dir() {
             cmd.current_dir(workdir);
@@ -75,7 +79,13 @@ impl LcdTest {
             use std::os::windows::process::CommandExt;
             cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
         }
-        match cmd.spawn() {
+        cmd
+        };
+        let spawned = match build(false).spawn() {
+            Err(e) if needs_elevation(&e) => build(true).spawn(),
+            r => r,
+        };
+        match spawned {
             Ok(mut child) => {
                 let (tx, rx) = mpsc::channel();
                 if let Some(out) = child.stdout.take() {
@@ -104,7 +114,7 @@ impl LcdTest {
                 self.child = Some(child);
                 self.rx = Some(rx);
             }
-            Err(e) => self.message = Some((format!("cannot run {}: {e}", exe.display()), true)),
+            Err(e) => self.message = Some((if needs_elevation(&e) { elevation_message(exe) } else { format!("cannot run {}: {e}", exe.display()) }, true)),
         }
     }
 
@@ -208,6 +218,81 @@ fn lcd_test_box(ui: &mut egui::Ui, test: &mut LcdTest, ed: &mut Ed, exe: Option<
 enum Lang {
     It,
     En,
+}
+
+/// The editor remembers the language you pick (IT / EN) in `trofeo_config.ini`, next to the
+/// program, or in your user settings folder when that one cannot be written.
+const PREF_FILE: &str = "trofeo_config.ini";
+
+fn pref_dirs() -> Vec<PathBuf> {
+    let mut v = Vec::new();
+    if let Some(d) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
+        v.push(d);
+    }
+    let user = if cfg!(windows) {
+        std::env::var_os("APPDATA").map(|d| PathBuf::from(d).join("trofeo_lcd"))
+    } else {
+        std::env::var_os("XDG_CONFIG_HOME")
+            .map(|d| PathBuf::from(d).join("trofeo_lcd"))
+            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config").join("trofeo_lcd")))
+    };
+    v.extend(user);
+    v
+}
+
+/// `language = en` / `language = it` in the text of the preference file.
+fn parse_lang_pref(text: &str) -> Option<Lang> {
+    for line in text.lines() {
+        let line = line.trim();
+        if line.starts_with('#') || line.starts_with(';') {
+            continue;
+        }
+        if let Some((k, v)) = line.split_once('=') {
+            if k.trim().eq_ignore_ascii_case("language") {
+                return match v.trim().to_ascii_lowercase().as_str() {
+                    "en" | "english" => Some(Lang::En),
+                    "it" | "italiano" => Some(Lang::It),
+                    _ => None,
+                };
+            }
+        }
+    }
+    None
+}
+
+fn load_lang_pref(dirs: &[PathBuf]) -> Option<Lang> {
+    dirs.iter().find_map(|d| std::fs::read_to_string(d.join(PREF_FILE)).ok().and_then(|t| parse_lang_pref(&t)))
+}
+
+/// Writes the choice in the first folder that accepts it; a failure is not worth an error.
+fn save_lang_pref(dirs: &[PathBuf], lang: Lang) {
+    let text = format!("# Language of the settings editor (it | en)\nlanguage = {}\n", if lang == Lang::En { "en" } else { "it" });
+    for d in dirs {
+        let _ = std::fs::create_dir_all(d);
+        if std::fs::write(d.join(PREF_FILE), &text).is_ok() {
+            return;
+        }
+    }
+}
+
+/// The language to start in: what you chose last time; otherwise the `language` of the
+/// configuration being edited (the language of the display) when it is Italian; otherwise the
+/// language of the system (Linux `LANG`); otherwise English.
+fn initial_lang(saved: Option<Lang>, conf_text: &str, system: Option<&str>) -> Lang {
+    if let Some(l) = saved {
+        return l;
+    }
+    let from_conf = conf_text.lines().map(str::trim).filter(|l| !l.starts_with('#')).find_map(|l| {
+        let (k, v) = l.split_once('=')?;
+        k.trim().eq_ignore_ascii_case("language").then(|| v.trim().to_ascii_lowercase())
+    });
+    if let Some(v) = from_conf {
+        return if v.starts_with("it") { Lang::It } else { Lang::En };
+    }
+    if system.is_some_and(|v| v.to_ascii_lowercase().starts_with("it")) {
+        return Lang::It;
+    }
+    Lang::En
 }
 
 fn tr<'a>(l: Lang, en: &'a str, it: &'a str) -> &'a str {
@@ -420,6 +505,25 @@ fn find_main_exe() -> Option<PathBuf> {
     std::env::var_os("PATH").and_then(|paths| std::env::split_paths(&paths).map(|d| d.join(name)).find(|p| p.is_file()))
 }
 
+/// Windows: "The requested operation requires elevation" (os error 740). It happens when
+/// `trofeo_lcd.exe` is set to always run as administrator and the editor is not.
+fn needs_elevation(e: &std::io::Error) -> bool {
+    e.raw_os_error() == Some(740)
+}
+
+fn elevation_message(exe: &Path) -> String {
+    format!(
+        "cannot run {}: it is set to always run as administrator, so the editor has to run as administrator too (or turn off \"Run this program as an administrator\" in the Properties of trofeo_lcd.exe: the autostart task already starts it elevated by itself)",
+        exe.display()
+    )
+}
+
+/// Asks Windows to start the child with the rights of the editor, ignoring the "run as
+/// administrator" flag of the program. The preview and the screen test do not need more.
+fn run_as_invoker(cmd: &mut std::process::Command) {
+    cmd.env("__COMPAT_LAYER", "RunAsInvoker");
+}
+
 /// Runs the main program once to draw a frame of `text` (the configuration being edited).
 fn render_preview(exe: &Path, text: &str, workdir: &Path, state: PreviewState, layout: usize, secs: f64) -> Result<Rendered, String> {
     let tmp = std::env::temp_dir();
@@ -428,7 +532,11 @@ fn render_preview(exe: &Path, text: &str, workdir: &Path, state: PreviewState, l
     let png = tmp.join(format!("trofeo_config_{id}.png"));
     std::fs::write(&conf, text).map_err(|e| format!("cannot write the temporary file: {e}"))?;
     let _ = std::fs::remove_file(&png);
+    let build = |invoker: bool| {
     let mut cmd = std::process::Command::new(exe);
+    if invoker {
+        run_as_invoker(&mut cmd);
+    }
     cmd.arg("--config")
         .arg(&conf)
         .arg("--preview-png")
@@ -449,7 +557,13 @@ fn render_preview(exe: &Path, text: &str, workdir: &Path, state: PreviewState, l
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     }
-    let out = cmd.output().map_err(|e| format!("cannot run {}: {e}", exe.display()))?;
+    cmd
+    };
+    let out = match build(false).output() {
+        Err(e) if needs_elevation(&e) => build(true).output(),
+        r => r,
+    }
+    .map_err(|e| if needs_elevation(&e) { elevation_message(exe) } else { format!("cannot run {}: {e}", exe.display()) })?;
     let _ = std::fs::remove_file(&conf);
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
@@ -1307,9 +1421,11 @@ impl App {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.selectable_label(self.lang == Lang::En, "EN").clicked() {
                     self.lang = Lang::En;
+                    save_lang_pref(&pref_dirs(), Lang::En);
                 }
                 if ui.selectable_label(self.lang == Lang::It, "IT").clicked() {
                     self.lang = Lang::It;
+                    save_lang_pref(&pref_dirs(), Lang::It);
                 }
             });
         });
@@ -1593,12 +1709,12 @@ impl eframe::App for App {
 fn main() -> eframe::Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut path: Option<PathBuf> = None;
-    let (mut lang, mut section, mut shot) = (Lang::It, None, None);
+    let (mut lang, mut section, mut shot): (Option<Lang>, _, _) = (None, None, None);
     let mut size = [1280.0f32, 860.0];
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
-            "--lang" => lang = if it.next().is_some_and(|v| v.starts_with("en")) { Lang::En } else { Lang::It },
+            "--lang" => lang = Some(if it.next().is_some_and(|v| v.starts_with("en")) { Lang::En } else { Lang::It }),
             "--section" => section = it.next().cloned(),
             "--screenshot" => shot = it.next().map(PathBuf::from),
             "--size" => {
@@ -1611,6 +1727,11 @@ fn main() -> eframe::Result<()> {
         }
     }
     let path = path.unwrap_or_else(default_path);
+    // --lang wins; otherwise the saved choice, the language of the configuration, the system
+    let lang = lang.unwrap_or_else(|| {
+        let system = ["LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"].iter().find_map(|k| std::env::var(k).ok().filter(|v| !v.is_empty()));
+        initial_lang(load_lang_pref(&pref_dirs()), &std::fs::read_to_string(&path).unwrap_or_default(), system.as_deref())
+    });
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size(size).with_min_inner_size([900.0, 560.0]).with_title("Trofeo LCD - config"),
         ..Default::default()
@@ -1632,6 +1753,51 @@ fn main() -> eframe::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_language_is_remembered_and_has_sensible_defaults() {
+        // what you chose wins over everything
+        assert_eq!(initial_lang(Some(Lang::En), "language = it\n", Some("it_IT.UTF-8")), Lang::En);
+        assert_eq!(initial_lang(Some(Lang::It), "language = en\n", None), Lang::It);
+        // nothing saved: the language of the configuration, then of the system, then English
+        assert_eq!(initial_lang(None, "language = it\n", None), Lang::It);
+        assert_eq!(initial_lang(None, "language = de\n", Some("it_IT")), Lang::En);
+        assert_eq!(initial_lang(None, "# language = it\nbrightness = 50\n", None), Lang::En);
+        assert_eq!(initial_lang(None, "", Some("it_IT.UTF-8")), Lang::It);
+        assert_eq!(initial_lang(None, "", Some("en_US.UTF-8")), Lang::En);
+        assert_eq!(initial_lang(None, "", None), Lang::En);
+        // the preference file
+        assert_eq!(parse_lang_pref("# x\nlanguage = en\n"), Some(Lang::En));
+        assert_eq!(parse_lang_pref("language=IT"), Some(Lang::It));
+        assert_eq!(parse_lang_pref("language = klingon"), None);
+        assert_eq!(parse_lang_pref(""), None);
+    }
+
+    #[test]
+    fn the_language_choice_is_written_and_read_back() {
+        let base = std::env::temp_dir().join(format!("trofeo_pref_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let (a, b) = (base.join("a"), base.join("b"));
+        assert_eq!(load_lang_pref(&[a.clone(), b.clone()]), None);
+        save_lang_pref(&[a.clone(), b.clone()], Lang::En);
+        assert_eq!(load_lang_pref(&[a.clone(), b.clone()]), Some(Lang::En));
+        save_lang_pref(&[a.clone(), b.clone()], Lang::It);
+        assert_eq!(load_lang_pref(&[a.clone()]), Some(Lang::It));
+        // a folder that cannot be written: the next one takes it (a file where the folder should be)
+        let blocked = base.join("blocked");
+        std::fs::write(&blocked, "x").unwrap();
+        save_lang_pref(&[blocked.clone(), base.join("c")], Lang::En);
+        assert_eq!(load_lang_pref(&[base.join("c")]), Some(Lang::En));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn the_elevation_error_of_windows_is_recognised_and_explained() {
+        assert!(needs_elevation(&std::io::Error::from_raw_os_error(740)));
+        assert!(!needs_elevation(&std::io::Error::from_raw_os_error(2)));
+        let m = elevation_message(Path::new("D:\\Sensor Panel\\trofeo_lcd.exe"));
+        assert!(m.contains("administrator") && m.contains("Sensor Panel"), "{m}");
+    }
 
     #[cfg(unix)]
     fn fake_exe(name: &str, body: &str) -> PathBuf {

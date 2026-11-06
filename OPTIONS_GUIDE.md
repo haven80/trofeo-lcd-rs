@@ -31,6 +31,15 @@ the same file for you.
   own words; nothing is saved until you press *Save*.
 - The editor is not resident: close it when you are done, `trofeo_lcd` does not need it.
   On Linux the file dialogs are replaced by a text box with the path.
+- **Language of the window**: English or Italian, switch at the top right. The choice is
+  remembered in `trofeo_config.ini` (next to the editor, or in your user settings folder if that one
+  cannot be written). Until you choose, it starts in Italian when `language = it` is in the file you
+  are editing, or when the system language is Italian (Linux), and in English otherwise.
+  `--lang en` / `--lang it` on the command line wins over everything.
+- **If it says "requires elevation (os error 740)"**: `trofeo_lcd.exe` is set to always run as
+  administrator (Properties, Compatibility). The editor asks Windows to start it for the preview without
+  elevation, and if Windows refuses, open `trofeo_config.exe` as administrator too. The autostart task starts
+  `trofeo_lcd.exe` elevated by itself: you do not need to set that flag.
 
 ## How settings work
 

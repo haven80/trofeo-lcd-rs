@@ -28,6 +28,11 @@ $removedSomething = $false
 if ($Method -eq "Task" -or $Method -eq "Both") {
     $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     if ($task) {
+        $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $isAdmin = (New-Object Security.Principal.WindowsPrincipal($id)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+        if (-not $isAdmin) {
+            Write-Host "The task '$TaskName' runs elevated, so removing it needs PowerShell opened as administrator." -ForegroundColor Yellow
+        }
         Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
         Write-Host "Removed scheduled task '$TaskName'." -ForegroundColor Green
         $removedSomething = $true
