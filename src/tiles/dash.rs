@@ -379,16 +379,16 @@ pub struct History {
     series: HashMap<&'static str, VecDeque<f32>>,
     last: Option<f64>,
     /// Counts the samples taken (part of the redraw signature).
-    rev: u64,
+    pub(super) rev: u64,
 }
 
 impl History {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         History { series: HashMap::new(), last: None, rev: 0 }
     }
 
     /// Takes a sample when a second has passed since the last one.
-    fn sample(&mut self, secs: f64, keep: usize, values: &[(&'static str, Option<f32>)]) {
+    pub(super) fn sample(&mut self, secs: f64, keep: usize, values: &[(&'static str, Option<f32>)]) {
         if self.last.is_some_and(|l| secs - l < 1.0 && secs >= l) {
             return;
         }
@@ -406,7 +406,7 @@ impl History {
     }
 
     /// For previews (fixed clock): a plausible wavy history around the current value.
-    fn fake(&mut self, keep: usize, values: &[(&'static str, Option<f32>)]) {
+    pub(super) fn fake(&mut self, keep: usize, values: &[(&'static str, Option<f32>)]) {
         if self.rev > 0 {
             return;
         }
@@ -424,7 +424,7 @@ impl History {
         }
     }
 
-    fn get(&self, key: &str) -> Vec<f32> {
+    pub(super) fn get(&self, key: &str) -> Vec<f32> {
         self.series.get(key).map(|q| q.iter().copied().collect()).unwrap_or_default()
     }
 }
@@ -432,45 +432,45 @@ impl History {
 // -------------------------------------------------------------------- panels
 
 #[derive(Clone, PartialEq, Debug)]
-struct Stat {
-    label: String,
-    value: String,
-    unit: String,
+pub(super) struct Stat {
+    pub(super) label: String,
+    pub(super) value: String,
+    pub(super) unit: String,
 }
 
 #[derive(Clone, PartialEq, Debug)]
-struct Ring {
-    label: String,
-    frac: f32,
+pub(super) struct Ring {
+    pub(super) label: String,
+    pub(super) frac: f32,
 }
 
 /// What one column / card / cluster shows, already formatted.
 #[derive(Clone, PartialEq, Debug)]
-struct Panel {
-    kind: PKind,
-    title: String,
-    sub: String,
-    hero: String,
-    unit: String,
-    frac: Option<f32>,
+pub(super) struct Panel {
+    pub(super) kind: PKind,
+    pub(super) title: String,
+    pub(super) sub: String,
+    pub(super) hero: String,
+    pub(super) unit: String,
+    pub(super) frac: Option<f32>,
     /// Name of the history the graph draws, and the smallest range it spans.
-    series: Option<(&'static str, f32)>,
-    stats: Vec<Stat>,
-    rings: Vec<Ring>,
+    pub(super) series: Option<(&'static str, f32)>,
+    pub(super) stats: Vec<Stat>,
+    pub(super) rings: Vec<Ring>,
     /// Extra lines of the clock / weather / music panels.
-    lines: Vec<String>,
+    pub(super) lines: Vec<String>,
     /// The hero is text (a title), not a number.
-    text: bool,
+    pub(super) text: bool,
     /// Fan speed shown in the header of a card (CPU and GPU).
-    fan: Option<u32>,
+    pub(super) fan: Option<u32>,
 }
 
-fn stat(label: &str, value: impl Into<String>, unit: &str) -> Stat {
+pub(super) fn stat(label: &str, value: impl Into<String>, unit: &str) -> Stat {
     Stat { label: label.to_string(), value: value.into(), unit: unit.to_string() }
 }
 
 /// 4350 -> ("4.35", "GHz"), 950 -> ("950", "MHz").
-fn freq_parts(mhz: u32) -> (String, &'static str) {
+pub(super) fn freq_parts(mhz: u32) -> (String, &'static str) {
     if mhz >= 1000 {
         (format!("{:.2}", mhz as f32 / 1000.0), "GHz")
     } else {
@@ -478,11 +478,11 @@ fn freq_parts(mhz: u32) -> (String, &'static str) {
     }
 }
 
-fn gb(mb: u64) -> String {
+pub(super) fn gb(mb: u64) -> String {
     format!("{:.1}", mb as f32 / 1024.0)
 }
 
-fn rate_parts(kb: f64) -> (String, &'static str) {
+pub(super) fn rate_parts(kb: f64) -> (String, &'static str) {
     if kb >= 1024.0 {
         (format!("{:.1}", kb / 1024.0), "MB/s")
     } else {
@@ -490,7 +490,7 @@ fn rate_parts(kb: f64) -> (String, &'static str) {
     }
 }
 
-fn panel(kind: PKind, d: &WidgetData, hw: &lhm::Readings, s: &Settings, ts: &tiles::Settings, now: &chrono::DateTime<Local>) -> Panel {
+pub(super) fn panel(kind: PKind, d: &WidgetData, hw: &lhm::Readings, s: &Settings, ts: &tiles::Settings, now: &chrono::DateTime<Local>) -> Panel {
     let smooth = s.font == FontStyle::Smooth;
     let deg = if smooth { "\u{b0}C" } else { "C" };
     let case = |t: String| if smooth { nice_case(&t) } else { t.to_uppercase() };
@@ -713,12 +713,12 @@ fn panel(kind: PKind, d: &WidgetData, hw: &lhm::Readings, s: &Settings, ts: &til
 
 // ----------------------------------------------------------------- drawing
 
-fn luma(c: Rgb) -> f32 {
+pub(super) fn luma(c: Rgb) -> f32 {
     c.0 as f32 * 0.299 + c.1 as f32 * 0.587 + c.2 as f32 * 0.114
 }
 
 /// The `i`-th accent colour; on the light theme the pale ones are deepened so they show on white.
-fn accent(s: &Settings, i: usize) -> Rgb {
+pub(super) fn accent(s: &Settings, i: usize) -> Rgb {
     let c = s.colors[i % s.colors.len().max(1)];
     if s.theme == Theme::Light && luma(c) > 150.0 {
         darken(c, ((luma(c) - 150.0) / 255.0).clamp(0.0, 0.3) + 0.08)
@@ -727,33 +727,33 @@ fn accent(s: &Settings, i: usize) -> Rgb {
     }
 }
 
-fn is_light(s: &Settings) -> bool {
+pub(super) fn is_light(s: &Settings) -> bool {
     s.theme == Theme::Light
 }
 
 /// Text colour by theme (or `dash_text_color`).
-fn text_color(s: &Settings) -> Rgb {
+pub(super) fn text_color(s: &Settings) -> Rgb {
     s.text.unwrap_or(if is_light(s) { (0x1B, 0x22, 0x36) } else { (0xFF, 0xFF, 0xFF) })
 }
 
 /// Plate behind deck / orbit: colour and alpha.
-fn plate(s: &Settings) -> (Rgb, u8) {
+pub(super) fn plate(s: &Settings) -> (Rgb, u8) {
     let rgb = s.plate_color.unwrap_or(if is_light(s) { (0xFF, 0xFF, 0xFF) } else { (6, 8, 16) });
     (rgb, (s.plate.unwrap_or(if is_light(s) { 92 } else { 50 }) * 255 / 100) as u8)
 }
 
 /// Lines and outlines: pale on the dark theme, dark on the light one. (colour, alpha for outline, alpha for hairline)
-fn line_style(s: &Settings) -> (Rgb, u8, u8) {
+pub(super) fn line_style(s: &Settings) -> (Rgb, u8, u8) {
     if is_light(s) { ((0x1B, 0x22, 0x36), 60, 46) } else { ((255, 255, 255), 34, 30) }
 }
 
-fn darken(c: Rgb, t: f32) -> Rgb {
+pub(super) fn darken(c: Rgb, t: f32) -> Rgb {
     lerp_rgb(c, (0, 0, 0), t)
 }
 
 impl Layer {
     /// A soft dot.
-    fn dot(&mut self, cx: f32, cy: f32, r: f32, rgb: Rgb, alpha: u8) {
+    pub(super) fn dot(&mut self, cx: f32, cy: f32, r: f32, rgb: Rgb, alpha: u8) {
         let (x0, x1, y0, y1) = ((cx - r - 1.0).floor() as i32, (cx + r + 1.0).ceil() as i32, (cy - r - 1.0).floor() as i32, (cy + r + 1.0).ceil() as i32);
         for py in y0..y1 {
             for px in x0..x1 {
@@ -768,7 +768,7 @@ impl Layer {
 
     /// A graph: a line with a fading area under it. `span_min` = the smallest range the vertical
     /// axis covers (so a quiet reading does not turn into noise).
-    fn spark(&mut self, rect: (f32, f32, f32, f32), data: &[f32], span_min: f32, rgb: Rgb, thick: f32, fill_alpha: u8, line_alpha: u8, end_dot: bool) {
+    pub(super) fn spark(&mut self, rect: (f32, f32, f32, f32), data: &[f32], span_min: f32, rgb: Rgb, thick: f32, fill_alpha: u8, line_alpha: u8, end_dot: bool) {
         let (x, y, w, h) = rect;
         if data.len() < 2 || w < 6.0 || h < 6.0 {
             return;
@@ -841,14 +841,14 @@ impl Layer {
 }
 
 /// Everything the three styles share while drawing.
-struct Ctx<'a> {
-    s: &'a Settings,
-    hist: &'a History,
-    text: Rgb,
-    color_mode: ColorMode,
+pub(super) struct Ctx<'a> {
+    pub(super) s: &'a Settings,
+    pub(super) hist: &'a History,
+    pub(super) text: Rgb,
+    pub(super) color_mode: ColorMode,
 }
 
-fn value_unit(p: &mut Painter, x: f32, base: f32, value: &str, unit: &str, cap: f32, w: W, color: Rgb, alpha: u8, unit_alpha: u8) -> f32 {
+pub(super) fn value_unit(p: &mut Painter, x: f32, base: f32, value: &str, unit: &str, cap: f32, w: W, color: Rgb, alpha: u8, unit_alpha: u8) -> f32 {
     let vw = p.text(x, base, value, cap, w, color, alpha);
     if unit.is_empty() {
         return vw;
@@ -858,7 +858,7 @@ fn value_unit(p: &mut Painter, x: f32, base: f32, value: &str, unit: &str, cap: 
     vw + gap + p.text(x + vw + gap, base, unit, ucap, W::Regular, color, unit_alpha)
 }
 
-fn vu_width(p: &Painter, value: &str, unit: &str, cap: f32, w: W) -> f32 {
+pub(super) fn vu_width(p: &Painter, value: &str, unit: &str, cap: f32, w: W) -> f32 {
     let mut t = p.width(value, cap, w);
     if !unit.is_empty() {
         let ucap = (cap * 0.42).max(7.0);
@@ -868,7 +868,7 @@ fn vu_width(p: &Painter, value: &str, unit: &str, cap: f32, w: W) -> f32 {
 }
 
 /// The biggest cap (<= `cap`) at which value + unit fit in `max_w`.
-fn fit_vu(p: &Painter, value: &str, unit: &str, cap: f32, max_w: f32, w: W) -> f32 {
+pub(super) fn fit_vu(p: &Painter, value: &str, unit: &str, cap: f32, max_w: f32, w: W) -> f32 {
     let mut c = cap;
     for _ in 0..40 {
         if vu_width(p, value, unit, c, w) <= max_w || c <= 6.0 {
@@ -879,7 +879,7 @@ fn fit_vu(p: &Painter, value: &str, unit: &str, cap: f32, max_w: f32, w: W) -> f
     c
 }
 
-fn clip(p: &Painter, text: &str, cap: f32, max_w: f32, w: W) -> String {
+pub(super) fn clip(p: &Painter, text: &str, cap: f32, max_w: f32, w: W) -> String {
     if p.width(text, cap, w) <= max_w {
         return text.to_string();
     }
@@ -890,14 +890,14 @@ fn clip(p: &Painter, text: &str, cap: f32, max_w: f32, w: W) -> String {
     format!("{}...", t.trim_end())
 }
 
-fn graph_data(c: &Ctx, panel: &Panel) -> Option<(Vec<f32>, f32)> {
+pub(super) fn graph_data(c: &Ctx, panel: &Panel) -> Option<(Vec<f32>, f32)> {
     let (key, span) = panel.series?;
     let d = c.hist.get(key);
     (c.s.graph && d.len() >= 2).then_some((d, span))
 }
 
 /// A small label over a value (+ unit); returns the width used.
-fn stat_cell(p: &mut Painter, c: &Ctx, x: f32, y: f32, max_w: f32, st: &Stat, vcap: f32, ink: Rgb, label_alpha: u8) -> f32 {
+pub(super) fn stat_cell(p: &mut Painter, c: &Ctx, x: f32, y: f32, max_w: f32, st: &Stat, vcap: f32, ink: Rgb, label_alpha: u8) -> f32 {
     let lcap = (vcap * 0.4).max(7.0);
     p.text(x, y + lcap, &clip(p, &st.label, lcap, max_w, W::Regular), lcap, W::Regular, ink, label_alpha);
     let vcap = fit_vu(p, &st.value, &st.unit, vcap, max_w, W::Regular);

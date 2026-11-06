@@ -20,6 +20,7 @@ mod cpu_freq;
 mod cpu_sensor;
 mod deepcool;
 mod foreground;
+mod game_info;
 mod fps_etw;
 mod gpu_nvml;
 mod layouts;
@@ -34,6 +35,7 @@ mod pawnio;
 mod effect;
 mod pixel_game;
 mod spectrum;
+mod steam;
 mod frame;
 mod tiles;
 mod ticker;
@@ -271,6 +273,8 @@ enum PreviewState {
     Playing,
     /// The now-playing card (only when `music_screen = true`).
     Music,
+    /// The screen shown while a game runs (`gaming_layout`), with sample readings.
+    Gaming,
 }
 
 fn print_help() {
@@ -625,12 +629,13 @@ fn parse_args() -> anyhow::Result<Config> {
             "--preview-time" => preview_secs = next_f32(&mut args, "--preview-time")? as f64,
             "--preview-layout" => preview_layout = next_u64(&mut args, "--preview-layout")? as usize,
             "--preview-state" => {
-                let raw = args.next().ok_or_else(|| anyhow::anyhow!("--preview-state requires idle | playing | music"))?;
+                let raw = args.next().ok_or_else(|| anyhow::anyhow!("--preview-state requires idle | playing | music | gaming"))?;
                 preview_state = match raw.to_ascii_lowercase().as_str() {
                     "idle" => PreviewState::Idle,
                     "playing" | "spectrum" => PreviewState::Playing,
                     "music" => PreviewState::Music,
-                    _ => anyhow::bail!("--preview-state: '{raw}' not valid (idle | playing | music)"),
+                    "gaming" | "game" => PreviewState::Gaming,
+                    _ => anyhow::bail!("--preview-state: '{raw}' not valid (idle | playing | music | gaming)"),
                 };
             }
             "--lhm-list" => {
@@ -940,7 +945,7 @@ fn item_key(key: &str) -> Option<(usize, &str)> {
 }
 
 fn is_override_key(key: &str) -> bool {
-    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "clock_backdrop" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key == "console" || key.starts_with("console_") || key.starts_with("gaming_") || key.starts_with("hid_") || key == "deepcool_source" || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
+    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "clock_backdrop" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key == "console" || key.starts_with("console_") || key.starts_with("gaming_") || key.starts_with("steam_") || key.starts_with("hid_") || key == "deepcool_source" || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
 }
 
 /// Style for a single item of the info block.
@@ -1203,6 +1208,8 @@ fn parse_ui_options(file: &ConfigFile) -> anyhow::Result<UiOptions> {
         lhm: lhm::parse(file)?,
         deepcool: deepcool::parse(file)?,
         dash: tiles::dash::parse(file)?,
+        game: tiles::game::parse(file)?,
+        steam: tiles::steam_flow::parse(file)?,
     })
 }
 
@@ -2147,6 +2154,10 @@ fn main() -> anyhow::Result<()> {
     let mut tiles_screen = tiles::TilesScreen::new();
     let mut frame_screen = frame::FrameScreen::new();
     let mut dash_screen = tiles::dash::DashScreen::new();
+    let mut game_screen = tiles::game::GameScreen::new();
+    let mut game_tracker = game_info::Tracker::default();
+    let mut steam_screen = tiles::steam_flow::SteamScreen::new();
+    let mut game_window: (Instant, Option<foreground::WindowInfo>) = (Instant::now() - Duration::from_secs(10), None);
     let Display { mut resolution, mut background, mut idle_fps_effective, mut composite, mut fb, mut ui } =
         build_display(&config)?;
     let _ = resolution;
@@ -2288,6 +2299,25 @@ fn main() -> anyhow::Result<()> {
         // "Gaming": the GPU stays busy for a few seconds (see `GamingDetector`), unless the
         // automatic gaming screen is switched off (`gaming_screen = false`).
         let gaming_active = gaming_detector.update(latest_gpu_percent, Instant::now(), &opts().gaming);
+        // The new gaming screens (everything but `classic`), drawn by `tiles/game.rs`.
+        let game_style = (gaming_active && ui_show.dashboard && opts().game.layout != tiles::game::Layout::Classic).then(|| opts().game.layout);
+        if game_style.is_some() {
+            // a full-screen design of its own: no status lines over it
+            ACTIVE_PANEL.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        if game_style.is_some() || active_def.is_some_and(|d| d.name == "steam") {
+            steam::request(opts().steam.path.as_deref());
+        }
+        // Which game it is: the program in the foreground (looked at twice a second).
+        if game_style.is_some() {
+            if game_window.0.elapsed() >= Duration::from_millis(500) {
+                game_window = (Instant::now(), foreground::window_info());
+            }
+            let lib = steam::shared();
+            game_tracker.update(Instant::now(), game_window.1.clone(), &mut sys, lib.as_deref(), latest_gpu_data.fps);
+        } else {
+            game_tracker.end();
+        }
         // Music screen: a track is playing (sound + player info) and we're not gaming.
         let track = track_shared.lock().ok().and_then(|g| g.clone());
         let music_screen_on = music_screen_active(
@@ -2331,6 +2361,18 @@ fn main() -> anyhow::Result<()> {
         let dash_style = active_def.and_then(|d| tiles::dash::Style::from_layout(d.name)).filter(|_| is_idle && !(gaming_now && ui_show.dashboard));
         let target_fps = match dash_style {
             Some(_) => target_fps.max(tiles::dash::DashScreen::wanted_fps(&opts().dash, config.ui.effect.fps as f32, config.active_fps)),
+            None => target_fps,
+        };
+        // The Steam cover flow (see `tiles/steam_flow.rs`): smooth while the row slides.
+        let steam_now = is_idle && active_def.is_some_and(|d| d.name == "steam") && !(gaming_now && ui_show.dashboard);
+        let target_fps = if steam_now {
+            let n = steam::shared().map_or(0, |l| l.games.len());
+            target_fps.max(steam_screen.wanted_fps(&opts().steam, n, config.ui.effect.fps as f32, config.active_fps))
+        } else {
+            target_fps
+        };
+        let target_fps = match game_style {
+            Some(_) => target_fps.max(tiles::game::GameScreen::wanted_fps(&opts().game, config.ui.effect.fps as f32, config.active_fps)),
             None => target_fps,
         };
         let target_fps = if frame_wanted { target_fps.max(frame_screen.wanted_fps()) } else { target_fps };
@@ -2478,7 +2520,7 @@ fn main() -> anyhow::Result<()> {
         };
 
         // Data of the panel layouts (also used by the tiles screen, which paints on `fb`).
-        let widget_data = (is_idle && active_def.is_some() && !(gaming_mode && ui_show.dashboard)).then(|| layouts::WidgetData {
+        let widget_data = (game_style.is_some() || (is_idle && active_def.is_some() && !(gaming_mode && ui_show.dashboard))).then(|| layouts::WidgetData {
             cpu_pct: sys.global_cpu_info().cpu_usage(),
             cpu_temp: latest_cpu_temp,
             cpu_power: latest_cpu_power,
@@ -2550,6 +2592,27 @@ fn main() -> anyhow::Result<()> {
             let o = opts();
             dash_screen.draw(&mut fb, area, style, wd, color_mode, &o.dash, &o.tiles, &env);
         }
+        if let (Some(_), Some(wd)) = (game_style, widget_data.as_ref()) {
+            let area = if composite {
+                (config.margins.left, config.margins.top, ui.width(), ui.height())
+            } else {
+                (0, 0, fb.width(), fb.height())
+            };
+            let env = tiles::Env { fps: config.active_fps, ffmpeg: config.ffmpeg.as_deref(), effect: &config.ui.effect, secs: None };
+            let o = opts();
+            let hint = if wd.fps.is_none() && fps_etw::status() == fps_etw::Status::NeedsAdmin { i18n::t().need_admin.to_string() } else { String::new() };
+            game_screen.draw(&mut fb, area, wd, game_tracker.info(), &hint, color_mode, &o.game, &o.tiles, &env);
+        }
+        if steam_now && widget_data.is_some() {
+            let area = if composite {
+                (config.margins.left, config.margins.top, ui.width(), ui.height())
+            } else {
+                (0, 0, fb.width(), fb.height())
+            };
+            let env = tiles::Env { fps: config.active_fps, ffmpeg: config.ffmpeg.as_deref(), effect: &config.ui.effect, secs: None };
+            let lib = steam::shared();
+            steam_screen.draw(&mut fb, area, lib.as_ref(), color_mode, &opts().steam, &env);
+        }
         if let (true, Some(wd)) = (frame_now, widget_data.as_ref()) {
             let area = if composite {
                 (config.margins.left, config.margins.top, ui.width(), ui.height())
@@ -2560,7 +2623,9 @@ fn main() -> anyhow::Result<()> {
             frame_screen.draw(&mut fb, area, wd, color_mode, &opts().frame, &opts().tiles, &env);
         }
         let target: &mut Framebuffer = if composite { &mut ui } else { &mut fb };
-        if gaming_mode && ui_show.dashboard {
+        if game_style.is_some() {
+            // painted above, on `fb`, with its own background
+        } else if gaming_mode && ui_show.dashboard {
             draw_game_dashboard(
                 target,
                 &sys,
@@ -2733,17 +2798,20 @@ fn render_preview(config: &Config, req: &PreviewReq) -> anyhow::Result<Framebuff
     // Which screen: the layout list entry asked for, or the standard one.
     let layouts_list = &config.ui.layouts;
     let idx = req.layout.min(layouts_list.len().saturating_sub(1));
-    let active_def = layouts_list.get(idx).map(|(d, _)| *d).filter(|d| !d.standard);
-    ACTIVE_PANEL.store(active_def.is_some(), Relaxed);
+    let gaming_state = req.state == PreviewState::Gaming;
+    let game_style = (gaming_state && o.game.layout != tiles::game::Layout::Classic).then(|| o.game.layout);
+    let active_def = layouts_list.get(idx).map(|(d, _)| *d).filter(|d| !d.standard).filter(|_| !gaming_state);
+    ACTIVE_PANEL.store(active_def.is_some() || game_style.is_some(), Relaxed);
     ACTIVE_ITEMS.store(layouts_list.get(idx).is_some_and(|(d, _)| d.name == "default2"), Relaxed);
     let music_on = req.state == PreviewState::Music && o.music_screen;
     let is_idle = !music_on && (req.state != PreviewState::Playing || !ui_show.spectrum);
-    let game_wanted = o.pixel_game && ui_show.clock && !music_on && layouts_list.get(idx).map_or(true, |(d, _)| d.standard);
+    let game_wanted = o.pixel_game && ui_show.clock && !music_on && !gaming_state && layouts_list.get(idx).map_or(true, |(d, _)| d.standard);
     GAME_STRIP.store(game_wanted, Relaxed);
     let game_on = game_wanted && default_areas(&fb).1.is_some();
     let tiles_now = is_idle && active_def.is_some_and(|d| d.name == "tiles");
     let frame_now = is_idle && active_def.is_some_and(|d| d.name == "frame");
     let dash_now = active_def.and_then(|d| tiles::dash::Style::from_layout(d.name)).filter(|_| is_idle);
+    let steam_now = is_idle && active_def.is_some_and(|d| d.name == "steam");
     let color_mode = config.color_mode;
 
     let mut sys = System::new_all();
@@ -2790,6 +2858,25 @@ fn render_preview(config: &Config, req: &PreviewReq) -> anyhow::Result<Framebuff
         let env = tiles::Env { fps: config.active_fps, ffmpeg: config.ffmpeg.as_deref(), effect: &config.ui.effect, secs: Some(req.secs) };
         tiles::dash::DashScreen::new().draw(&mut fb, area, style, &wd, color_mode, &o.dash, &o.tiles, &env);
     }
+    if steam_now {
+        let area = if composite {
+            (config.margins.left, config.margins.top, ui.width(), ui.height())
+        } else {
+            (0, 0, fb.width(), fb.height())
+        };
+        let env = tiles::Env { fps: config.active_fps, ffmpeg: config.ffmpeg.as_deref(), effect: &config.ui.effect, secs: Some(req.secs) };
+        let lib = steam::load_now(o.steam.path.as_deref());
+        tiles::steam_flow::SteamScreen::new().draw(&mut fb, area, lib.as_ref(), color_mode, &o.steam, &env);
+    }
+    if game_style.is_some() {
+        let area = if composite {
+            (config.margins.left, config.margins.top, ui.width(), ui.height())
+        } else {
+            (0, 0, fb.width(), fb.height())
+        };
+        let env = tiles::Env { fps: config.active_fps, ffmpeg: config.ffmpeg.as_deref(), effect: &config.ui.effect, secs: Some(req.secs) };
+        tiles::game::GameScreen::new().draw(&mut fb, area, &wd, Some(&game_info::GameInfo::sample()), "", color_mode, &o.game, &o.tiles, &env);
+    }
     if frame_now {
         let area = if composite {
             (config.margins.left, config.margins.top, ui.width(), ui.height())
@@ -2814,7 +2901,11 @@ fn render_preview(config: &Config, req: &PreviewReq) -> anyhow::Result<Framebuff
     let mut peaks = spectrum::PeakTracker::new(NUM_BARS);
     peaks.update(&bars, 0.1);
 
-    if music_on {
+    if game_style.is_some() {
+        // painted above, on `fb`
+    } else if gaming_state {
+        draw_game_dashboard(target, &sys, wd.gpu_pct, &gpu_data, wd.cpu_temp, wd.cpu_power, wd.cpu_mhz, color_mode);
+    } else if music_on {
         let mut music = music_screen::MusicScreen::new();
         music.stats = music_screen::Stats {
             cpu: Some(wd.cpu_pct),
@@ -2867,7 +2958,7 @@ fn render_preview(config: &Config, req: &PreviewReq) -> anyhow::Result<Framebuff
             pixel_game::PixelGame::new().frame(target, rect, &inputs, o.pixel_game_hero, o.pixel_game_hud);
         }
     }
-    if !music_on {
+    if !music_on && game_style.is_none() {
         draw_status_lines(
             target,
             &sys,
@@ -3098,6 +3189,10 @@ struct UiOptions {
     deepcool: deepcool::Settings,
     /// The `deck`, `cards` and `orbit` screens (see `tiles/dash.rs`).
     dash: tiles::dash::Settings,
+    /// The gaming screens (see `tiles/game.rs`).
+    game: tiles::game::Settings,
+    /// The Steam cover flow (see `tiles/steam_flow.rs`).
+    steam: tiles::steam_flow::Settings,
 }
 
 impl Default for UiOptions {
@@ -3156,6 +3251,8 @@ impl Default for UiOptions {
             lhm: lhm::Settings::default(),
             deepcool: deepcool::Settings::default(),
             dash: tiles::dash::Settings::default(),
+            game: tiles::game::Settings::default(),
+            steam: tiles::steam_flow::Settings::default(),
         }
     }
 }
@@ -4821,6 +4918,8 @@ mod layout_tests {
                 let extra = match (key, v.as_str()) {
                     ("tiles_bg", "image") => "tiles_bg_image = picture.png\n",
                     ("dash_bg", "image") => "dash_bg_image = picture.png\n",
+                    ("gaming_bg", "image") => "gaming_bg_image = picture.png\n",
+                    ("steam_bg", "image") => "steam_bg_image = picture.png\n",
                     ("effect_palette", "custom") => "effect_colors = #112233, #445566\n",
                     ("tiles_palette", "custom") => "tiles_colors = #112233, #445566\n",
                     ("spectrum_palette", "custom") => "spectrum_gradient = #112233, #445566\n",
@@ -4909,6 +5008,27 @@ mod layout_tests {
         }
         // a mistake is reported (the config reload then keeps the previous settings)
         for bad in ["tiles = cpu, bogus", "tiles_font = comic", "tile_ram_color = notacolor", "tiles_bg = image"] {
+            assert!(parse_ui_options(&ConfigFile::parse(bad).unwrap()).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn gaming_and_steam_options_come_from_the_config() {
+        let o = parse_ui_options(&ConfigFile::parse(
+            "layout = steam:20, tiles\ngaming_layout = neon\ngaming_items = gpu, fans\ngaming_bg = gradient\ngaming_bg_color = #101010, #302010\nsteam_interval = 9\nsteam_bg = blur\nsteam_order = name\n",
+        ).unwrap()).unwrap();
+        assert_eq!(o.layouts[0].0.name, "steam");
+        assert!(!o.layouts[0].0.standard && o.layouts[0].0.rows.is_empty());
+        assert_eq!(o.game.layout, tiles::game::Layout::Neon);
+        assert_eq!(o.game.items.len(), 2);
+        assert_eq!((o.steam.interval, o.steam.order), (9, tiles::steam_flow::Order::Name));
+        for k in ["gaming_layout", "gaming_cover", "steam_path", "steam_tilt"] {
+            assert!(is_override_key(k), "{k}");
+        }
+        // the defaults, and mistakes reported
+        let d = parse_ui_options(&ConfigFile::parse("").unwrap()).unwrap();
+        assert_eq!(d.game, tiles::game::Settings::default());
+        for bad in ["gaming_layout = comic", "gaming_items = clock", "gaming_bg = image", "steam_side = 9", "steam_bg = image"] {
             assert!(parse_ui_options(&ConfigFile::parse(bad).unwrap()).is_err(), "{bad}");
         }
     }

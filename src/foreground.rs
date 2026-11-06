@@ -11,6 +11,18 @@
 //! `PROCESS_QUERY_LIMITED_INFORMATION`, the minimal access right that's
 //! enough for this).
 
+/// The program that owns the foreground window (Windows only; elsewhere there is none).
+#[derive(Clone, Debug, PartialEq)]
+pub struct WindowInfo {
+    pub pid: u32,
+    /// Full path of the .exe.
+    pub exe: std::path::PathBuf,
+    /// Title of the window.
+    pub title: String,
+    /// Size of the window's drawing area, in pixels.
+    pub size: Option<(u32, u32)>,
+}
+
 #[cfg(windows)]
 mod imp {
     use windows::Win32::Foundation::CloseHandle;
@@ -18,7 +30,7 @@ mod imp {
         OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
         PROCESS_QUERY_LIMITED_INFORMATION,
     };
-    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+    use windows::Win32::UI::WindowsAndMessaging::{GetClientRect, GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId};
 
     /// PID of the process that owns the foreground window.
     pub fn foreground_pid() -> Option<u32> {
@@ -30,6 +42,35 @@ mod imp {
             let mut pid: u32 = 0;
             GetWindowThreadProcessId(hwnd, Some(&mut pid));
             (pid != 0).then_some(pid)
+        }
+    }
+
+
+    /// What the foreground window tells about the program that owns it.
+    pub fn window_info() -> Option<super::WindowInfo> {
+        unsafe {
+            let hwnd = GetForegroundWindow();
+            if hwnd.0.is_null() {
+                return None;
+            }
+            let mut pid: u32 = 0;
+            GetWindowThreadProcessId(hwnd, Some(&mut pid));
+            if pid == 0 {
+                return None;
+            }
+            let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+            let mut buf = [0u16; 1024];
+            let mut size = buf.len() as u32;
+            let result = QueryFullProcessImageNameW(process, PROCESS_NAME_WIN32, windows::core::PWSTR(buf.as_mut_ptr()), &mut size);
+            let _ = CloseHandle(process);
+            result.ok()?;
+            let exe = std::path::PathBuf::from(String::from_utf16_lossy(&buf[..size as usize]));
+            let mut tbuf = [0u16; 256];
+            let n = GetWindowTextW(hwnd, &mut tbuf);
+            let title = String::from_utf16_lossy(&tbuf[..n.max(0) as usize]).trim().to_string();
+            let mut rect = windows::Win32::Foundation::RECT::default();
+            let size = GetClientRect(hwnd, &mut rect).ok().map(|_| ((rect.right - rect.left).max(0) as u32, (rect.bottom - rect.top).max(0) as u32));
+            Some(super::WindowInfo { pid, exe, title, size })
         }
     }
 
@@ -164,3 +205,15 @@ mod imp {
 pub use imp::foreground_exe_name;
 #[cfg(windows)]
 pub use imp::foreground_pid;
+
+/// Info on the foreground window and its program (Windows). `None` on other systems.
+pub fn window_info() -> Option<WindowInfo> {
+    #[cfg(windows)]
+    {
+        imp::window_info()
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}

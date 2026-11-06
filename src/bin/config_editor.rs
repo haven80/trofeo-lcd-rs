@@ -471,6 +471,8 @@ enum PreviewState {
     Idle,
     Playing,
     Music,
+    /// A game is running (the in-game screen, see the Gaming section).
+    Gaming,
 }
 
 impl PreviewState {
@@ -479,6 +481,7 @@ impl PreviewState {
             PreviewState::Idle => "idle",
             PreviewState::Playing => "playing",
             PreviewState::Music => "music",
+            PreviewState::Gaming => "gaming",
         }
     }
 }
@@ -1451,11 +1454,13 @@ impl App {
                     PreviewState::Idle => tr(l, "Nothing playing", "Niente in riproduzione"),
                     PreviewState::Playing => tr(l, "Music playing (spectrum)", "Musica (spettro)"),
                     PreviewState::Music => tr(l, "Music card", "Scheda musica"),
+                    PreviewState::Gaming => tr(l, "Game running", "Gioco in corso"),
                 })
                 .show_ui(ui, |ui| {
                     ui.selectable_value(&mut self.state, PreviewState::Idle, tr(l, "Nothing playing", "Niente in riproduzione"));
                     ui.selectable_value(&mut self.state, PreviewState::Playing, tr(l, "Music playing (spectrum)", "Musica (spettro)"));
                     ui.selectable_value(&mut self.state, PreviewState::Music, tr(l, "Music card", "Scheda musica"));
+                    ui.selectable_value(&mut self.state, PreviewState::Gaming, tr(l, "Game running", "Gioco in corso"));
                 });
             if self.state == PreviewState::Music && self.ed.value_of("music_screen", &self.fields) != "true" {
                 ui.colored_label(Color32::from_rgb(255, 190, 90), tr(l, "turn on \"Music card\" in the Music section", "attiva \"Scheda musica\" nella sezione Musica"));
@@ -1538,7 +1543,11 @@ impl App {
         ui.heading(sec);
         ui.add_space(4.0);
         // The preview shows the screens of the `layout` list: jump to the one this section is about.
-        if self.section == "frame" || self.section == "tiles" {
+        if self.section == "gaming" && self.pv_section != self.section {
+            // this section is about the in-game screen: show it
+            self.state = PreviewState::Gaming;
+        }
+        if self.section == "frame" || self.section == "tiles" || self.section == "steam" {
             let name = self.section.clone();
             let names = self.layout_names();
             match names.iter().position(|n| *n == name) {

@@ -172,6 +172,7 @@ language = en
 #   cards         colourful cards in a mosaic, each with a ghost graph (see "Deck, Cards, Orbit and Console")
 #   orbit         concentric rings per device with the readings beside them (see "Deck, Cards, Orbit and Console")
 #   console       a bar with the names and the clock over a row of tiles, one in focus (see "Deck, Cards, Orbit and Console")
+#   steam         cover flow of your Steam library: the box art slides by in perspective (see "Steam cover flow")
 #   frame         digital picture frame: a collage of a folder's pictures (see below)
 #   weather       Current weather, big: temperature, condition icon and city
 #   news          Latest headlines from ticker_source, scrolling
@@ -182,6 +183,54 @@ language = en
 # gaming_gpu_percent = 50       # GPU usage (%) above which the PC counts as gaming (1-100)
 # gaming_delay = 3              # seconds the GPU must stay above it before switching (0-60, 0 = at once)
 # gaming_hold = 5               # seconds the dashboard stays after the GPU drops (0-120)
+
+# --- Gaming screen: what is shown while a game runs ----------------------------------
+# Eight designs, or the old big squares. Every option can also be set in the settings editor (section "Gaming screen").
+# gaming_layout = arena         # classic | arena | zen | cockpit | tactical | neon | telemetry | quest | arcade
+#   arena      elegant cards: big FPS, rings for GPU / CPU / RAM        zen        minimal, the FPS over a soft graph
+#   cockpit    racing dials, the FPS in the big one                     tactical   HUD with brackets and segmented bars
+#   neon       synthwave sun and grid                                    telemetry  an engineer's chart of the FPS
+#   quest      RPG panels: the game's cover or initial, HP / MP bars     arcade     pixel font, CREDIT 01 and a hi-score
+# gaming_items = gpu, cpu, ram  # 1-4 of cpu, gpu, ram, fans, net, disk (the first gets the most room)
+# gaming_hero = load            # load | temp: the big number of CPU and GPU
+# gaming_graph = true           # the graph of the FPS, in the designs that have one
+# gaming_history = 60           # seconds of FPS history (20-600)
+# gaming_fps_max = 144          # FPS at the end of the gauges (30-1000): your monitor's refresh rate
+# gaming_warn_temp = 80         # temperature (C) that turns red (50-110)
+# gaming_glow = 60              # glow around numbers and lines (0-100)
+# The game: its name comes from the program in the foreground (and from your Steam library for Steam games).
+# gaming_info = true            # show the name and the facts below
+# gaming_details = session, total, resolution   # session | total | resolution | memory | store
+# gaming_cover = true           # the cover (Steam games), where the design has room for it
+# gaming_clock = true
+# gaming_palette = default      # default = the design's colors, or any preset of dash_palette (pastel, neon, sunset, ...)
+# gaming_colors = #FF2BD6, #00E5FF   # your own colors instead
+# gaming_font = auto            # auto | smooth | pixel
+# gaming_text_color = #FFFFFF
+# gaming_bg = design            # design | global | color | gradient | effect | image
+# gaming_bg_color = #10142A, #241030   # for color / gradient
+# gaming_bg_image = C:\Pictures\game.jpg   # for image
+# gaming_bg_dim = 0             # darken (0-100)
+
+# --- Steam cover flow (layout = steam) --------------------------------------------------
+# Your installed Steam games as covers sliding by in perspective, with a reflection; it reads the local Steam
+# folder only (no account, no internet). Add "steam" to the layout list: layout = steam, or layout = default:30, steam:20
+# steam_path =                  # Steam's folder; empty = found by itself (registry, then the usual folders)
+# steam_order = recent          # recent | name | random
+# steam_only_covers = false     # true = skip the games Steam has no cover cached for
+# steam_interval = 6            # seconds per game (2-600)
+# steam_speed = 800             # milliseconds the slide takes (100-5000)
+# steam_side = 3                # covers on each side (1-5)
+# steam_tilt = 55               # tilt of the side covers (0-90 degrees)
+# steam_reflection = 45         # reflection under the covers (0-100, 0 = none)
+# steam_title = true            # the name of the game in the middle
+# steam_details = true          # hours played and last time played
+# steam_clock = true
+# steam_bg = blur               # blur | global | color | gradient | effect | image
+#                               # blur = the cover in the middle, blurred; global = the program's background (also animated)
+# steam_bg_color = #10142A, #241030   # for color / gradient
+# steam_bg_image = C:\Pictures\steam.jpg   # for image
+# steam_bg_dim = 0              # darken (0-100)
 # layout = cpu-gpu
 # Rotation: several layouts separated by commas, changing every layout_interval seconds.
 # layout = cpu-gpu, temps, music

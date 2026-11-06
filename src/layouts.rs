@@ -158,6 +158,13 @@ pub const LAYOUTS: &[LayoutDef] = &[
         rows: &[],
     },
     LayoutDef {
+        name: "steam",
+        description: "Cover flow of your Steam library: the box art of the installed games slides by on a perspective row with reflections (see the `steam_*` options)",
+        standard: false,
+        cols: 1,
+        rows: &[],
+    },
+    LayoutDef {
         name: "frame",
         description: "Digital picture frame: a collage of the pictures of a folder (`frame_folder`), with system info at the sides",
         standard: false,

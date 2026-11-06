@@ -20,7 +20,9 @@ whose driver was rewritten byte-for-byte from
 See **[NOTICE.md](./NOTICE.md)** for the full provenance and a summary of
 what this fork adds on top of the original.
 
-**New in 2.9.4 — the FPS counter no longer shows double on Windows.** On some systems (reported on an AMD RX 6700 XT) the FPS read correctly for the first second and then doubled. The cause was that Windows delivers the frame events in batches of about a second and the program dated them when the batch arrived instead of when the frame happened. Every frame is now dated with its own timestamp, so the number is the real rate whatever the batches. Nothing to configure.
+**New in 2.10.0 — eight gaming screens, the name of the game, and a Steam cover flow.** The big squares you saw while gaming are now just one of nine designs (`gaming_layout = classic | arena | zen | cockpit | tactical | neon | telemetry | quest | arcade`), each one drawn for landscape and portrait and fully adjustable (colors, font, background, which readings, the FPS graph). The program now finds out **which game is running** — from the program in the foreground, and for Steam games from your library — and shows its name, the time since it started, the hours played on Steam, the window resolution and the RAM it uses. And `layout = steam` is a new screen of its own: your installed Steam games as a **cover flow**, the box art sliding by in perspective with a reflection over the blurred cover or any background of the program. See [the gaming screens](#gaming-screens) and [the Steam cover flow](#steam-cover-flow). New in this version and not yet tried on every PC: see the notes under each section.
+
+**2.9.4 — the FPS counter no longer shows double on Windows.** On some systems (reported on an AMD RX 6700 XT) the FPS read correctly for the first second and then doubled. The cause was that Windows delivers the frame events in batches of about a second and the program dated them when the batch arrived instead of when the frame happened. Every frame is now dated with its own timestamp, so the number is the real rate whatever the batches. Nothing to configure.
 
 **New in 2.9.3 — fixes for the Windows autostart and the settings editor.** The autostart script no longer fails with *"Cannot bind argument to parameter 'Path' because it is an empty string"* and finds `trofeo_lcd.exe` by itself (also one folder up, where the release zip puts it); the README explains it step by step, including the quotes needed around folders with spaces. The settings editor now **remembers its language** instead of always starting in Italian, and no longer stops with *"The requested operation requires elevation (os error 740)"* when `trofeo_lcd.exe` is set to run as administrator. See [Autostart on Windows](#autostart-on-windows).
 
@@ -69,8 +71,7 @@ system status (CPU/GPU/RAM/temp) stays readable while playing.
 
 **The gaming screen is optional.** When the GPU stays busy for a few seconds the screen switches to the in-game
 dashboard by itself. If you prefer to keep your own screen while you play (for example a `tiles` layout with the
-FPS and the temperatures), set `gaming_screen = false` — it is a checkbox in the settings editor, under *Screens
-(layouts)*. `gaming_delay` (default 3 s) keeps a short GPU spike on the desktop from flashing the gaming screen, and
+FPS and the temperatures), set `gaming_screen = false` — it is a checkbox in the settings editor, under *Gaming screen*. `gaming_delay` (default 3 s) keeps a short GPU spike on the desktop from flashing the gaming screen, and
 `gaming_gpu_percent` and `gaming_hold` tune the threshold and how long it stays. See the
 [options guide](./OPTIONS_GUIDE.md#the-automatic-gaming-screen-applies-live).
 
@@ -109,6 +110,9 @@ option, and a live preview of the display drawn by the real program.
 - **Deck, Cards, Orbit and Console**: four more full screens with graphs of the last minutes —
   instrument columns, colourful cards, concentric rings and a console-style row of tiles with a
   focus that moves (see [Deck, Cards, Orbit and Console](#deck-cards-orbit-and-console)).
+- **Gaming screens and the Steam cover flow**: nine designs for the in-game screen (arena, zen, cockpit, tactical, neon,
+  telemetry, quest, arcade, classic) with the name of the game and facts about it, and `layout = steam`, a cover flow
+  of your Steam library (see [Gaming screens](#gaming-screens) and [Steam cover flow](#steam-cover-flow)).
 - **Digital picture frame**: `layout = frame` turns the LCD into a photo frame — a collage of
   the pictures of a folder, either a tidy **mosaic** or scattered **polaroid** prints, one
   picture changing at a time over a blurred copy of the photo, with slim glass tiles (clock,
@@ -660,7 +664,7 @@ and more examples (combining feeds and files, styling the chyron, etc.).
 
 ### Preset layouts
 
-`layout = default | cpu-gpu | temps | overview | grid6 | clock-center | io | music | gaming | cpu | gpu | weather | news | tiles | deck | cards | orbit | console | frame`
+`layout = default | cpu-gpu | temps | overview | grid6 | clock-center | io | music | gaming | cpu | gpu | weather | news | tiles | deck | cards | orbit | console | steam | frame`
 (`--layout list` prints them). All of them, shown here over a sample background
 (`background = img/sample_background.jpg`, `panel_opacity = 60`):
 
@@ -685,6 +689,30 @@ makes panels see-through over the background. Big panels replace the clock; port
 them vertically. See `trofeo.conf.example`. In the [settings editor](#settings-editor-trofeo_config),
 the *Screens (layouts)* section builds the rotation with a list (add, reorder, seconds per screen)
 and the preview lets you look at each screen in turn.
+
+### Gaming screens
+
+While a game runs (the GPU stays busy) the LCD switches to a screen made for it. `gaming_layout` chooses among nine designs, all of them drawn for landscape and for portrait:
+
+| | | |
+|---|---|---|
+| ![arena](img/gaming-arena.png)<br>`arena` — elegant cards, big FPS, rings | ![zen](img/gaming-zen.png)<br>`zen` — minimal, the FPS over a soft graph | ![cockpit](img/gaming-cockpit.png)<br>`cockpit` — racing dials |
+| ![tactical](img/gaming-tactical.png)<br>`tactical` — HUD with brackets | ![neon](img/gaming-neon.png)<br>`neon` — synthwave sun and grid | ![telemetry](img/gaming-telemetry.png)<br>`telemetry` — an engineer's chart |
+| ![quest](img/gaming-quest.png)<br>`quest` — RPG panels, HP / MP bars | ![arcade](img/gaming-arcade.png)<br>`arcade` — pixel font, CREDIT 01, hi-score | ![classic](img/gaming-classic.png)<br>`classic` — the old big squares |
+
+Everything is adjustable, in the *Gaming screen* section of the settings editor (whose preview shows a game running) or in the file: the readings (`gaming_items`, up to four of cpu, gpu, ram, fans, net, disk), which number is big (`gaming_hero`), the FPS graph and its history, the FPS at the end of the gauges, the temperature that turns red, the glow, your own colors or a preset, the font, and the background (the design's own, the program's one, a color, a gradient, an animated effect or a picture).
+
+**The game.** The name comes from the program in the foreground: for Steam games from your library (`appmanifest` files), for games of the Epic, GOG and Xbox folders from the install folder, otherwise from the window title or the program's name. The facts under it (`gaming_details`) are the time since the game started, the hours played (Steam), the size of the game window, the RAM the game uses and the store. The cover (`gaming_cover`) is shown by the designs that have room for it. *This part reads the foreground window, so an unusual window title can give an odd name; set `gaming_info = false` to hide it.*
+
+### Steam cover flow
+
+`layout = steam` (or put `steam` in your list of screens, e.g. `layout = default:30, steam:20`) shows your **installed Steam games** as covers sliding by in perspective, with a reflection:
+
+![Steam cover flow](img/steam-coverflow.png)
+
+![Steam cover flow, aurora background and a stronger tilt](img/steam-coverflow-aurora.png)
+
+It reads the local Steam folder only (the registry and the usual folders, or `steam_path`): no account, no internet. The covers are the ones Steam has already cached for its library; a game without a cached cover gets a generated card with its initial and name. Tune it with `steam_interval` (seconds per game), `steam_speed` (how long the slide takes), `steam_side` (covers on each side), `steam_tilt`, `steam_reflection`, `steam_order` (recent, name, random), `steam_title` / `steam_details` (name, hours played, last time) and the background: `steam_bg = blur` (the cover in the middle, blurred) or `global | color | gradient | effect | image` for the same backgrounds as everywhere else (an animated one, a picture, ...), so the flow can sit over an aurora or a picture. The row rests on a game for `steam_interval` seconds and then slides to the next; while it rests the screen idles at a few frames a second. In the settings editor the *Steam cover flow* section has a folder picker and a real preview. *Not tried on every PC: if Steam is installed in an unusual place, set `steam_path`.*
 
 ### Tiles layout (glass dashboard)
 

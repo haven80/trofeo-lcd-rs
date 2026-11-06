@@ -75,6 +75,10 @@ Starting from the `sukualam/trofeo-lcd` codebase, this fork has:
 - Added **network** and **globe** backgrounds (`background_effect = network | globe`): nodes joined
   by thin lines, drifting on a plane or turning on a sphere, in dark and light variants, with the
   same color palettes as the other effects.
+- Added **eight in-game screens** (`gaming_layout`) with the name of the game and facts about it, and a **Steam cover flow**
+  (`layout = steam`) that reads the local Steam folder (VDF text files and the cover pictures Steam caches; no account,
+  no network). Covers are decoded with the [image](https://github.com/image-rs/image) crate. The Steam logo and the
+  covers shown in the documentation are not used: the pictures there are generated samples with invented names.
 - Added a **digital picture frame** layout (`layout = frame`): a collage of the pictures of a
   folder, as a tidy mosaic or as scattered polaroid prints, one picture changing at a time over a
   blurred copy of the photo, with glass tiles at the sides. Pictures are decoded with the

@@ -778,7 +778,7 @@ element in `show`/`hide`, independent of whether `fps_monitor` succeeds.
 
 While the GPU stays busy the screen switches by itself to the in-game dashboard (FPS, GPU, CPU, RAM), the track
 title is replaced by the name of the program in the foreground, and the music card gives way. These keys decide
-when that happens; all of them are in the settings editor (section "Screens (layouts)").
+when that happens; all of them are in the settings editor (section "Gaming screen").
 
 | Key | CLI | Values | Default |
 |---|---|---|---|
@@ -1010,12 +1010,13 @@ background = C:\Pictures\bg.jpg
 
 Names (`trofeo_lcd.exe --layout list` prints these with descriptions):
 `default, default2, cpu-gpu, temps, overview, grid6, clock-center, io, music,
-gaming, cpu, gpu, tiles, frame, weather, news`.
+gaming, cpu, gpu, tiles, deck, cards, orbit, console, steam, frame, weather, news`.
 
 - `default` = the standard screen (status lines, spectrum, big clock).
 - `default2` = the standard screen with [per-item](#per-item-control) styling.
 - `news` = the [ticker](#ticker)'s headlines, big and scrolling, full screen.
 - `tiles` = the [glass tiles](#tiles-layout) dashboard.
+- `steam` = the [Steam cover flow](#steam-cover-flow): your installed Steam games as covers in perspective.
 - `frame` = the [digital picture frame](#digital-frame): a collage of the pictures of a folder.
 - Everything else replaces the clock with big panel(s); the top status block
   and spectrum turn off (use `show = nowplaying, time` etc. to add lines back
@@ -1289,6 +1290,66 @@ frame_left = clock
 frame_right = cpu:ring, gpu:ring, ram:ring
 tiles_theme = dark
 tiles_palette = ocean, sunset      # the side tiles in changing colors
+```
+
+## The gaming screens *(applies live)*
+
+What is shown while a game runs (see [the automatic gaming screen](#the-automatic-gaming-screen-applies-live) for when it switches). All keys are in the settings editor, section "Gaming screen", and can also be given on the command line (`--gaming-layout neon`).
+
+| Key | Values | Default |
+|---|---|---|
+| `gaming_layout` | `classic` (the big squares), `arena`, `zen`, `cockpit`, `tactical`, `neon`, `telemetry`, `quest`, `arcade` | `arena` |
+| `gaming_items` | 1-4 of `cpu, gpu, ram, fans, net, disk` (the first gets the most room) | `gpu, cpu, ram` |
+| `gaming_hero` | `load` / `temp`: the big number of CPU and GPU | `load` |
+| `gaming_graph` / `gaming_history` | the FPS graph (designs that have one) / seconds of history `20`-`600` | `true` / `60` |
+| `gaming_fps_max` | `30`-`1000`: FPS at the end of the gauges (your monitor's refresh rate) | `144` |
+| `gaming_warn_temp` | `50`-`110` °C from which a reading turns red | `80` |
+| `gaming_glow` | `0`-`100`: glow around numbers and lines | `60` |
+| `gaming_info` | `true` / `false`: the name of the game and its facts | `true` |
+| `gaming_details` | any of `session, total, resolution, memory, store` (`none` = no facts) | `session, total, resolution` |
+| `gaming_cover` | `true` / `false`: the Steam cover where the design has room | `true` |
+| `gaming_clock` | `true` / `false` | `true` |
+| `gaming_palette` / `gaming_colors` | `default` or a preset of `dash_palette` / your own colors, e.g. `#FF2BD6, #00E5FF` | the design's colors |
+| `gaming_font` / `gaming_text_color` | `auto` (the design's: pixel for arcade), `smooth`, `pixel` / a color | `auto` / by design |
+| `gaming_bg` | `design` (the gradient of the design), `global`, `color`, `gradient`, `effect`, `image` | `design` |
+| `gaming_bg_color`, `gaming_bg_image`, `gaming_bg_dim` | colors for `color`/`gradient`, a picture for `image`, darken `0`-`100` | none, none, `0` |
+
+**Finding the game.** The program looks at the program in the foreground twice a second. The name is taken from your Steam library when the program is inside a Steam game's folder, from the install folder for the Epic Games, GOG and Xbox stores, otherwise from the window title, otherwise from the name of the program. It keeps the game while another window is in front for a moment (the game is only replaced when the new foreground program is drawing frames, or the game has closed). Facts: `session` is the time since the game was first seen, `total` the hours played from Steam's own record (when Steam has it), `resolution` the size of the game window, `memory` the RAM the game uses, `store` Steam / Epic / GOG / Xbox. Without Steam the name is a best guess from the window title. The FPS needs the program to run as Administrator (see [In-game FPS dashboard](#in-game-fps-dashboard-restart-required)); without it the screens show a hint instead of the number.
+
+```ini
+gaming_layout = neon
+gaming_items = gpu, cpu, ram, fans
+gaming_details = session, total, memory
+gaming_fps_max = 165
+gaming_bg = effect          # with background_effect = aurora, for example
+```
+
+## Steam cover flow *(applies live)*
+
+`layout = steam` shows the installed Steam games as covers in a perspective row with a reflection. Only local files are read (Steam's `libraryfolders.vdf`, the `appmanifest` files, the cover pictures Steam has cached in `appcache/librarycache` and, when there, the play times in `userdata`): no account and no internet. Games Steam has not cached a cover for get a generated card; tools and redistributables (Steamworks, Proton, runtimes) are left out.
+
+| Key | Values | Default |
+|---|---|---|
+| `steam_path` | Steam's folder; empty = found by itself (the registry on Windows, then the usual folders) | empty |
+| `steam_order` | `recent` (last played first), `name`, `random` | `recent` |
+| `steam_only_covers` | `true`: skip the games without a cached cover | `false` |
+| `steam_interval` | `2`-`600` seconds the row rests on each game | `6` |
+| `steam_speed` | `100`-`5000` milliseconds the slide takes | `800` |
+| `steam_side` | `1`-`5` covers on each side of the middle one | `3` |
+| `steam_tilt` | `0`-`90` degrees the side covers lean | `55` |
+| `steam_reflection` | `0`-`100` (`0` = none) | `45` |
+| `steam_title` / `steam_details` / `steam_clock` | the name of the game / hours played and last time / the clock | `true` |
+| `steam_bg` | `blur` (the middle cover, blurred), `global`, `color`, `gradient`, `effect`, `image` | `blur` |
+| `steam_bg_color`, `steam_bg_image`, `steam_bg_dim` | colors, a picture, darken `0`-`100` | none, none, `0` |
+
+With `steam_bg = global` the program's own background shows through — a picture, a video or an animated effect (`background_effect = aurora`). The row is redrawn only while it slides (a few times a second when it rests, more with an animated background). Covers are read one per frame and kept, so the first lap may show a card for a moment.
+
+```ini
+layout = default:30, steam:20
+steam_interval = 8
+steam_tilt = 70
+steam_bg = global
+background_effect = aurora
 ```
 
 ## Screenshot hotkey — command-line only *(restart required)*

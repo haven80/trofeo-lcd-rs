@@ -113,6 +113,8 @@ pub const SECTIONS: &[(&str, &str, &str)] = &[
     ("background", "Background", "Sfondo"),
     ("effect", "Animated background", "Sfondo animato"),
     ("layouts", "Screens (layouts)", "Schermate (layout)"),
+    ("gaming", "Gaming screen", "Schermata gaming"),
+    ("steam", "Steam cover flow", "Coverflow Steam"),
     ("tiles", "Tiles", "Tiles"),
     ("dash", "Deck, Cards, Orbit and Console", "Deck, Cards, Orbit e Console"),
     ("frame", "Digital frame", "Cornice digitale"),
@@ -155,6 +157,11 @@ pub const DASH_PALETTES: &[&str] = &[
     "default", "pastel", "fluo", "neon", "candy", "sunset", "ocean", "aurora", "fire", "forest", "ice", "mono", "rainbow", "matrix", "amber",
     "violet", "crimson", "snow", "lagoon", "deep", "tropical", "midnight", "dusk", "ember", "mint", "rose", "slate",
 ];
+pub const GAMING_LAYOUTS: &[&str] = &["classic", "arena", "zen", "cockpit", "tactical", "neon", "telemetry", "quest", "arcade"];
+pub const GAMING_BG: &[&str] = &["design", "global", "color", "gradient", "effect", "image"];
+pub const STEAM_BG: &[&str] = &["blur", "global", "color", "gradient", "effect", "image"];
+pub const GAMING_ITEMS: &[&str] = &["cpu", "gpu", "ram", "fans", "net", "disk"];
+pub const GAMING_DETAILS: &[&str] = &["session", "total", "resolution", "memory", "store"];
 pub const TILES_BG: &[&str] = &["global", "color", "gradient", "effect", "image"];
 
 /// The items of the info block with per-item options (`<item>_size`, ...): (key, English, Italian).
@@ -191,6 +198,7 @@ pub const LAYOUT_NAMES: &[(&str, &str, &str)] = &[
     ("cards", "Colourful cards in a mosaic (see the Deck, Cards, Orbit and Console section)", "Card colorate a mosaico (vedi la sezione Deck, Cards, Orbit e Console)"),
     ("orbit", "Concentric rings per device (see the Deck, Cards, Orbit and Console section)", "Anelli concentrici per dispositivo (vedi la sezione Deck, Cards, Orbit e Console)"),
     ("console", "Console: a bar and a row of tiles, one in focus (see the Deck, Cards, Orbit and Console section)", "Console: una barra e una fila di tile, uno in primo piano (vedi la sezione Deck, Cards, Orbit e Console)"),
+    ("steam", "Steam library as a cover flow (see the Steam cover flow section)", "Libreria Steam a coverflow (vedi la sezione Coverflow Steam)"),
     ("frame", "Digital picture frame (the folder is set in the Digital frame section)", "Cornice digitale (la cartella si sceglie nella sezione Cornice digitale)"),
     ("weather", "Weather, big", "Meteo, grande"),
     ("news", "News headlines, scrolling", "Notizie scorrevoli"),
@@ -434,26 +442,119 @@ pub fn fields() -> Vec<Field> {
         .def("false")
         .help("Show the audio spectrum on top of a panel while music plays", "Mostra lo spettro sopra un pannello mentre suona la musica"));
     add(Field::new("layout_hold_on_music", "layouts", "Stay on the first screen while music plays", "Resta sulla prima schermata mentre suona la musica", Bool).def("false"));
-    add(Field::new("gaming_screen", "layouts", "Switch to the gaming screen by itself", "Passa da solo alla schermata gaming", Bool)
+    add(Field::new("gaming_screen", "gaming", "Switch to the gaming screen by itself", "Passa da solo alla schermata gaming", Bool)
         .def("true")
-        .group("gaming")
+        .group("switch")
         .help(
             "When the GPU stays busy the screen changes to the in-game dashboard (FPS, GPU, CPU). Turn it off to keep your own screen (for example a Tiles layout with the FPS) while gaming",
             "Quando la GPU resta impegnata lo schermo passa al pannello di gioco (FPS, GPU, CPU). Disattivalo per tenere la tua schermata (per esempio un layout Tiles con gli FPS) mentre giochi",
         ));
-    add(Field::new("gaming_gpu_percent", "layouts", "GPU usage that counts as gaming (%)", "Uso della GPU che conta come gioco (%)", int(1, 100))
+    add(Field::new("gaming_gpu_percent", "gaming", "GPU usage that counts as gaming (%)", "Uso della GPU che conta come gioco (%)", int(1, 100))
         .def("50")
         .when("gaming_screen", music_on)
-        .group("gaming"));
-    add(Field::new("gaming_delay", "layouts", "Seconds above it before switching", "Secondi sopra la soglia prima di passare", int(0, 60))
+        .group("switch"));
+    add(Field::new("gaming_delay", "gaming", "Seconds above it before switching", "Secondi sopra la soglia prima di passare", int(0, 60))
         .def("3")
         .when("gaming_screen", music_on)
-        .group("gaming")
+        .group("switch")
         .help("A short spike on the desktop (a video, a browser) no longer flashes the gaming screen; 0 = at once", "Un picco breve sul desktop (un video, il browser) non fa più comparire la schermata gaming; 0 = subito"));
-    add(Field::new("gaming_hold", "layouts", "Seconds to stay after the GPU drops", "Secondi di permanenza dopo il calo della GPU", int(0, 120))
+    add(Field::new("gaming_hold", "gaming", "Seconds to stay after the GPU drops", "Secondi di permanenza dopo il calo della GPU", int(0, 120))
         .def("5")
         .when("gaming_screen", music_on)
-        .group("gaming"));
+        .group("switch"));
+    add(Field::new("gaming_layout", "gaming", "Design of the in-game screen", "Grafica della schermata in gioco", Choice(GAMING_LAYOUTS))
+        .def("arena")
+        .group("design")
+        .help(
+            "arena = elegant cards with a big FPS; zen = minimal; cockpit = racing dials; tactical = HUD with brackets; neon = synthwave; telemetry = engineer's charts; quest = RPG panels; arcade = pixel retro; classic = the old big squares",
+            "arena = card eleganti con FPS grandi; zen = minimale; cockpit = quadranti da corsa; tactical = HUD con riquadri; neon = synthwave; telemetry = grafici da ingegnere; quest = pannelli RPG; arcade = retro a pixel; classic = i vecchi quadrati grandi",
+        ));
+    add(Field::new("gaming_items", "gaming", "Readings shown", "Letture mostrate", Multi(GAMING_ITEMS))
+        .def("gpu, cpu, ram")
+        .group("design")
+        .help("Up to four, the first one gets the most room", "Fino a quattro, la prima ha più spazio"));
+    add(Field::new("gaming_hero", "gaming", "Big number of CPU and GPU", "Numero grande di CPU e GPU", Choice(&["load", "temp"]))
+        .def("load")
+        .group("design")
+        .help("load = the usage in big and the temperature small; temp = the opposite", "load = in grande il carico e piccola la temperatura; temp = il contrario"));
+    add(Field::new("gaming_graph", "gaming", "Graph of the FPS", "Grafico degli FPS", Bool).def("true").group("design").help("In the designs that have one", "Nei design che lo prevedono"));
+    add(Field::new("gaming_history", "gaming", "Seconds of history", "Secondi di storico", int(20, 600)).def("60").group("design").when("gaming_graph", &["true"]));
+    add(Field::new("gaming_fps_max", "gaming", "FPS at the end of the gauges", "FPS a fondo scala dei quadranti", int(30, 1000))
+        .def("144")
+        .group("design")
+        .help("Set it to the refresh rate of your monitor", "Imposta la frequenza del tuo monitor"));
+    add(Field::new("gaming_warn_temp", "gaming", "Temperature that turns red (\u{b0}C)", "Temperatura che diventa rossa (\u{b0}C)", int(50, 110)).def("80").group("design"));
+    add(Field::new("gaming_glow", "gaming", "Glow around numbers and lines (%)", "Alone attorno a numeri e linee (%)", int(0, 100)).def("60").group("design"));
+    add(Field::new("gaming_info", "gaming", "Show the game", "Mostra il gioco", Bool)
+        .def("true")
+        .group("game")
+        .help(
+            "The name of the game, found from the program in the foreground and, for Steam games, from your library",
+            "Il nome del gioco, ricavato dal programma in primo piano e, per i giochi Steam, dalla tua libreria",
+        ));
+    add(Field::new("gaming_details", "gaming", "Facts about the game", "Informazioni sul gioco", Multi(GAMING_DETAILS))
+        .def("session, total, resolution")
+        .group("game")
+        .when("gaming_info", &["true"])
+        .help(
+            "session = time since it started; total = hours played (Steam); resolution = size of the game window; memory = RAM used by the game; store = Steam, Epic, GOG, Xbox",
+            "session = tempo dall'avvio; total = ore giocate (Steam); resolution = dimensione della finestra; memory = RAM usata dal gioco; store = Steam, Epic, GOG, Xbox",
+        ));
+    add(Field::new("gaming_cover", "gaming", "Show the cover (Steam)", "Mostra la copertina (Steam)", Bool)
+        .def("true")
+        .group("game")
+        .when("gaming_info", &["true"])
+        .help("Where the design has room for it, for games found in your Steam library", "Dove il design ha spazio, per i giochi trovati nella tua libreria Steam"));
+    add(Field::new("gaming_clock", "gaming", "Clock", "Orologio", Bool).def("true").group("game"));
+    add(Field::new("gaming_palette", "gaming", "Colors from a preset", "Colori da un preset", Choice(DASH_PALETTES))
+        .def("default")
+        .group("look")
+        .help("default = the colors of the design", "default = i colori del design"));
+    add(Field::new("gaming_colors", "gaming", "Own colors", "Colori propri", ColorList).group("look").help("One or more colors, used instead of the design's own", "Uno o più colori, usati al posto di quelli del design"));
+    add(Field::new("gaming_font", "gaming", "Font", "Font", Choice(&["auto", "smooth", "pixel"])).def("auto").group("look").help("auto = the font of the design (pixel for arcade)", "auto = il font del design (pixel per arcade)"));
+    add(Field::new("gaming_text_color", "gaming", "Text color", "Colore del testo", Color).group("look").help("Empty = the design's own", "Vuoto = quello del design"));
+    add(Field::new("gaming_bg", "gaming", "Background", "Sfondo", Choice(GAMING_BG))
+        .def("design")
+        .group("background")
+        .help("design = the gradient of the design; global = the normal background of the program", "design = il gradiente del design; global = lo sfondo normale del programma"));
+    add(Field::new("gaming_bg_color", "gaming", "Color(s)", "Colore/i", ColorList).group("background").when("gaming_bg", &["color", "gradient"]));
+    add(Field::new("gaming_bg_image", "gaming", "Picture", "Immagine", Path).group("background").when("gaming_bg", &["image"]));
+    add(Field::new("gaming_bg_dim", "gaming", "Darken", "Scurisci", int(0, 100)).def("0").group("background").when("gaming_bg", &["image", "global", "effect"]));
+
+    // ---- Steam cover flow
+    add(Field::new("steam_path", "steam", "Steam folder", "Cartella di Steam", Folder)
+        .group("library")
+        .help(
+            "Empty = found by itself (the Windows registry, then the usual folders). Set it if Steam is somewhere else",
+            "Vuoto = trovata da sola (registro di Windows, poi le cartelle solite). Impostala se Steam è altrove",
+        ));
+    add(Field::new("steam_order", "steam", "Order of the games", "Ordine dei giochi", Choice(&["recent", "name", "random"]))
+        .def("recent")
+        .group("library")
+        .help("recent = the last played first", "recent = prima gli ultimi giocati"));
+    add(Field::new("steam_only_covers", "steam", "Only games with a cover", "Solo giochi con copertina", Bool)
+        .def("false")
+        .group("library")
+        .help("Steam keeps the covers of the games it has shown in its library; the others get a generated card", "Steam conserva le copertine dei giochi mostrati nella sua libreria; gli altri ricevono una card generata"));
+    add(Field::new("steam_interval", "steam", "Seconds per game", "Secondi per gioco", int(2, 600)).def("6").group("motion"));
+    add(Field::new("steam_speed", "steam", "Duration of the slide (ms)", "Durata dello scorrimento (ms)", int(100, 5000)).def("800").group("motion"));
+    add(Field::new("steam_side", "steam", "Covers on each side", "Copertine per lato", int(1, 5)).def("3").group("motion"));
+    add(Field::new("steam_tilt", "steam", "Tilt of the side covers (degrees)", "Inclinazione delle copertine laterali (gradi)", int(0, 90)).def("55").group("motion"));
+    add(Field::new("steam_reflection", "steam", "Reflection (%)", "Riflesso (%)", int(0, 100)).def("45").group("motion").help("0 = none", "0 = nessuno"));
+    add(Field::new("steam_title", "steam", "Name of the game", "Nome del gioco", Bool).def("true").group("text"));
+    add(Field::new("steam_details", "steam", "Hours played and last time", "Ore giocate e ultima volta", Bool).def("true").group("text").when("steam_title", &["true"]));
+    add(Field::new("steam_clock", "steam", "Clock", "Orologio", Bool).def("true").group("text"));
+    add(Field::new("steam_bg", "steam", "Background", "Sfondo", Choice(STEAM_BG))
+        .def("blur")
+        .group("background")
+        .help(
+            "blur = the cover in the middle, blurred and darkened; global = the normal background of the program (also an animated one)",
+            "blur = la copertina al centro, sfocata e scurita; global = lo sfondo normale del programma (anche animato)",
+        ));
+    add(Field::new("steam_bg_color", "steam", "Color(s)", "Colore/i", ColorList).group("background").when("steam_bg", &["color", "gradient"]));
+    add(Field::new("steam_bg_image", "steam", "Picture", "Immagine", Path).group("background").when("steam_bg", &["image"]));
+    add(Field::new("steam_bg_dim", "steam", "Darken", "Scurisci", int(0, 100)).def("0").group("background").when("steam_bg", &["image", "global", "effect"]));
+
     add(Field::new("panel_opacity", "layouts", "Panel opacity", "Opacità dei pannelli", int(0, 100))
         .def("100")
         .help("100 = solid, 0 = see-through (only the border)", "100 = pieno, 0 = trasparente (resta il bordo)"));
@@ -806,6 +907,12 @@ pub fn group_title(group: &str) -> (&str, &str) {
         "look" => ("Look", "Aspetto"),
         "update" => ("New version notice", "Avviso di nuova versione"),
         "gaming" => ("Gaming screen", "Schermata gaming"),
+        "switch" => ("When to switch", "Quando passare"),
+        "design" => ("Design and readings", "Grafica e letture"),
+        "game" => ("The game", "Il gioco"),
+        "library" => ("Library", "Libreria"),
+        "motion" => ("Motion and shape", "Movimento e forma"),
+        "text" => ("Texts", "Testi"),
         "sides" => ("Side columns", "Colonne laterali"),
         other => (other, other),
     }
