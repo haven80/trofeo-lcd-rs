@@ -177,7 +177,11 @@ language = en
 #   news          Latest headlines from ticker_source, scrolling
 # With a layout, the top info block and the spectrum are off (the panels already
 # show the data); "show = nowplaying, time" adds info lines, "hide" removes them.
-# The automatic dashboard while gaming stays on (hide = dashboard to disable it).
+# While you are gaming (the GPU stays busy) the screen switches to the in-game dashboard by itself:
+# gaming_screen = true          # false = it never switches: your own screen stays (like hide = dashboard)
+# gaming_gpu_percent = 50       # GPU usage (%) above which the PC counts as gaming (1-100)
+# gaming_delay = 3              # seconds the GPU must stay above it before switching (0-60, 0 = at once)
+# gaming_hold = 5               # seconds the dashboard stays after the GPU drops (0-120)
 # layout = cpu-gpu
 # Rotation: several layouts separated by commas, changing every layout_interval seconds.
 # layout = cpu-gpu, temps, music

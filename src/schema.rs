@@ -434,6 +434,26 @@ pub fn fields() -> Vec<Field> {
         .def("false")
         .help("Show the audio spectrum on top of a panel while music plays", "Mostra lo spettro sopra un pannello mentre suona la musica"));
     add(Field::new("layout_hold_on_music", "layouts", "Stay on the first screen while music plays", "Resta sulla prima schermata mentre suona la musica", Bool).def("false"));
+    add(Field::new("gaming_screen", "layouts", "Switch to the gaming screen by itself", "Passa da solo alla schermata gaming", Bool)
+        .def("true")
+        .group("gaming")
+        .help(
+            "When the GPU stays busy the screen changes to the in-game dashboard (FPS, GPU, CPU). Turn it off to keep your own screen (for example a Tiles layout with the FPS) while gaming",
+            "Quando la GPU resta impegnata lo schermo passa al pannello di gioco (FPS, GPU, CPU). Disattivalo per tenere la tua schermata (per esempio un layout Tiles con gli FPS) mentre giochi",
+        ));
+    add(Field::new("gaming_gpu_percent", "layouts", "GPU usage that counts as gaming (%)", "Uso della GPU che conta come gioco (%)", int(1, 100))
+        .def("50")
+        .when("gaming_screen", music_on)
+        .group("gaming"));
+    add(Field::new("gaming_delay", "layouts", "Seconds above it before switching", "Secondi sopra la soglia prima di passare", int(0, 60))
+        .def("3")
+        .when("gaming_screen", music_on)
+        .group("gaming")
+        .help("A short spike on the desktop (a video, a browser) no longer flashes the gaming screen; 0 = at once", "Un picco breve sul desktop (un video, il browser) non fa più comparire la schermata gaming; 0 = subito"));
+    add(Field::new("gaming_hold", "layouts", "Seconds to stay after the GPU drops", "Secondi di permanenza dopo il calo della GPU", int(0, 120))
+        .def("5")
+        .when("gaming_screen", music_on)
+        .group("gaming"));
     add(Field::new("panel_opacity", "layouts", "Panel opacity", "Opacità dei pannelli", int(0, 100))
         .def("100")
         .help("100 = solid, 0 = see-through (only the border)", "100 = pieno, 0 = trasparente (resta il bordo)"));
@@ -785,6 +805,7 @@ pub fn group_title(group: &str) -> (&str, &str) {
         "palette" => ("Colors from the presets", "Colori dai preset"),
         "look" => ("Look", "Aspetto"),
         "update" => ("New version notice", "Avviso di nuova versione"),
+        "gaming" => ("Gaming screen", "Schermata gaming"),
         "sides" => ("Side columns", "Colonne laterali"),
         other => (other, other),
     }

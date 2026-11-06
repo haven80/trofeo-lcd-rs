@@ -20,7 +20,9 @@ whose driver was rewritten byte-for-byte from
 See **[NOTICE.md](./NOTICE.md)** for the full provenance and a summary of
 what this fork adds on top of the original.
 
-**New in 2.9.0 — a console-style look: a new background and a new layout, and `deck`, `cards` and `orbit` finally work in portrait.** `background_effect = veil` is slow, silky bands of light drifting over a deep night gradient with a few floating specks (six new night palettes: `midnight`, `dusk`, `ember`, `mint`, `rose`, `slate`). `layout = console` is a bar with the names and the clock over a row of tiles: the tile in focus grows, lights up in its colour and shows a graph and its readings, the others stay small and dim. The focus can **rotate** by itself, **follow the busiest part of the PC** or be **off**, and the colours come from the same presets as the other layouts. In portrait, `deck`, `cards`, `orbit` and `console` now stack their parts in a column (before, `deck`, `cards` and `orbit` were squeezed into thin strips). See [Veil](#backgrounds-solid-color-and-animated-effects), [Console](#deck-cards-orbit-and-console) and [Orientation](#orientation-landscape--portrait).
+**New in 2.9.1 — the gaming screen can be switched off.** `gaming_screen = false` (a checkbox in the settings editor) keeps your own screen while you play instead of switching to the in-game dashboard, and the switch now waits for the GPU to stay busy for a few seconds (`gaming_delay`), so a one-second spike on the desktop no longer flashes it. The README also explains how to run the autostart scripts when Windows blocks them. See [the gaming screen](./OPTIONS_GUIDE.md#the-automatic-gaming-screen-applies-live).
+
+**2.9.0 — a console-style look: a new background and a new layout, and `deck`, `cards` and `orbit` finally work in portrait.** `background_effect = veil` is slow, silky bands of light drifting over a deep night gradient with a few floating specks (six new night palettes: `midnight`, `dusk`, `ember`, `mint`, `rose`, `slate`). `layout = console` is a bar with the names and the clock over a row of tiles: the tile in focus grows, lights up in its colour and shows a graph and its readings, the others stay small and dim. The focus can **rotate** by itself, **follow the busiest part of the PC** or be **off**, and the colours come from the same presets as the other layouts. In portrait, `deck`, `cards`, `orbit` and `console` now stack their parts in a column (before, `deck`, `cards` and `orbit` were squeezed into thin strips). See [Veil](#backgrounds-solid-color-and-animated-effects), [Console](#deck-cards-orbit-and-console) and [Orientation](#orientation-landscape--portrait).
 
 **2.7.1 — fixes for Radeon cards:** the **GPU usage** now comes from the Radeon driver (what the Radeon software shows) instead of the Windows counter, which only sees the 3D engine and could read about 40 % lower; and the **GPU hot spot** now shows in the `deck`, `cards` and `orbit` layouts on cards that do not report their power (such as the RX 9070 XT). See [Which sensors you need](#which-sensors-you-need-and-what-to-install).
 
@@ -60,6 +62,13 @@ With `music_screen = true` the whole panel becomes a Spotify-style now-playing c
 system status (CPU/GPU/RAM/temp) stays readable while playing.
 
 ![Gaming — foreground game info](img/gaming.png)
+
+**The gaming screen is optional.** When the GPU stays busy for a few seconds the screen switches to the in-game
+dashboard by itself. If you prefer to keep your own screen while you play (for example a `tiles` layout with the
+FPS and the temperatures), set `gaming_screen = false` — it is a checkbox in the settings editor, under *Screens
+(layouts)*. `gaming_delay` (default 3 s) keeps a short GPU spike on the desktop from flashing the gaming screen, and
+`gaming_gpu_percent` and `gaming_hold` tune the threshold and how long it stays. See the
+[options guide](./OPTIONS_GUIDE.md#the-automatic-gaming-screen-applies-live).
 
 **Don't like editing text files?** Start **`trofeo_config`**, the graphical
 [settings editor](#settings-editor-trofeo_config): menus, sliders and color pickers for every
@@ -986,6 +995,16 @@ privileges and no UAC prompt on every login — needed if you use
 .\scripts\install-autostart.ps1                              # elevated task, --hide-console
 .\scripts\install-autostart.ps1 -Arguments ""                # elevated task, console visible
 .\scripts\install-autostart.ps1 -Method Shortcut              # simple Startup-folder shortcut, no admin needed, not elevated
+```
+
+**If Windows says that running scripts is disabled** on your system (the default policy blocks `.ps1` files), start
+the script through PowerShell with the policy bypassed for that one command. For the default (Scheduled Task)
+method open PowerShell **as administrator** in the folder of the exe and run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-autostart.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\install-autostart.ps1 -Method Shortcut   # no admin needed
+powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-autostart.ps1
 ```
 
 Remove it with `.\scripts\uninstall-autostart.ps1` (removes whichever

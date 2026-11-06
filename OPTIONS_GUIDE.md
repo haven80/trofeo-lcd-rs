@@ -765,6 +765,22 @@ Vulkan/OpenGL-native games aren't covered. The dashboard itself (FPS + GPU +
 CPU + RAM while a game is in the foreground) is controlled by the `dashboard`
 element in `show`/`hide`, independent of whether `fps_monitor` succeeds.
 
+## The automatic gaming screen *(applies live)*
+
+While the GPU stays busy the screen switches by itself to the in-game dashboard (FPS, GPU, CPU, RAM), the track
+title is replaced by the name of the program in the foreground, and the music card gives way. These keys decide
+when that happens; all of them are in the settings editor (section "Screens (layouts)").
+
+| Key | CLI | Values | Default |
+|---|---|---|---|
+| `gaming_screen` | `--gaming-screen` | `true` / `false` (`false`: the screen never switches by itself, your own screen — for example a `tiles` layout with the FPS — stays while you play) | `true` |
+| `gaming_gpu_percent` | `--gaming-gpu-percent` | `1`-`100`: the GPU usage (%) above which the PC counts as gaming | `50` |
+| `gaming_delay` | `--gaming-delay` | `0`-`60` seconds the GPU must stay above it before the screen switches (a spike of a second on the desktop no longer flashes the gaming screen; `0` = at once, as before 2.9.1) | `3` |
+| `gaming_hold` | `--gaming-hold` | `0`-`120` seconds the dashboard stays after the GPU drops (a short dip in a game does not drop it) | `5` |
+
+`hide = dashboard` also removes the dashboard, but `gaming_screen = false` is the clearer switch: it also keeps the
+track title and the music card as they are while you play.
+
 ## OpenRGB sync — command-line only *(restart required)*
 
 | CLI | Values | Default |

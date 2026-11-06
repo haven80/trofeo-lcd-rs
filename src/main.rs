@@ -352,6 +352,11 @@ fn print_help() {
          \x20\x20                          (default: 10). Requires a restart.\n\
          \x20\x20gpu_usage_source <S>   (config-file only) GPU usage: auto (default: the Radeon driver's own\n\
          \x20\x20                          figure, else the Windows counter) | windows (always the counter)\n\
+         \x20\x20gaming_screen <BOOL>    Switch to the in-game dashboard by itself while the GPU is\n\
+         \x20\x20                          busy (default: true; false keeps your own screen)\n\
+         \x20\x20gaming_gpu_percent <N>  GPU usage (%) that counts as gaming (1-100, default 50)\n\
+         \x20\x20gaming_delay <N>        Seconds above it before switching (0-60, default 3)\n\
+         \x20\x20gaming_hold <N>         Seconds the dashboard stays after the GPU drops (0-120, default 5)\n\
          \x20\x20update_check <BOOL>     (config-file only) Look on GitHub, once at start-up, whether\n\
          \x20\x20                          a newer version exists and show a banner at the bottom of\n\
          \x20\x20                          the screen if so (default: false). Requires a restart.\n\
@@ -935,7 +940,7 @@ fn item_key(key: &str) -> Option<(usize, &str)> {
 }
 
 fn is_override_key(key: &str) -> bool {
-    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "clock_backdrop" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key == "console" || key.starts_with("console_") || key.starts_with("hid_") || key == "deepcool_source" || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
+    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "clock_backdrop" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key == "console" || key.starts_with("console_") || key.starts_with("gaming_") || key.starts_with("hid_") || key == "deepcool_source" || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
 }
 
 /// Style for a single item of the info block.
@@ -1174,6 +1179,7 @@ fn parse_ui_options(file: &ConfigFile) -> anyhow::Result<UiOptions> {
             Some(v) => anyhow::bail!("spectrum_rainbow_speed: must be between 0 and 360 (got {v})"),
         },
         music_screen: file.get_bool("music_screen").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(false),
+        gaming: parse_gaming(file)?,
         music_bg: parse_music_bg(file)?,
         music_stats: parse_music_stats(file)?,
         music_spectrum: parse_music_spectrum(file)?,
@@ -1426,10 +1432,86 @@ fn parse_music_bg(file: &ConfigFile) -> anyhow::Result<music_screen::Bg> {
     Ok(bg)
 }
 
+/// When the automatic gaming screen (the in-game dashboard) takes over.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct GamingSettings {
+    /// `gaming_screen`: false = it never switches by itself.
+    enabled: bool,
+    /// `gaming_gpu_percent`: the GPU usage above which the PC counts as gaming.
+    gpu_percent: u32,
+    /// `gaming_delay`: seconds the GPU must stay above it before the screen switches.
+    delay_secs: u32,
+    /// `gaming_hold`: seconds the screen stays after the GPU has dropped.
+    hold_secs: u32,
+}
+
+impl Default for GamingSettings {
+    fn default() -> Self {
+        GamingSettings { enabled: true, gpu_percent: 50, delay_secs: 3, hold_secs: 5 }
+    }
+}
+
+/// Decides when the PC is "gaming": GPU usage above a threshold for a few seconds. A spike of a
+/// second on the desktop (a video, a browser, a window effect) no longer flashes the gaming
+/// screen, and a short dip in a game does not drop it.
+#[derive(Debug, Default)]
+struct GamingDetector {
+    high_since: Option<Instant>,
+    low_since: Option<Instant>,
+    on: bool,
+}
+
+impl GamingDetector {
+    fn update(&mut self, gpu: Option<f32>, now: Instant, s: &GamingSettings) -> bool {
+        if !s.enabled {
+            *self = GamingDetector::default();
+            return false;
+        }
+        if gpu.is_some_and(|p| p > s.gpu_percent as f32) {
+            self.low_since = None;
+            let since = *self.high_since.get_or_insert(now);
+            if !self.on && now.saturating_duration_since(since) >= Duration::from_secs(s.delay_secs as u64) {
+                self.on = true;
+            }
+        } else {
+            self.high_since = None;
+            if self.on {
+                let since = *self.low_since.get_or_insert(now);
+                if now.saturating_duration_since(since) >= Duration::from_secs(s.hold_secs as u64) {
+                    self.on = false;
+                    self.low_since = None;
+                }
+            }
+        }
+        self.on
+    }
+}
+
 /// The music screen shows while it is enabled, the player reports a track,
 /// sound is actually playing and the PC isn't busy gaming (the game dashboard wins).
 fn music_screen_active(enabled: bool, has_track: bool, gaming: bool, sound_recent: bool) -> bool {
     enabled && has_track && !gaming && sound_recent
+}
+
+/// `gaming_screen`, `gaming_gpu_percent`, `gaming_delay`, `gaming_hold`.
+fn parse_gaming(file: &ConfigFile) -> anyhow::Result<GamingSettings> {
+    let mut g = GamingSettings::default();
+    if let Some(v) = file.get_bool("gaming_screen").map_err(|e| anyhow::anyhow!(e))? {
+        g.enabled = v;
+    }
+    let mut num = |key: &str, lo: u32, hi: u32, slot: &mut u32| -> anyhow::Result<()> {
+        if let Some(v) = file.get_u32(key).map_err(|e| anyhow::anyhow!(e))? {
+            if !(lo..=hi).contains(&v) {
+                anyhow::bail!("{key}: must be between {lo} and {hi} (got {v})");
+            }
+            *slot = v;
+        }
+        Ok(())
+    };
+    num("gaming_gpu_percent", 1, 100, &mut g.gpu_percent)?;
+    num("gaming_delay", 0, 60, &mut g.delay_secs)?;
+    num("gaming_hold", 0, 120, &mut g.hold_secs)?;
+    Ok(g)
 }
 
 /// A rotation interval in seconds (2-3600), same bounds as `layout_interval`.
@@ -2046,6 +2128,7 @@ fn main() -> anyhow::Result<()> {
     let mut now_playing_marquee = Marquee::new();
 
     let mut latest_gpu_percent: Option<f32> = None;
+    let mut gaming_detector = GamingDetector::default();
     let mut latest_net_kb = (0.0f64, 0.0f64); // (down, up)
     let mut latest_disk_mb = (0.0f64, 0.0f64); // (read, write)
     let mut latest_volume: Option<(f32, bool)> = None; // (percent, muted)
@@ -2202,18 +2285,21 @@ fn main() -> anyhow::Result<()> {
             std::sync::atomic::Ordering::Relaxed,
         );
         let ui_show = opts().show;
+        // "Gaming": the GPU stays busy for a few seconds (see `GamingDetector`), unless the
+        // automatic gaming screen is switched off (`gaming_screen = false`).
+        let gaming_active = gaming_detector.update(latest_gpu_percent, Instant::now(), &opts().gaming);
         // Music screen: a track is playing (sound + player info) and we're not gaming.
         let track = track_shared.lock().ok().and_then(|g| g.clone());
         let music_screen_on = music_screen_active(
             opts().music_screen,
             track.is_some(),
-            latest_gpu_percent.is_some_and(|p| p > 50.0),
+            gaming_active,
             last_sound.elapsed() < config.silence_timeout,
         );
         let is_idle = !music_screen_on && (!ui_show.spectrum || last_sound.elapsed() >= config.silence_timeout);
         // The pixel game lives on the default screen only (not on a layout panel, the
         // music screen or the gaming dashboard) and needs the clock to be shown.
-        let gaming_now = latest_gpu_percent.is_some_and(|p| p > 50.0);
+        let gaming_now = gaming_active;
         let game_wanted = opts().pixel_game
             && ui_show.clock
             && !music_screen_on
@@ -2358,10 +2444,10 @@ fn main() -> anyhow::Result<()> {
                 }
             }
         }
-        // "Gaming" mode detection: GPU usage > 50%. Used for two things:
+        // "Gaming" mode detection (`gaming_active`: GPU usage above `gaming_gpu_percent`). Used for two things:
         // swap the "NOW PLAYING" content for the foreground exe name, AND replace the
         // EQ bar/clock area with the performance dashboard (see draw_game_dashboard).
-        let gaming_mode = latest_gpu_percent.is_some_and(|p| p > 50.0);
+        let gaming_mode = gaming_active;
 
         // The "NOW PLAYING" title is usually the song/media being played, BUT if GPU
         // usage is high (indicating gaming), it's replaced with the name of the
@@ -2979,6 +3065,8 @@ struct UiOptions {
     /// While a track plays, replace the whole screen with the now-playing card
     /// (cover, artist/title, progress, spectrum) — see `music_screen.rs`.
     music_screen: bool,
+    /// When the automatic gaming screen takes over (`gaming_*`).
+    gaming: GamingSettings,
     /// Music screen background: mode (gradient / blur / color / solid / none),
     /// brightness, blur amount, fit and the solid color.
     music_bg: music_screen::Bg,
@@ -3052,6 +3140,7 @@ impl Default for UiOptions {
             spectrum_palette_interval: 20,
             spectrum_rainbow_speed: 30,
             music_screen: false,
+            gaming: GamingSettings::default(),
             music_bg: music_screen::Bg::default(),
             music_stats: Vec::new(),
             music_stats_set: false,
@@ -4434,6 +4523,54 @@ mod layout_tests {
         assert_eq!(rotation_index(&o.layouts, 31, false), 1);
         assert_eq!(rotation_index(&o.layouts, 36, false), 2);
         assert_eq!(rotation_index(&[], 5, false), 0);
+    }
+
+    #[test]
+    fn the_gaming_screen_needs_a_busy_gpu_for_a_few_seconds_and_can_be_turned_off() {
+        let t0 = Instant::now();
+        let at = |s: u64| t0 + Duration::from_secs(s);
+        let st = GamingSettings::default(); // 50 %, 3 s to switch on, 5 s to switch off
+        // a spike of a second on the desktop does not switch the screen
+        let mut d = GamingDetector::default();
+        assert!(!d.update(Some(90.0), at(0), &st));
+        assert!(!d.update(Some(90.0), at(1), &st));
+        assert!(!d.update(Some(5.0), at(2), &st));
+        assert!(!d.update(Some(90.0), at(3), &st)); // the count starts again
+        // a game: busy for 3 seconds -> on, stays through a short dip, off after 5 quiet seconds
+        assert!(!d.update(Some(95.0), at(5), &st));
+        assert!(d.update(Some(95.0), at(6), &st));
+        assert!(d.update(Some(10.0), at(7), &st));
+        assert!(d.update(Some(95.0), at(9), &st)); // the dip ended: the hold timer is cleared
+        assert!(d.update(Some(10.0), at(10), &st));
+        assert!(d.update(Some(10.0), at(14), &st));
+        assert!(!d.update(Some(10.0), at(15), &st));
+        // no reading at all is a quiet GPU
+        assert!(!d.update(None, at(16), &st));
+        // zero delays = the old behaviour: at once
+        let now = GamingSettings { delay_secs: 0, hold_secs: 0, ..st };
+        let mut d = GamingDetector::default();
+        assert!(d.update(Some(51.0), at(0), &now));
+        assert!(!d.update(Some(50.0), at(1), &now)); // above, not at, the threshold
+        // a higher threshold
+        let high = GamingSettings { gpu_percent: 80, delay_secs: 0, ..st };
+        assert!(!GamingDetector::default().update(Some(70.0), at(0), &high));
+        // off: never, whatever the GPU does
+        let off = GamingSettings { enabled: false, ..now };
+        let mut d = GamingDetector::default();
+        assert!(!d.update(Some(100.0), at(0), &off));
+        assert!(!d.update(Some(100.0), at(60), &off));
+    }
+
+    #[test]
+    fn the_gaming_options_parse_and_are_checked() {
+        let o = parse_ui_options(&ConfigFile::parse("").unwrap()).unwrap();
+        assert_eq!(o.gaming, GamingSettings { enabled: true, gpu_percent: 50, delay_secs: 3, hold_secs: 5 });
+        let o = parse_ui_options(&ConfigFile::parse("gaming_screen = false\ngaming_gpu_percent = 70\ngaming_delay = 0\ngaming_hold = 12\n").unwrap()).unwrap();
+        assert_eq!(o.gaming, GamingSettings { enabled: false, gpu_percent: 70, delay_secs: 0, hold_secs: 12 });
+        for bad in ["gaming_gpu_percent = 0\n", "gaming_gpu_percent = 101\n", "gaming_delay = 61\n", "gaming_hold = 121\n", "gaming_screen = maybe\n"] {
+            assert!(parse_ui_options(&ConfigFile::parse(bad).unwrap()).is_err(), "{bad}");
+        }
+        assert!(is_override_key("gaming_screen") && is_override_key("gaming_delay"));
     }
 
     #[test]
