@@ -103,12 +103,48 @@ impl FpsSource {
 }
 
 /// The FPS to show: `driver` is the Radeon driver's figure, `etw` the one counted from the Presents.
+///
+/// `auto` takes the Presents, with one safety net: if they read well over the driver's own figure
+/// (a test on an RX 6700 XT counted 2.1 Presents per displayed frame, with every game), the extra
+/// ones are not frames and the driver's figure, which counts what is displayed, is used.
 pub fn pick_fps(source: FpsSource, driver: Option<i32>, etw: Option<u32>) -> Option<i32> {
     let etw = etw.map(|f| f as i32);
     match source {
-        FpsSource::Auto => etw.or(driver),
+        FpsSource::Auto => match (etw, driver) {
+            (Some(e), Some(d)) if d > 0 && e as f32 > d as f32 * 1.6 => Some(d),
+            (e, d) => e.or(d),
+        },
         FpsSource::Etw => etw,
         FpsSource::Driver => driver,
+    }
+}
+
+/// The Radeon driver's FPS, steadied: its readings jump now and then (an earlier test showed
+/// 134, 134, 19634, 257, 221, 134), so the figure is the median of the last few and absurd values are
+/// ignored.
+#[derive(Default, Debug)]
+pub struct DriverFps {
+    recent: std::collections::VecDeque<i32>,
+}
+
+impl DriverFps {
+    const KEEP: usize = 5;
+    const MAX: i32 = 1500;
+
+    pub fn push(&mut self, v: Option<i32>) -> Option<i32> {
+        match v {
+            None => self.recent.clear(),
+            Some(f) if (0..=Self::MAX).contains(&f) => {
+                self.recent.push_back(f);
+                if self.recent.len() > Self::KEEP {
+                    self.recent.pop_front();
+                }
+            }
+            Some(_) => {}
+        }
+        let mut s: Vec<i32> = self.recent.iter().copied().collect();
+        s.sort_unstable();
+        s.get(s.len() / 2).copied().filter(|f| *f > 0)
     }
 }
 
@@ -120,6 +156,9 @@ pub struct PresentEvent {
     pub pid: u32,
     pub tid: u32,
     pub start: bool,
+    /// A `Present_Start` made with `DXGI_PRESENT_TEST`: it asks whether the window is visible and
+    /// shows nothing, so it is not a frame (PresentMon ignores these too).
+    pub test: bool,
 }
 
 /// Counts every frame once, however many times the DXGI provider reports it.
@@ -175,7 +214,7 @@ impl PresentFilter {
         }
         st.1 = e.ts;
         if e.start {
-            let counts = st.0 == 0 || !self.stops_seen;
+            let counts = !e.test && (st.0 == 0 || !self.stops_seen);
             st.0 += 1;
             counts
         } else {
@@ -194,8 +233,16 @@ pub struct DiagRow {
     pub threads: std::collections::BTreeSet<u32>,
     pub chains: std::collections::BTreeSet<u64>,
     pub raw_starts: u32,
-    /// Frames left after the nested calls were removed.
+    /// Frames left after the test presents and the nested calls were removed.
     pub counted: u32,
+    /// Present_Start events made with `DXGI_PRESENT_TEST`.
+    pub tests: u32,
+    /// `Flags` argument of Present -> how many.
+    pub flags: std::collections::BTreeMap<u32, u32>,
+    /// `SyncInterval` argument -> how many.
+    pub syncs: std::collections::BTreeMap<u32, u32>,
+    /// Thread -> Present_Starts it made.
+    pub thread_starts: std::collections::BTreeMap<u32, u32>,
 }
 
 #[cfg(windows)]
@@ -214,6 +261,8 @@ mod imp {
     const DXGI_PROVIDER: GUID = GUID::from_u128(0xCA11C036_0102_4A2D_A6AD_F03CFED5D3C9);
     const DXGI_PRESENT_START: u16 = 42;
     const DXGI_PRESENT_STOP: u16 = 43;
+    /// `DXGI_PRESENT_TEST`: the Present only checks the window, it draws nothing.
+    const DXGI_PRESENT_TEST: u32 = 1;
 
     static PRESENTS: OnceLock<Mutex<HashMap<u32, PresentWindow>>> = OnceLock::new();
     static FILTER: OnceLock<Mutex<PresentFilter>> = OnceLock::new();
@@ -263,6 +312,25 @@ mod imp {
             return;
         }
         let id = h.EventDescriptor.Id;
+        // The arguments of a Present_Start: the swap chain (a pointer), Flags, SyncInterval.
+        let (mut chain, mut flags, mut sync) = (0u64, 0u32, 0u32);
+        if id == DXGI_PRESENT_START && !r.UserData.is_null() {
+            let ptr = if h.Flags & 0x20 != 0 { 4usize } else { 8usize }; // EVENT_HEADER_FLAG_32_BIT_HEADER
+            let len = r.UserDataLength as usize;
+            let data = std::slice::from_raw_parts(r.UserData as *const u8, len);
+            if len >= ptr {
+                let mut b = [0u8; 8];
+                b[..ptr].copy_from_slice(&data[..ptr]);
+                chain = u64::from_le_bytes(b);
+            }
+            if len >= ptr + 4 {
+                flags = u32::from_le_bytes([data[ptr], data[ptr + 1], data[ptr + 2], data[ptr + 3]]);
+            }
+            if len >= ptr + 8 {
+                sync = u32::from_le_bytes([data[ptr + 4], data[ptr + 5], data[ptr + 6], data[ptr + 7]]);
+            }
+        }
+        let test = id == DXGI_PRESENT_START && flags & DXGI_PRESENT_TEST != 0;
         // for `--fps-diag`: everything the provider says, by process
         if let Some(Ok(mut d)) = DIAG.get().map(|m| m.lock()) {
             if let Some(map) = d.as_mut() {
@@ -271,12 +339,12 @@ mod imp {
                 row.threads.insert(h.ThreadId);
                 if id == DXGI_PRESENT_START {
                     row.raw_starts += 1;
-                    // the first field of the payload is the swap chain (a pointer)
-                    if !r.UserData.is_null() && r.UserDataLength >= 8 {
-                        let p = r.UserData as *const u8;
-                        let mut b = [0u8; 8];
-                        std::ptr::copy_nonoverlapping(p, b.as_mut_ptr(), 8);
-                        row.chains.insert(u64::from_le_bytes(b));
+                    row.chains.insert(chain);
+                    *row.flags.entry(flags).or_insert(0) += 1;
+                    *row.syncs.entry(sync).or_insert(0) += 1;
+                    *row.thread_starts.entry(h.ThreadId).or_insert(0) += 1;
+                    if test {
+                        row.tests += 1;
                     }
                 }
             }
@@ -286,7 +354,7 @@ mod imp {
         }
         // the time the Present happened (the trace is set up with the performance counter as its
         // clock), not the time this callback runs: the events come in batches
-        let ev = PresentEvent { ts: h.TimeStamp, pid: h.ProcessId, tid: h.ThreadId, start: id == DXGI_PRESENT_START };
+        let ev = PresentEvent { ts: h.TimeStamp, pid: h.ProcessId, tid: h.ThreadId, start: id == DXGI_PRESENT_START, test };
         let frames = match FILTER.get_or_init(Default::default).lock() {
             Ok(mut f) => f.feed(ev, freq()),
             Err(_) => return,
@@ -516,7 +584,7 @@ mod tests {
     use super::{pick_fps, FpsSource, PresentEvent, PresentFilter};
 
     fn ev(ts: i64, tid: u32, start: bool) -> PresentEvent {
-        PresentEvent { ts, pid: 7, tid, start }
+        PresentEvent { ts, pid: 7, tid, start, test: false }
     }
 
     /// Runs events through a filter, then flushes it with a late event; returns the frames' times.
@@ -598,10 +666,55 @@ mod tests {
     fn the_source_decides_which_figure_is_shown() {
         assert_eq!(pick_fps(FpsSource::Auto, Some(288), Some(144)), Some(144));
         assert_eq!(pick_fps(FpsSource::Auto, Some(90), None), Some(90));
+        // the Presents read double the driver's figure: the driver's is the real one
+        assert_eq!(pick_fps(FpsSource::Auto, Some(134), Some(265)), Some(134));
+        // frame generation: the driver shows more than the game presents; keep the Presents
+        assert_eq!(pick_fps(FpsSource::Auto, Some(240), Some(120)), Some(120));
+        // close enough: the Presents
+        assert_eq!(pick_fps(FpsSource::Auto, Some(134), Some(125)), Some(125));
+        assert_eq!(pick_fps(FpsSource::Etw, Some(134), Some(265)), Some(265));
         assert_eq!(pick_fps(FpsSource::Etw, Some(288), None), None);
         assert_eq!(pick_fps(FpsSource::Driver, Some(288), Some(144)), Some(288));
         assert_eq!(FpsSource::parse("ETW"), Some(FpsSource::Etw));
         assert_eq!(FpsSource::parse("adl"), Some(FpsSource::Driver));
         assert_eq!(FpsSource::parse("x"), None);
+    }
+
+    use super::DriverFps;
+
+    #[test]
+    fn test_presents_are_not_frames_but_still_count_as_a_call_in_progress() {
+        // every frame: a Present with the TEST flag (checks the window), then the real one
+        let mut v = Vec::new();
+        for i in 0..60i64 {
+            let t = i * FREQ / 60;
+            v.extend([
+                PresentEvent { ts: t, pid: 7, tid: 1, start: true, test: true },
+                ev(t + 10, 1, false),
+                ev(t + 20, 1, true),
+                ev(t + 300, 1, false),
+            ]);
+        }
+        assert_eq!(frames_of(v).len(), 60);
+        // a test Present that wraps the real one (nested): still one frame
+        let v = vec![
+            PresentEvent { ts: 0, pid: 7, tid: 1, start: true, test: true },
+            ev(5, 1, true),
+            ev(50, 1, false),
+            ev(60, 1, false),
+        ];
+        assert_eq!(frames_of(v).len(), 0, "the outer call is a test, the inner one is nested in it");
+    }
+
+    #[test]
+    fn the_driver_figure_ignores_jumps() {
+        let mut d = DriverFps::default();
+        let mut shown = Vec::new();
+        for v in [134, 135, 19634, 134, 257, 134, 135, 134] {
+            shown.push(d.push(Some(v)).unwrap());
+        }
+        assert!(shown.iter().skip(2).all(|f| (134..=135).contains(f)), "{shown:?}");
+        assert_eq!(d.push(None), None);
+        assert_eq!(d.push(Some(0)), None, "zero means no game");
     }
 }

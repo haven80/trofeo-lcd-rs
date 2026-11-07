@@ -1879,7 +1879,7 @@ fn run_lcd_test(
 
 /// `--fps-diag`: for 20 seconds shows, once a second, what each FPS source reads for the program in the
 /// foreground, to find out where a wrong number comes from.
-fn fps_diag_run(secs: u64) {
+fn fps_diag_run(secs: u64, config_fps_source: fps_etw::FpsSource) {
     println!("=== FPS diagnostics ({secs} s) ===");
     if !cfg!(windows) {
         println!("FPS is measured on Windows only.");
@@ -1892,8 +1892,10 @@ fn fps_diag_run(secs: u64) {
     }
     fps_etw::diag_begin();
     let amd = gpu_amd::GpuAmdSensor::new();
-    println!("{:>3}  {:<28} {:>5}  {:>10} {:>10} {:>9}  {:>7} {:>6}  {}", "s", "foreground program", "pid", "raw starts", "no nesting", "ETW fps", "threads", "chains", "driver fps (Radeon)");
-    let mut last: std::collections::HashMap<u32, (u32, u32)> = std::collections::HashMap::new();
+    println!("fps_source in the config file: {:?}", config_fps_source);
+    println!("{:>3}  {:<22} {:>5}  {:>10} {:>6} {:>10} {:>8}  {:>7} {:>6}  {}", "s", "foreground program", "pid", "raw starts", "tests", "frames", "ETW fps", "threads", "chains", "driver fps (Radeon)  | shown");
+    let mut last: std::collections::HashMap<u32, (u32, u32, u32)> = std::collections::HashMap::new();
+    let mut shown_driver = fps_etw::DriverFps::default();
     for t in 1..=secs {
         std::thread::sleep(Duration::from_secs(1));
         let win = foreground::window_info();
@@ -1905,18 +1907,20 @@ fn fps_diag_run(secs: u64) {
         };
         let name = w.exe.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
         let row = snap.iter().find(|(p, _)| *p == w.pid).map(|(_, r)| r.clone()).unwrap_or_default();
-        let before = last.insert(w.pid, (row.raw_starts, row.counted)).unwrap_or((row.raw_starts, row.counted));
+        let before = last.insert(w.pid, (row.raw_starts, row.counted, row.tests)).unwrap_or((0, 0, 0));
         let etw = fps_etw::fps_for_pid(w.pid);
         println!(
-            "{t:>3}  {:<28} {:>5}  {:>10} {:>10} {:>9}  {:>7} {:>6}  {}",
-            name.chars().take(28).collect::<String>(),
+            "{t:>3}  {:<22} {:>5}  {:>10} {:>6} {:>10} {:>8}  {:>7} {:>6}  {:>10}  | {}",
+            name.chars().take(22).collect::<String>(),
             w.pid,
             row.raw_starts.saturating_sub(before.0),
+            row.tests.saturating_sub(before.2),
             row.counted.saturating_sub(before.1),
             etw.map_or("-".to_string(), |f| f.to_string()),
             row.threads.len(),
             row.chains.len(),
             driver.map_or("-".to_string(), |f| f.to_string()),
+            fps_etw::pick_fps(config_fps_source, shown_driver.push(driver), etw).map_or("-".to_string(), |f| f.to_string()),
         );
     }
     println!();
@@ -1925,7 +1929,11 @@ fn fps_diag_run(secs: u64) {
     rows.sort_by_key(|(_, r)| std::cmp::Reverse(r.raw_starts));
     for (pid, r) in rows.iter().take(6) {
         let ids: Vec<String> = r.ids.iter().map(|(i, n)| format!("{i}:{n}")).collect();
-        println!("  pid {pid}: starts {} -> frames {}; threads {}; swap chains {}; events [{}]", r.raw_starts, r.counted, r.threads.len(), r.chains.len(), ids.join(" "));
+        println!("  pid {pid}: starts {} (of them TEST presents {}) -> frames {}; threads {}; swap chains {}; events [{}]", r.raw_starts, r.tests, r.counted, r.threads.len(), r.chains.len(), ids.join(" "));
+        let fl: Vec<String> = r.flags.iter().map(|(f, n)| format!("{f:#x}:{n}")).collect();
+        let sy: Vec<String> = r.syncs.iter().map(|(f, n)| format!("{f}:{n}")).collect();
+        let th: Vec<String> = r.thread_starts.iter().map(|(f, n)| format!("{f}:{n}")).collect();
+        println!("          Flags [{}]  SyncInterval [{}]  starts per thread [{}]", fl.join(" "), sy.join(" "), th.join(" "));
     }
     println!();
     println!("Please send this whole output with the game, its graphics API and what the in-game counter shows.");
@@ -1943,7 +1951,7 @@ fn main() -> anyhow::Result<()> {
     let fps_diag = std::env::args().any(|a| a == "--fps-diag");
     let mut config = parse_args()?;
     if fps_diag {
-        fps_diag_run(20);
+        fps_diag_run(20, config.fps_source);
         return Ok(());
     }
     if lhm_list {
@@ -2146,11 +2154,12 @@ fn main() -> anyhow::Result<()> {
     // FPS for any DirectX game via ETW (requires administrator).
     if config.fps_monitor {
         match fps_etw::start() {
-            Ok(()) => println!("FPS: ETW monitor active (DirectX 9-12)"),
+            Ok(()) => println!("FPS: ETW monitor active (DirectX 9-12), source: {:?}", config.fps_source),
             Err(e) => eprintln!("FPS: monitor not active ({e}). Run the program as administrator."),
         }
     }
     let mut latest_gpu_data = gpu_amd::GpuAmdData::default();
+    let mut driver_fps_filter = fps_etw::DriverFps::default();
 
     // Weather (Open-Meteo): current temperature/humidity/condition for a city given
     // in the config, or auto-detected from the machine's public IP otherwise. Runs
@@ -2555,7 +2564,7 @@ fn main() -> anyhow::Result<()> {
             });
             // The FPS: the Presents counted through ETW (what PresentMon counts), the Radeon
             // driver's figure, or ETW first and the driver's as a fallback (`fps_source`).
-            let driver_fps = latest_gpu_data.fps;
+            let driver_fps = driver_fps_filter.push(latest_gpu_data.fps);
             #[allow(unused_mut)]
             let mut etw_fps: Option<u32> = None;
             #[cfg(windows)]

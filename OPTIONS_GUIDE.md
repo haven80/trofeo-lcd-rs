@@ -772,12 +772,17 @@ deepcool_alternate = 8
 Measures FPS for any DirectX 9-12 game via ETW. **Requires running as
 Administrator** — without it, FPS just won't populate (nothing else breaks).
 Native Vulkan/OpenGL games usually aren't covered (some drivers route their presents through DXGI, and then they are).
-On Radeon cards the driver also reports an FPS of its own; before 2.10.1 that figure was shown first, now the ETW count is.
+On Radeon cards the driver also reports an FPS of its own. `auto` shows the ETW count, except that when it reads
+more than 1.6 times the driver's figure (a test on an RX 6700 XT found 2.1 Present calls per displayed frame, from two threads on
+one swap chain) the driver's figure is shown, because that one counts what is displayed. Present calls made with `DXGI_PRESENT_TEST`
+(a window check that draws nothing) are never counted, and the driver's figure is the median of its last five readings, since it
+occasionally jumps. With frame generation the driver's figure is higher than the game's, so the ETW count is kept.
 
 **If the number is wrong** (for example exactly double): close `trofeo_lcd`, start `trofeo_lcd.exe --fps-diag` as
 administrator, put the game in front for the 20 seconds it runs, and send the output. It prints, once a second, the
-events the program receives for the game (raw `Present_Start`s, the frames left after nested calls are merged,
-the ETW result, and the driver's figure), which shows which source is off. The dashboard itself (FPS + GPU +
+events the program receives for the game (raw `Present_Start`s, how many of them are `DXGI_PRESENT_TEST` calls, the frames left
+after those and nested calls are removed, the ETW result, the driver's figure and the figure the screen would show),
+and at the end the `Flags` and `SyncInterval` of the calls and how many each thread made, which shows which source is off. The dashboard itself (FPS + GPU +
 CPU + RAM while a game is in the foreground) is controlled by the `dashboard`
 element in `show`/`hide`, independent of whether `fps_monitor` succeeds.
 
