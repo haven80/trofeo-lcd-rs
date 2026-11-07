@@ -397,6 +397,17 @@ effect_fps = 6
 Element names: `cpu, gpu, uptime, time, date, mem` (or `ram`)`, net, disk,
 volume, nowplaying, weather, spectrum, ticker, clock, clock_date, dashboard`.
 
+**The FPS in the standard screens.** For people who do not want a separate gaming screen (`gaming_screen = false`): `fps_item = true`
+(or `fps` in a `show` list) adds an item "FPS 144" to the info block of the standard screens (`default`, `default2`). It appears only
+while a game gives FPS (see [In-game FPS dashboard](#in-game-fps-dashboard-restart-required)) and disappears afterwards. It is
+an item like the others: in the one-line style it follows the GPU, in the list style it has its own line, and in per-item mode
+(`default2`) it has its own `fps_size`, `fps_position`, `fps_color` and `fps_backdrop`. With it on, the FPS no longer also appears
+inside the GPU line. The tiles already have an `fps` tile, and `deck`, `cards`, `orbit` and `console` have an `fps` panel (list it in `deck = ...`, `orbit = ...` and so on): big FPS number, graph, frame time and GPU load, "no game" when nothing is running.
+
+![FPS item, one-line style](img/standard-fps-lines.png)
+
+![FPS item, per-item mode: big, green, top right](img/standard-fps-items.png)
+
 Detail fields inside the CPU/GPU lines can also be individually hidden:
 `cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_hotspot, gpu_power, gpu_fan, gpu_clock, gpu_fps`, and the fan speeds
 of [LibreHardwareMonitor](#fans-and-sensors-librehardwaremonitor) in the CPU line: `cpu_fan, case_fan, pump`. `gpu_hotspot` (the GPU hot spot temperature) is the one detail that is off
@@ -917,7 +928,7 @@ layout = default, news:20
 
 Every info item can be turned on/off individually with `show`/`hide`
 (element names: `cpu, gpu, uptime, time, date, mem`/`ram, net, disk, volume,
-nowplaying, weather`) and, independently, styled on its own. **Setting any one
+nowplaying, weather, fps` — `fps` is off unless asked, see [the FPS item](#what-to-show--show--hide)) and, independently, styled on its own. **Setting any one
 of the options below switches the info block into per-item mode** (same as
 `layout = default2`); items placed at the same position stack automatically.
 
@@ -1197,8 +1208,10 @@ with `update_check = false`).
 ## Deck, Cards, Orbit and Console
 
 Four more full screens (`layout = deck`, `cards`, `orbit`, `console`). On a portrait panel (`orientation = portrait`) they stack their parts in a column: one row per device in `deck` and `orbit`, one card under the other in `cards` (the `|` groups are read in order), one tile under the other in `console`. Every key can also be a command-line
-flag and all of them apply live. Panels: `cpu gpu ram fans net disk clock weather music` (`clock` also shows
+flag and all of them apply live. Panels: `cpu gpu ram fans net disk clock weather music fps` (`clock` also shows
 the weather and the playing track). `fans` needs [LibreHardwareMonitor](#fans-and-sensors-librehardwaremonitor).
+
+![The fps panel in deck, cards, orbit and console](img/dash-fps.png)
 
 | Key | Values | Default |
 |---|---|---|

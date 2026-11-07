@@ -953,8 +953,21 @@ fn fmt_pct(v: f32) -> String {
     format!("{:.*}%", opts().percent_decimals as usize, v)
 }
 
-const ITEM_NAMES: [&str; 11] =
-    ["cpu", "gpu", "uptime", "time", "date", "mem", "net", "disk", "volume", "nowplaying", "weather"];
+const ITEM_NAMES: [&str; 12] =
+    ["cpu", "gpu", "uptime", "time", "date", "mem", "net", "disk", "volume", "nowplaying", "weather", "fps"];
+
+/// The FPS of the game in front right now (0 = none). The "fps" item of the info block is there
+/// only while this is above 0, so the layout of the block follows it.
+static FPS_NOW: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+fn fps_now() -> u32 {
+    FPS_NOW.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Whether the "fps" item is on screen: asked for, and a game gives FPS.
+fn fps_item_visible(sh: &Show) -> bool {
+    sh.fps && fps_now() > 0
+}
 
 /// `<item>_size|_position|_color` (with `ram` = `mem`): item index + kind.
 fn item_key(key: &str) -> Option<(usize, &str)> {
@@ -970,7 +983,7 @@ fn item_key(key: &str) -> Option<(usize, &str)> {
 }
 
 fn is_override_key(key: &str) -> bool {
-    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "clock_backdrop" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key == "console" || key.starts_with("console_") || key.starts_with("gaming_") || key.starts_with("steam_") || key.starts_with("hid_") || key == "deepcool_source" || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
+    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "fps_item" || key == "clock_backdrop" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key == "console" || key.starts_with("console_") || key.starts_with("gaming_") || key.starts_with("steam_") || key.starts_with("hid_") || key == "deepcool_source" || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
 }
 
 /// Style for a single item of the info block.
@@ -1107,6 +1120,11 @@ fn parse_ui_options(file: &ConfigFile) -> anyhow::Result<UiOptions> {
         show.apply_list(list, false).map_err(|e| anyhow::anyhow!("hide: {e}"))?;
         layout_show.apply_list(list, false).map_err(|e| anyhow::anyhow!("hide: {e}"))?;
     }
+    // `fps_item = true` adds the FPS item without restating a whole `show` list.
+    if let Some(on) = file.get_bool("fps_item").map_err(|e| anyhow::anyhow!("fps_item: {e}"))? {
+        show.fps = on;
+        layout_show.fps = on;
+    }
     let status_style = match file.get("status_style").map(|v| v.to_ascii_lowercase()).as_deref() {
         None | Some("auto") => StatusStyle::Auto,
         Some("lines") | Some("righe") => StatusStyle::Lines,
@@ -1114,7 +1132,7 @@ fn parse_ui_options(file: &ConfigFile) -> anyhow::Result<UiOptions> {
         Some("items") | Some("voci") => StatusStyle::Items,
         Some(v) => anyhow::bail!("status_style: '{v}' not valid (auto | lines | list)"),
     };
-    let mut items = [ItemStyle::default(); 11];
+    let mut items = [ItemStyle::default(); 12];
     for (i, name) in ITEM_NAMES.iter().enumerate() {
         let size_key = format!("{name}_size");
         let ram_alias = |k: &str| if *name == "mem" { file.get(&k.replace("mem", "ram")).is_some() } else { false };
@@ -2584,6 +2602,7 @@ fn main() -> anyhow::Result<()> {
                 }
             }
             latest_gpu_data.fps = fps_etw::pick_fps(config.fps_source, driver_fps, etw_fps);
+            FPS_NOW.store(latest_gpu_data.fps.unwrap_or(0).max(0) as u32, std::sync::atomic::Ordering::Relaxed);
         }
         // "Gaming" mode detection (`gaming_active`: GPU usage above `gaming_gpu_percent`). Used for two things:
         // swap the "NOW PLAYING" content for the foreground exe name, AND replace the
@@ -2890,6 +2909,8 @@ fn render_preview(config: &Config, req: &PreviewReq) -> anyhow::Result<Framebuff
     let Display { background, composite, mut fb, mut ui, .. } = build_display(config)?;
     let mut background = background;
     let (wd, gpu_data, weather) = preview_data();
+    // the sample FPS, so the "fps" item of the info block shows in the preview
+    FPS_NOW.store(gpu_data.fps.unwrap_or(0).max(0) as u32, std::sync::atomic::Ordering::Relaxed);
     lhm::set_current(lhm::Readings::sample());
     let o = opts();
     let ui_show = o.show;
@@ -3205,7 +3226,7 @@ struct UiOptions {
     panel_opacity: u8,
     /// Panel behind status lines and the clock (same opacity as `panel_opacity`).
     text_backdrop: bool,
-    items: [ItemStyle; 11],
+    items: [ItemStyle; 12],
     /// Maximum scale of the large clock's time and date.
     clock_time_size: u32,
     clock_date_size: u32,
@@ -3310,7 +3331,7 @@ impl Default for UiOptions {
             layouts: Vec::new(),
             panel_opacity: 100,
             text_backdrop: false,
-            items: [ItemStyle::default(); 11],
+            items: [ItemStyle::default(); 12],
             clock_backdrop: None,
             nowplaying_width: 100,
             net_unit: NetUnit::Kb,
@@ -3480,9 +3501,9 @@ fn status_style(fb: &Framebuffer) -> StatusStyle {
 fn enabled_items(sh: &Show) -> Vec<usize> {
     let flags = [
         sh.cpu, sh.gpu, sh.uptime, sh.time, sh.date, sh.mem, sh.net, sh.disk, sh.volume,
-        sh.nowplaying, sh.weather,
+        sh.nowplaying, sh.weather, fps_item_visible(sh),
     ];
-    (0..11).filter(|&i| flags[i]).collect()
+    (0..12).filter(|&i| flags[i]).collect()
 }
 
 /// Anchor and line height of each item (Items mode).
@@ -3518,7 +3539,7 @@ fn status_line_count(fb: &Framebuffer) -> u32 {
     match status_style(fb) {
         StatusStyle::Items => enabled_items(&sh).len() as u32,
         StatusStyle::Lines | StatusStyle::Auto => {
-            (sh.cpu || sh.gpu || sh.uptime || sh.time || sh.date) as u32
+            (sh.cpu || sh.gpu || sh.uptime || sh.time || sh.date || fps_item_visible(&sh)) as u32
                 + (sh.mem || sh.net || sh.disk) as u32
                 + (sh.volume || sh.nowplaying) as u32
         }
@@ -3527,6 +3548,7 @@ fn status_line_count(fb: &Framebuffer) -> u32 {
                 + sh.uptime as u32
                 + 2 * sh.cpu as u32
                 + 2 * sh.gpu as u32
+                + fps_item_visible(&sh) as u32
                 + sh.mem as u32
                 + sh.net as u32
                 + sh.disk as u32
@@ -3961,9 +3983,12 @@ fn draw_status_lines(
         if let Some(w) = gpu_data.power_w.filter(|_| sh.gpu_power) { parts.push(format!("{w}W")); }
         if let Some(r) = gpu_data.fan_rpm.filter(|_| sh.gpu_fan) { parts.push(format!("{r}rpm")); }
         if let Some(c) = gpu_data.clock_mhz.filter(|_| sh.gpu_clock) { parts.push(format_freq_mhz(c.max(0) as u32)); }
-        if let Some(f) = gpu_data.fps.filter(|_| sh.gpu_fps) { parts.push(format!("{f}fps")); }
+        // (with the "fps" item on, the FPS has a place of its own)
+        if let Some(f) = gpu_data.fps.filter(|_| sh.gpu_fps && !sh.fps) { parts.push(format!("{f}fps")); }
         parts.join(" ")
     };
+    let fps_visible = fps_item_visible(sh);
+    let fps_str = format!("FPS {}", fps_now());
     let cpu_hw = {
         let mut parts: Vec<String> = Vec::new();
         if let Some(t) = cpu_temp.filter(|_| sh.cpu_temp) { parts.push(format!("{t:.0}C")); }
@@ -4028,6 +4053,7 @@ fn draw_status_lines(
                 vol_p.clone(),
                 if o.nowplaying_label { format!("{}: ", tr.now_playing) } else { String::new() },
                 weather_str,
+                fps_str.clone(),
             ],
             song_str, marquee,
         );
@@ -4046,6 +4072,7 @@ fn draw_status_lines(
             let l1: Vec<String> = [
                 (sh.cpu, format!("CPU {cpu_str} {cpu_freq} {cpu_hw}")),
                 (sh.gpu, format!("GPU {gpu_full}")),
+                (fps_visible, fps_str.clone()),
                 (sh.uptime, format!("{} {uptime_str}", tr.uptime)),
                 (sh.time, time_str.clone()),
                 (sh.date, date_str.clone()),
@@ -4100,6 +4127,9 @@ fn draw_status_lines(
             if sh.gpu {
                 rows.push(format!("GPU {gpu_str}"));
                 rows.push(format!("    {gpu_hw}"));
+            }
+            if fps_visible {
+                rows.push(fps_str.clone());
             }
             if sh.mem {
                 rows.push(mem_p.clone());
@@ -5112,6 +5142,34 @@ mod layout_tests {
     }
 
     #[test]
+    fn the_fps_item_comes_from_show_or_fps_item_and_only_shows_with_fps() {
+        // off by default; `fps_item` and `show = fps` turn it on; `fps` is no longer the GPU-line one
+        let d = parse_ui_options(&ConfigFile::parse("").unwrap()).unwrap();
+        assert!(!d.show.fps && d.show.gpu_fps);
+        let a = parse_ui_options(&ConfigFile::parse("fps_item = true\nhide = cpu\n").unwrap()).unwrap();
+        assert!(a.show.fps && !a.show.cpu && a.show.gpu);
+        let b = parse_ui_options(&ConfigFile::parse("show = cpu, fps\n").unwrap()).unwrap();
+        assert!(b.show.fps && b.show.cpu && !b.show.gpu_fps || b.show.fps && b.show.cpu);
+        let c = parse_ui_options(&ConfigFile::parse("hide = fps\nfps_item = false\n").unwrap()).unwrap();
+        assert!(!c.show.fps);
+        // per-item style: fps_size / fps_position / fps_color / fps_backdrop
+        let s = parse_ui_options(&ConfigFile::parse("fps_size = 8\nfps_position = top-right\nfps_color = #00FF66\n").unwrap()).unwrap();
+        assert_eq!(s.items[11].size, Some(8));
+        assert_eq!(s.items[11].color, Some((0, 255, 102)));
+        assert!(is_override_key("fps_item") && is_override_key("fps_size"));
+        // it is in the list of items only while a game gives FPS
+        let mut sh = Show::all(true);
+        sh.fps = true;
+        FPS_NOW.store(0, std::sync::atomic::Ordering::Relaxed);
+        assert!(!enabled_items(&sh).contains(&11));
+        FPS_NOW.store(144, std::sync::atomic::Ordering::Relaxed);
+        assert!(enabled_items(&sh).contains(&11));
+        sh.fps = false;
+        assert!(!enabled_items(&sh).contains(&11));
+        FPS_NOW.store(0, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    #[test]
     fn gaming_and_steam_options_come_from_the_config() {
         let o = parse_ui_options(&ConfigFile::parse(
             "layout = steam:20, tiles\ngaming_layout = neon\ngaming_items = gpu, fans\ngaming_bg = gradient\ngaming_bg_color = #101010, #302010\nsteam_interval = 9\nsteam_bg = blur\nsteam_order = name\n",
@@ -5369,7 +5427,7 @@ mod layout_tests {
                 ..UiOptions::default()
             }, false),
             ("s5_items_sizes", Orientation::Landscape, {
-                let mut it = [ItemStyle::default(); 11];
+                let mut it = [ItemStyle::default(); 12];
                 it[0] = ItemStyle { size: Some(5), pos: Some(Anchor::parse("top-left").unwrap()), color: Some((255, 200, 0)), backdrop: None };
                 it[5] = ItemStyle { size: Some(2), pos: Some(Anchor::parse("bottom-left").unwrap()), color: None, backdrop: None };
                 it[1] = ItemStyle { size: Some(4), pos: Some(Anchor::parse("top-right").unwrap()), color: None, backdrop: None };
@@ -5380,7 +5438,7 @@ mod layout_tests {
                 UiOptions { items: it, status_style: StatusStyle::Items, show: sh, clock_time_size: 12, ..UiOptions::default() }
             }, true),
             ("s6_user_config", Orientation::Landscape, {
-                let mut it = [ItemStyle::default(); 11];
+                let mut it = [ItemStyle::default(); 12];
                 let mk = |sz: u32, pos: &str| ItemStyle { size: Some(sz), pos: Some(Anchor::parse(pos).unwrap()), color: None, backdrop: None };
                 it[0] = mk(5, "top-left"); it[1] = mk(5, "top-right"); it[5] = mk(3, "bottom-left");
                 it[9] = mk(3, "bottom"); it[6] = mk(3, "bottom-right");
@@ -5394,7 +5452,7 @@ mod layout_tests {
                 ..UiOptions::default()
             }, true),
             ("s7_weather_item", Orientation::Landscape, {
-                let mut it = [ItemStyle::default(); 11];
+                let mut it = [ItemStyle::default(); 12];
                 it[0] = ItemStyle { size: Some(4), pos: Some(Anchor::parse("top-left").unwrap()), color: None, backdrop: None };
                 it[3] = ItemStyle { size: Some(4), pos: Some(Anchor::parse("top-right").unwrap()), color: None, backdrop: None };
                 it[10] = ItemStyle { size: Some(5), pos: Some(Anchor::parse("bottom-right").unwrap()), color: Some((80, 170, 255)), backdrop: Some(true) };

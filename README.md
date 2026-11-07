@@ -20,7 +20,13 @@ whose driver was rewritten byte-for-byte from
 See **[NOTICE.md](./NOTICE.md)** for the full provenance and a summary of
 what this fork adds on top of the original.
 
-**New in 2.10.3 — `fps_driver_divisor`, for games Windows gives no frame events for.** With the 2.10.2 diagnostics the doubled FPS was traced: half of the `Present` calls are window checks (`DXGI_PRESENT_TEST`) and 2.10.2 no longer counts them, so DX11, DX12 and Vulkan games read right. An exclusive-fullscreen DX9 game gives Windows no frame events at all, so only the Radeon driver's figure is left, and it read double there (122 for a game capped at 60). `fps_driver_divisor = 2` (config file, applies live) halves that figure and only that one; the default `1` changes nothing. See [In-game FPS dashboard](./OPTIONS_GUIDE.md#in-game-fps-dashboard-restart-required).
+**New in 2.12.0 — FPS panel in deck, cards, orbit and console.** `fps` is now a panel like `cpu` or `gpu`: `deck = cpu, gpu, fps, ram`, `orbit = cpu, gpu, fps`, `console = gpu, fps, cpu`, `cards = cpu, gpu | fps, ram` (or pick it in the settings editor, Deck, Cards, Orbit and Console). It shows the FPS of the running game with a graph, the frame time and the GPU load, and "no game" otherwise.
+
+**2.11.0 — the FPS in your own layout.** If you don't want a separate gaming screen, `fps_item = true` (a checkbox in the settings editor, *Single items*) adds an "FPS 144" item to the standard screens (`default`, `default2`) while a game gives FPS; with `gaming_screen = false` you keep your layout and get the FPS in it. In per-item mode it has its own size, position and color (`fps_size`, `fps_position`, `fps_color`, `fps_backdrop`). See [the options guide](./OPTIONS_GUIDE.md#what-to-show--show--hide).
+
+![FPS item in a standard screen](img/standard-fps-items.png)
+
+**2.10.3 — `fps_driver_divisor`, for games Windows gives no frame events for.** With the 2.10.2 diagnostics the doubled FPS was traced: half of the `Present` calls are window checks (`DXGI_PRESENT_TEST`) and 2.10.2 no longer counts them, so DX11, DX12 and Vulkan games read right. An exclusive-fullscreen DX9 game gives Windows no frame events at all, so only the Radeon driver's figure is left, and it read double there (122 for a game capped at 60). `fps_driver_divisor = 2` (config file, applies live) halves that figure and only that one; the default `1` changes nothing. See [In-game FPS dashboard](./OPTIONS_GUIDE.md#in-game-fps-dashboard-restart-required).
 
 **2.10.2 — doubled FPS on Radeon: the diagnostic showed what is going on, and the program now guards against it.** The `--fps-diag` output of a Radeon RX 6700 XT showed that the Windows events carry about 2.1 `Present` calls for every frame the AMD overlay and PresentMon count, from two threads on a single swap chain, while the driver's own figure was close to the real one. So the extra calls are not frames. Now the calls made with the `DXGI_PRESENT_TEST` flag (a window check that draws nothing, which PresentMon also ignores) are not counted, the driver's figure is steadied against its occasional jumps, and with `fps_source = auto` the driver's figure is used whenever the event count reads far above it. `--fps-diag` now also prints the flags of the calls and what the screen would show. See [In-game FPS dashboard](./OPTIONS_GUIDE.md#in-game-fps-dashboard-restart-required).
 
@@ -866,7 +872,7 @@ tile in focus is the tall one, the bar on top keeps only the date and the clock.
 
 ```ini
 layout = console
-console = cpu, gpu, ram, net, disk   # 1-7 of: cpu gpu ram fans net disk clock weather music
+console = cpu, gpu, ram, net, disk   # 1-7 of: cpu gpu ram fans net disk clock weather music fps
 console_focus = rotate               # rotate | load | none
 console_interval = 6                 # seconds per tile with rotate
 console_bar = true                   # the bar with the names and the clock
@@ -878,7 +884,7 @@ effect_palette = midnight
 
 ```ini
 layout = deck
-deck = cpu, gpu, ram, clock          # 2-5 of: cpu gpu ram fans net disk clock weather music
+deck = cpu, gpu, ram, clock          # 2-5 of: cpu gpu ram fans net disk clock weather music fps
 # layout = cards
 cards = clock | cpu | gpu | ram, disk | music, net    # "|" = next column, "," = stacked
 # layout = orbit

@@ -139,11 +139,11 @@ pub const EFFECT_PALETTES: &[&str] = &[
 ];
 pub const SHOW_ITEMS: &[&str] = &[
     "cpu", "gpu", "uptime", "time", "date", "mem", "net", "disk", "volume", "nowplaying", "weather", "spectrum", "ticker", "clock",
-    "clock_date", "dashboard",
+    "clock_date", "dashboard", "fps",
 ];
 pub const HIDE_ITEMS: &[&str] = &[
     "cpu", "gpu", "uptime", "time", "date", "mem", "net", "disk", "volume", "nowplaying", "weather", "spectrum", "ticker", "clock",
-    "clock_date", "dashboard", "cpu_freq", "cpu_temp", "cpu_power", "gpu_temp", "gpu_hotspot", "gpu_power", "gpu_fan", "gpu_clock", "gpu_fps",
+    "clock_date", "dashboard", "cpu_freq", "cpu_temp", "cpu_power", "gpu_temp", "gpu_hotspot", "gpu_power", "gpu_fan", "gpu_clock", "gpu_fps", "fps",
     "cpu_fan", "case_fan", "pump",
 ];
 pub const SPECTRUM_STYLES: &[&str] = &["bars", "led", "peaks", "area", "mirror", "all"];
@@ -177,6 +177,7 @@ pub const ITEMS: &[(&str, &str, &str)] = &[
     ("volume", "Volume", "Volume"),
     ("nowplaying", "Now playing", "Brano in ascolto"),
     ("weather", "Weather", "Meteo"),
+    ("fps", "FPS (while gaming)", "FPS (mentre giochi)"),
 ];
 
 /// The screens of `layout = ...`: (name, English, Italian).
@@ -240,6 +241,7 @@ pub const PANEL_KINDS: &[(&str, &str, &str)] = &[
     ("clock", "Clock, weather and music", "Orologio, meteo e musica"),
     ("weather", "Weather", "Meteo"),
     ("music", "Now playing", "Brano in ascolto"),
+    ("fps", "FPS (while gaming)", "FPS (mentre giochi)"),
 ];
 
 /// Named colors offered as swatches (all of them are understood by the program).
@@ -808,6 +810,13 @@ pub fn fields() -> Vec<Field> {
         v.push(Field::new(&format!("{k}_backdrop"), "items", &format!("{en}: panel behind"), &format!("{it}: pannello dietro"), Bool).group(g));
     }
     let mut add = |f: Field| v.push(f);
+    add(Field::new("fps_item", "items", "Show the FPS", "Mostra gli FPS", Bool)
+        .def("false")
+        .group("FPS (while gaming)")
+        .help(
+            "Adds \"FPS 144\" to the info block of the standard screens (default, default2) while a game gives FPS; nothing shows when no game runs. With the automatic gaming screen on, the screen changes while you play (gaming_screen = false keeps yours)",
+            "Aggiunge \"FPS 144\" al blocco informazioni delle schermate standard (default, default2) mentre un gioco fornisce gli FPS; senza giochi non compare nulla. Con la schermata gaming automatica attiva, lo schermo cambia mentre giochi (gaming_screen = false mantiene la tua)",
+        ));
     add(Field::new("nowplaying_label", "items", "Show the \"NOW PLAYING\" label", "Mostra la scritta \"NOW PLAYING\"", Bool).def("true").group("Now playing"));
     add(Field::new("nowplaying_width", "items", "Width of the track (%)", "Larghezza del brano (%)", int(1, 100)).def("100").group("Now playing"));
 

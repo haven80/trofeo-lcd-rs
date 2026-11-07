@@ -299,7 +299,8 @@ language = en
 
 # --- Deck, Cards, Orbit and Console (layout = deck | cards | orbit | console) ------------
 # Four more full screens, from the same readings as the tiles. Panels: cpu gpu ram fans net disk
-# clock weather music (the clock panel also shows the weather and the track).
+# clock weather music fps (the clock panel also shows the weather and the track; the fps panel
+# shows the FPS of the game that is running, "no game" otherwise).
 # layout = deck
 # deck = cpu, gpu, ram, clock           # instrument columns (2-5)
 # deck_gauge = true                     # the gauge line on top of each column
@@ -487,6 +488,12 @@ language = en
 # cpu_position = top-left
 # ram_size = 2
 # ram_position = bottom-left
+# The FPS in the standard screens: "FPS 144" appears in the info block while a game gives FPS (nothing without a game).
+# It is off by default; the item has its own fps_size / fps_position / fps_color / fps_backdrop (default2 / per-item mode).
+# fps_item = true                # also: show = ..., fps   (a `show` list replaces the default ones, so fps_item is simpler)
+# fps_size = 8
+# fps_position = top-right
+# fps_color = #00FF66
 # gpu_size = 4
 # gpu_position = top-right
 # nowplaying_size = 3

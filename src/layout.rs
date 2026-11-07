@@ -95,6 +95,9 @@ pub struct Show {
     pub gpu_fan: bool,
     pub gpu_clock: bool,
     pub gpu_fps: bool,
+    /// The FPS as an item of its own ("FPS 144"), shown while a game gives FPS. Off unless asked
+    /// (`show = fps`); when on, the FPS leaves the GPU line.
+    pub fps: bool,
     // Fan speeds from LibreHardwareMonitor (CPU line: CPU fan, case fans, pump).
     pub cpu_fan: bool,
     pub case_fan: bool,
@@ -113,13 +116,13 @@ impl Show {
             cpu: v, gpu: v, uptime: v, time: v, date: v, mem: v, net: v, disk: v,
             volume: v, nowplaying: v, weather: v, spectrum: v, ticker: v, clock: v, clock_date: v, dashboard: v,
             cpu_freq: true, cpu_temp: true, cpu_power: true,
-            gpu_temp: true, gpu_hotspot: false, gpu_power: true, gpu_fan: true, gpu_clock: true, gpu_fps: true,
+            gpu_temp: true, gpu_hotspot: false, gpu_power: true, gpu_fan: true, gpu_clock: true, gpu_fps: true, fps: false,
             cpu_fan: true, case_fan: true, pump: true,
         }
     }
 
     pub const NAMES: &'static str =
-        "cpu, gpu, uptime, time, date, mem, net, disk, volume, nowplaying, weather, spectrum, ticker, clock, clock_date, dashboard, cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_hotspot, gpu_power, gpu_fan, gpu_clock, gpu_fps, cpu_fan, case_fan, pump";
+        "cpu, gpu, uptime, time, date, mem, net, disk, volume, nowplaying, weather, spectrum, ticker, clock, clock_date, dashboard, cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_hotspot, gpu_power, gpu_fan, gpu_clock, gpu_fps, fps, cpu_fan, case_fan, pump";
 
     fn slot(&mut self, name: &str) -> Option<&mut bool> {
         Some(match name {
@@ -147,7 +150,8 @@ impl Show {
             "gpu_power" | "gpu_watt" => &mut self.gpu_power,
             "gpu_fan" => &mut self.gpu_fan,
             "gpu_clock" | "gpu_mhz" => &mut self.gpu_clock,
-            "gpu_fps" | "fps" => &mut self.gpu_fps,
+            "gpu_fps" => &mut self.gpu_fps,
+            "fps" | "game_fps" => &mut self.fps,
             "cpu_fan" | "fan" => &mut self.cpu_fan,
             "case_fan" | "case" | "ventole" => &mut self.case_fan,
             "pump" | "pompa" => &mut self.pump,

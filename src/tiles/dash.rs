@@ -81,10 +81,11 @@ pub enum PKind {
     Clock,
     Weather,
     Music,
+    Fps,
 }
 
 impl PKind {
-    pub const NAMES: &'static str = "cpu, gpu, ram, fans, net, disk, clock, weather, music";
+    pub const NAMES: &'static str = "cpu, gpu, ram, fans, net, disk, clock, weather, music, fps";
 
     pub fn parse(s: &str) -> Option<PKind> {
         Some(match s.trim().to_ascii_lowercase().replace(['-', ' '], "_").as_str() {
@@ -97,6 +98,7 @@ impl PKind {
             "clock" | "time" | "orologio" => PKind::Clock,
             "weather" | "meteo" => PKind::Weather,
             "music" | "nowplaying" | "now_playing" | "musica" => PKind::Music,
+            "fps" | "framerate" | "frame_rate" => PKind::Fps,
             _ => return None,
         })
     }
@@ -598,6 +600,31 @@ pub(super) fn panel(kind: PKind, d: &WidgetData, hw: &lhm::Readings, s: &Setting
             }
             if let Some(f) = d.fps {
                 p.stats.push(stat("FPS", f.to_string(), ""));
+            }
+        }
+        PKind::Fps => {
+            p.title = "FPS".into();
+            if let Some(f) = d.fps {
+                p.hero = f.to_string();
+                p.frac = Some(f as f32 / ts.fps_max.max(1) as f32);
+                p.series = Some(("fps", 30.0));
+                if f > 0 {
+                    p.stats.push(stat("FRAME", format!("{:.1}", 1000.0 / f as f32), "ms"));
+                }
+            } else {
+                p.sub = "no game".into();
+            }
+            if let Some(g) = d.gpu_pct {
+                p.stats.push(stat("GPU", pct(g), "%"));
+            }
+            if let Some(t) = d.gpu_temp {
+                p.stats.push(stat("TEMP", t.to_string(), deg));
+            }
+            if let Some(f) = d.fps {
+                p.rings.push(Ring { label: "FPS".into(), frac: f as f32 / ts.fps_max.max(1) as f32 });
+            }
+            if let Some(g) = d.gpu_pct {
+                p.rings.push(Ring { label: "GPU".into(), frac: g / 100.0 });
             }
         }
         PKind::Ram => {
@@ -1613,7 +1640,7 @@ impl DashScreen {
         let hw = lhm::current();
         let secs = env.secs.unwrap_or_else(|| self.started.elapsed().as_secs_f64());
         let ram_pct = if data.total_mb > 0 { data.used_mb as f32 * 100.0 / data.total_mb as f32 } else { 0.0 };
-        let sampled: [(&'static str, Option<f32>); 8] = [
+        let sampled: [(&'static str, Option<f32>); 9] = [
             ("cpu_temp", data.cpu_temp),
             ("cpu_pct", Some(data.cpu_pct)),
             ("gpu_temp", data.gpu_temp.map(|t| t as f32)),
@@ -1622,6 +1649,7 @@ impl DashScreen {
             ("fan", hw.cpu_fan.or(hw.case_fan).or(hw.pump).or(hw.gpu_fan).map(|v| v as f32)),
             ("net", Some(data.net_kb.0 as f32)),
             ("disk", Some(data.disk_mb.0 as f32)),
+            ("fps", data.fps.map(|f| f as f32)),
         ];
         let keep = s.history as usize;
         if env.secs.is_some() {
@@ -1911,6 +1939,28 @@ mod tests {
         d.gpu_hotspot = None;
         let p = panel(PKind::Gpu, &d, &hw, &s, &ts, &now);
         assert!(p.stats.iter().all(|x| x.label != "HOTSPOT"));
+    }
+
+    #[test]
+    fn the_fps_panel_shows_the_game_and_is_listed_in_every_dash_layout() {
+        let (s, ts) = (Settings::default(), tiles::Settings::default());
+        let now = Local::now();
+        let hw = lhm::Readings::sample();
+        let mut d = data();
+        d.fps = Some(120);
+        let p = panel(PKind::Fps, &d, &hw, &s, &ts, &now);
+        assert_eq!((p.title.as_str(), p.hero.as_str()), ("FPS", "120"));
+        assert!(p.stats.iter().any(|x| x.label == "FRAME" && x.value == "8.3"));
+        assert_eq!(p.series.map(|x| x.0), Some("fps"));
+        d.fps = None;
+        let p = panel(PKind::Fps, &d, &hw, &s, &ts, &now);
+        assert_eq!((p.hero.as_str(), p.sub.as_str()), ("--", "no game"));
+        let c = parse_cfg("deck = cpu, fps\ncards = cpu | fps, gpu\norbit = gpu, fps\nconsole = fps, cpu\n").unwrap();
+        assert_eq!(c.deck, vec![PKind::Cpu, PKind::Fps]);
+        assert_eq!(c.cards, vec![vec![PKind::Cpu], vec![PKind::Fps, PKind::Gpu]]);
+        assert_eq!(c.orbit, vec![PKind::Gpu, PKind::Fps]);
+        assert_eq!(c.console, vec![PKind::Fps, PKind::Cpu]);
+        assert_eq!(PKind::parse("Framerate"), Some(PKind::Fps));
     }
 
     #[test]
