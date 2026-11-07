@@ -156,6 +156,8 @@ language = en
 # fps_monitor = true
 # fps_source = auto              # auto | etw | driver: where the number comes from (see OPTIONS_GUIDE).
 #                                # auto = frames counted through Windows events, else the Radeon driver's figure
+# fps_driver_divisor = 1         # 1-10: divides ONLY the Radeon driver's FPS (used when Windows gives no frame events,
+#                                # e.g. exclusive-fullscreen DX9 games, where it can read double: set 2 there)
 # If the number is wrong: run  trofeo_lcd.exe --fps-diag  as administrator with the game in front and send the output.
 
 # --- Preset layouts ----------------------------------------------------------

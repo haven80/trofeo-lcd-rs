@@ -767,6 +767,7 @@ deepcool_alternate = 8
 | Key | CLI | Values | Default |
 |---|---|---|---|
 | `fps_monitor` | `--fps-monitor` | `true`/`false` | `true` |
+| `fps_driver_divisor` | config file only, applies live | `1`-`10`: divides only the Radeon driver's FPS (see below) | `1` |
 | `fps_source` | config file only, applies live | `auto` (the frames counted through ETW, else the Radeon driver's figure), `etw` (only the first), `driver` (only the Radeon driver's: exclusive-fullscreen games) | `auto` |
 
 Measures FPS for any DirectX 9-12 game via ETW. **Requires running as
@@ -777,6 +778,11 @@ more than 1.6 times the driver's figure (a test on an RX 6700 XT found 2.1 Prese
 one swap chain) the driver's figure is shown, because that one counts what is displayed. Present calls made with `DXGI_PRESENT_TEST`
 (a window check that draws nothing) are never counted, and the driver's figure is the median of its last five readings, since it
 occasionally jumps. With frame generation the driver's figure is higher than the game's, so the ETW count is kept.
+
+Some games give Windows no frame events at all (exclusive-fullscreen DX9 games: a test with MudRunner saw none), so only the
+driver's figure is left, and there it can read double (122 for a game capped at 60). `fps_driver_divisor = 2` halves the
+driver's figure (and only that: the ETW count is never divided). Leave it at `1` unless a game you play shows double; if it does
+only in some games, a window or borderless mode usually brings the frame events back and the figure is right again.
 
 **If the number is wrong** (for example exactly double): close `trofeo_lcd`, start `trofeo_lcd.exe --fps-diag` as
 administrator, put the game in front for the 20 seconds it runs, and send the output. It prints, once a second, the

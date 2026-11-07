@@ -243,6 +243,9 @@ struct Config {
     /// Where the FPS comes from (`fps_source`, applies live): the Presents counted through ETW,
     /// the Radeon driver's own figure, or ETW first (default).
     fps_source: fps_etw::FpsSource,
+    /// The Radeon driver's FPS is divided by this (`fps_driver_divisor`, applies live): 1 = as it
+    /// is, 2 for the games where the driver reads double.
+    fps_driver_divisor: f32,
     /// "New version available" notice (`update_check`, off by default). The three keys
     /// below are read at start-up (restart required): they decide whether the background
     /// check runs, how often it repeats (0 = only at start-up) and how long the banner stays.
@@ -362,6 +365,8 @@ fn print_help() {
          \x20\x20fps_source <S>         (config-file only) Where the FPS comes from: auto (default: the\n\
          \x20\x20                          Presents seen through ETW, else the Radeon driver's figure) |\n\
          \x20\x20                          etw | driver. '--fps-diag' prints what each one reads.\n\
+         \x20\x20fps_driver_divisor <N> (config-file only) Divides the Radeon driver's FPS (1-10, default 1;\n\
+         \x20\x20                          2 for games where it reads double, e.g. exclusive fullscreen DX9)\n\
          \x20\x20gaming_screen <BOOL>    Switch to the in-game dashboard by itself while the GPU is\n\
          \x20\x20                          busy (default: true; false keeps your own screen)\n\
          \x20\x20gaming_gpu_percent <N>  GPU usage (%) that counts as gaming (1-100, default 50)\n\
@@ -832,6 +837,10 @@ fn parse_args() -> anyhow::Result<Config> {
         Some(v) => fps_etw::FpsSource::parse(v)
             .ok_or_else(|| anyhow::anyhow!("fps_source: '{v}' not valid ({})", fps_etw::FpsSource::NAMES))?,
     };
+    let fps_driver_divisor = file.get_f32("fps_driver_divisor").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(1.0);
+    if !(1.0..=10.0).contains(&fps_driver_divisor) {
+        anyhow::bail!("fps_driver_divisor: must be between 1 and 10 (got {fps_driver_divisor})");
+    }
     let update_check = file.get_bool("update_check").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(false);
     let update_check_hours = file.get_u32("update_check_hours").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(0);
     if update_check_hours > 720 {
@@ -849,6 +858,7 @@ fn parse_args() -> anyhow::Result<Config> {
         ticker_refresh_min,
         gpu_usage_source,
         fps_source,
+        fps_driver_divisor,
         update_check,
         update_check_hours,
         update_notice_secs,
@@ -1879,7 +1889,7 @@ fn run_lcd_test(
 
 /// `--fps-diag`: for 20 seconds shows, once a second, what each FPS source reads for the program in the
 /// foreground, to find out where a wrong number comes from.
-fn fps_diag_run(secs: u64, config_fps_source: fps_etw::FpsSource) {
+fn fps_diag_run(secs: u64, config_fps_source: fps_etw::FpsSource, config_driver_divisor: f32) {
     println!("=== FPS diagnostics ({secs} s) ===");
     if !cfg!(windows) {
         println!("FPS is measured on Windows only.");
@@ -1892,7 +1902,7 @@ fn fps_diag_run(secs: u64, config_fps_source: fps_etw::FpsSource) {
     }
     fps_etw::diag_begin();
     let amd = gpu_amd::GpuAmdSensor::new();
-    println!("fps_source in the config file: {:?}", config_fps_source);
+    println!("fps_source in the config file: {:?}, fps_driver_divisor: {}", config_fps_source, config_driver_divisor);
     println!("{:>3}  {:<22} {:>5}  {:>10} {:>6} {:>10} {:>8}  {:>7} {:>6}  {}", "s", "foreground program", "pid", "raw starts", "tests", "frames", "ETW fps", "threads", "chains", "driver fps (Radeon)  | shown");
     let mut last: std::collections::HashMap<u32, (u32, u32, u32)> = std::collections::HashMap::new();
     let mut shown_driver = fps_etw::DriverFps::default();
@@ -1920,7 +1930,7 @@ fn fps_diag_run(secs: u64, config_fps_source: fps_etw::FpsSource) {
             row.threads.len(),
             row.chains.len(),
             driver.map_or("-".to_string(), |f| f.to_string()),
-            fps_etw::pick_fps(config_fps_source, shown_driver.push(driver), etw).map_or("-".to_string(), |f| f.to_string()),
+            fps_etw::pick_fps(config_fps_source, shown_driver.push(driver).map(|f| fps_etw::divide_fps(f, config_driver_divisor)), etw).map_or("-".to_string(), |f| f.to_string()),
         );
     }
     println!();
@@ -1951,7 +1961,7 @@ fn main() -> anyhow::Result<()> {
     let fps_diag = std::env::args().any(|a| a == "--fps-diag");
     let mut config = parse_args()?;
     if fps_diag {
-        fps_diag_run(20, config.fps_source);
+        fps_diag_run(20, config.fps_source, config.fps_driver_divisor);
         return Ok(());
     }
     if lhm_list {
@@ -2564,7 +2574,7 @@ fn main() -> anyhow::Result<()> {
             });
             // The FPS: the Presents counted through ETW (what PresentMon counts), the Radeon
             // driver's figure, or ETW first and the driver's as a fallback (`fps_source`).
-            let driver_fps = driver_fps_filter.push(latest_gpu_data.fps);
+            let driver_fps = driver_fps_filter.push(latest_gpu_data.fps).map(|f| fps_etw::divide_fps(f, config.fps_driver_divisor));
             #[allow(unused_mut)]
             let mut etw_fps: Option<u32> = None;
             #[cfg(windows)]
@@ -5050,7 +5060,7 @@ mod layout_tests {
         }
         // every key of the editor is one the program reads from the config file
         let from_cli_or_file = |k: &str| is_override_key(k) || ["orientation", "flip", "panel_size", "background", "background_dim", "ffmpeg", "language",
-            "hid_mount", "hid_header", "color", "silence_threshold", "silence_timeout_ms", "weather_city", "ticker_source", "ticker_refresh_min", "gpu_usage_source", "fps_source", "update_check", "update_check_hours", "update_notice_secs", "margin", "margin_top", "margin_bottom", "margin_left", "margin_right"].contains(&k);
+            "hid_mount", "hid_header", "color", "silence_threshold", "silence_timeout_ms", "weather_city", "ticker_source", "ticker_refresh_min", "gpu_usage_source", "fps_source", "fps_driver_divisor", "update_check", "update_check_hours", "update_notice_secs", "margin", "margin_top", "margin_bottom", "margin_left", "margin_right"].contains(&k);
         for f in fields() {
             assert!(from_cli_or_file(&f.key), "{} is not a key of the program", f.key);
         }

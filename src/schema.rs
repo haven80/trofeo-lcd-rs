@@ -858,6 +858,13 @@ pub fn fields() -> Vec<Field> {
     add(Field::new("gpu_usage_source", "system", "GPU usage from", "Carico GPU da", Choice(&["auto", "windows"]))
         .def("auto")
         .help("auto = the Radeon driver's own figure (what the Radeon software shows), else the Windows counter; windows = always the Windows counter (3D engines only)", "auto = il valore del driver Radeon (quello del software Radeon), altrimenti il contatore di Windows; windows = sempre il contatore di Windows (solo motori 3D)"));
+    add(Field::new("fps_driver_divisor", "system", "Divide the driver's FPS by", "Dividi gli FPS del driver per", Float { min: 1.0, max: 10.0 })
+        .def("1")
+        .when("fps_monitor", &["true"])
+        .help(
+            "Only for the FPS the Radeon driver reports (games where Windows gives no frame events, such as exclusive-fullscreen DX9 games). Some of them read double: set 2 to halve it. 1 = as the driver says",
+            "Solo per gli FPS riportati dal driver Radeon (giochi per cui Windows non da eventi di frame, come i giochi DX9 a schermo intero esclusivo). Alcuni leggono il doppio: imposta 2 per dimezzare. 1 = come dice il driver",
+        ));
     add(Field::new("update_check", "system", "Tell me when a new version is out", "Avvisami quando esce una nuova versione", Bool)
         .def("false")
         .restart()

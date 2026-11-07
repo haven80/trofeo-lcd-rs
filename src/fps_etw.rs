@@ -102,6 +102,11 @@ impl FpsSource {
     }
 }
 
+/// The driver's FPS divided by `divisor` (1 = unchanged), rounded.
+pub fn divide_fps(f: i32, divisor: f32) -> i32 {
+    if divisor <= 1.0 { f } else { (f as f32 / divisor).round() as i32 }
+}
+
 /// The FPS to show: `driver` is the Radeon driver's figure, `etw` the one counted from the Presents.
 ///
 /// `auto` takes the Presents, with one safety net: if they read well over the driver's own figure
@@ -660,6 +665,15 @@ mod tests {
         }
         let n = frames_of(v).len();
         assert_eq!(n, 22, "the lost-stop frame, the other thread's frame and the 20 later ones");
+    }
+
+    #[test]
+    fn the_driver_figure_can_be_divided() {
+        use super::divide_fps;
+        assert_eq!(divide_fps(122, 1.0), 122);
+        assert_eq!(divide_fps(122, 2.0), 61);
+        assert_eq!(divide_fps(125, 2.1), 60);
+        assert_eq!(divide_fps(122, 0.5), 122, "never multiplies");
     }
 
     #[test]
