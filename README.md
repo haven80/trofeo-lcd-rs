@@ -20,7 +20,9 @@ whose driver was rewritten byte-for-byte from
 See **[NOTICE.md](./NOTICE.md)** for the full provenance and a summary of
 what this fork adds on top of the original.
 
-**New in 2.12.0 — FPS panel in deck, cards, orbit and console.** `fps` is now a panel like `cpu` or `gpu`: `deck = cpu, gpu, fps, ram`, `orbit = cpu, gpu, fps`, `console = gpu, fps, cpu`, `cards = cpu, gpu | fps, ram` (or pick it in the settings editor, Deck, Cards, Orbit and Console). It shows the FPS of the running game with a graph, the frame time and the GPU load, and "no game" otherwise.
+**New in 2.13.0 — eight new designs for the music screen.** `music_layout = vinyl | poster | minimal | radial | equalizer | wave | cassette | vu` (or pick it in the settings editor, Music section) replaces the card with a spinning record and tonearm, a poster with a huge title, a minimal title, rays around the cover, an LED equaliser, soft waves, a cassette with turning reels, or two analogue VU meters. They use the same `music_bg`, `music_progress` and `music_stats` as the card, with `music_colors`, `music_font`, `music_clock`, `music_album` and `music_glow` on top. See [the options guide](./OPTIONS_GUIDE.md#music-screen-now-playing-card).
+
+**2.12.0 — FPS panel in deck, cards, orbit and console.** `fps` is now a panel like `cpu` or `gpu`: `deck = cpu, gpu, fps, ram`, `orbit = cpu, gpu, fps`, `console = gpu, fps, cpu`, `cards = cpu, gpu | fps, ram` (or pick it in the settings editor, Deck, Cards, Orbit and Console). It shows the FPS of the running game with a graph, the frame time and the GPU load, and "no game" otherwise.
 
 **2.11.0 — the FPS in your own layout.** If you don't want a separate gaming screen, `fps_item = true` (a checkbox in the settings editor, *Single items*) adds an "FPS 144" item to the standard screens (`default`, `default2`) while a game gives FPS; with `gaming_screen = false` you keep your layout and get the FPS in it. In per-item mode it has its own size, position and color (`fps_size`, `fps_position`, `fps_color`, `fps_backdrop`). See [the options guide](./OPTIONS_GUIDE.md#what-to-show--show--hide).
 
@@ -401,7 +403,7 @@ Also settable in `trofeo.conf` (see `trofeo.conf.example`), in the [settings edi
 ### What to show, where, and colors
 
 - **Music screen**: `music_screen = true` turns the panel into a Spotify-style
-  now-playing card while a track plays — album cover with glow, artist/title,
+  now-playing card while a track plays (nine designs, `music_layout`) — album cover with glow, artist/title,
   progress bar, spectrum on the side, all tinted with the cover's colors. The
   background is configurable (`music_bg = gradient | blur | color | solid | none | effect`,
   with brightness / blur / fit options), and a small footer with CPU / GPU / RAM

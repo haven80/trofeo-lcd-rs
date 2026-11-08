@@ -23,6 +23,7 @@ type Rgb = (u8, u8, u8);
 pub mod cover;
 pub mod dash;
 pub mod game;
+pub mod music;
 pub mod steam_flow;
 
 // ------------------------------------------------------------------ settings

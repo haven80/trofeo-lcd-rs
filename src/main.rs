@@ -913,6 +913,7 @@ const OVERRIDE_KEYS: &[&str] = &[
     "spectrum_palette_interval", "spectrum_gradient", "spectrum_rainbow_speed",
     "music_screen", "music_blur", "music_progress", "music_bg", "music_bg_brightness",
     "music_bg_blur", "music_bg_fit", "music_bg_color", "music_stats", "music_spectrum_color",
+    "music_layout", "music_colors", "music_font", "music_text_color", "music_clock", "music_album", "music_glow",
     "pixel_game", "pixel_game_hero", "pixel_game_height", "pixel_game_hud",
     "background_effect", "effect_palette", "effect_colors", "effect_palette_interval",
     "effect_speed", "effect_scale", "effect_brightness", "effect_fps", "effect_level", "effect_theme", "effect_flip", "effect_level_source", "effect_reactive",
@@ -1252,6 +1253,7 @@ fn parse_ui_options(file: &ConfigFile) -> anyhow::Result<UiOptions> {
         deepcool: deepcool::parse(file)?,
         dash: tiles::dash::parse(file)?,
         game: tiles::game::parse(file)?,
+        music: tiles::music::parse(file)?,
         steam: tiles::steam_flow::parse(file)?,
     })
 }
@@ -2268,6 +2270,7 @@ fn main() -> anyhow::Result<()> {
     let mut game_screen = tiles::game::GameScreen::new();
     let mut game_tracker = game_info::Tracker::default();
     let mut steam_screen = tiles::steam_flow::SteamScreen::new();
+    let mut music_layout_screen = tiles::music::MusicScreen::new();
     let mut game_window: (Instant, Option<foreground::WindowInfo>) = (Instant::now() - Duration::from_secs(10), None);
     let Display { mut resolution, mut background, mut idle_fps_effective, mut composite, mut fb, mut ui } =
         build_display(&config)?;
@@ -2437,6 +2440,8 @@ fn main() -> anyhow::Result<()> {
             gaming_active,
             last_sound.elapsed() < config.silence_timeout,
         );
+        // One of the new designs of the music screen (`music_layout`), drawn by `tiles/music.rs`.
+        let music_style = music_screen_on && opts().music.layout != tiles::music::Layout::Classic;
         let is_idle = !music_screen_on && (!ui_show.spectrum || last_sound.elapsed() >= config.silence_timeout);
         // The pixel game lives on the default screen only (not on a layout panel, the
         // music screen or the gaming dashboard) and needs the clock to be shown.
@@ -2721,6 +2726,25 @@ fn main() -> anyhow::Result<()> {
             let hint = if wd.fps.is_none() && fps_etw::status() == fps_etw::Status::NeedsAdmin { i18n::t().need_admin.to_string() } else { String::new() };
             game_screen.draw(&mut fb, area, wd, game_tracker.info(), &hint, color_mode, &o.game, &o.tiles, &env);
         }
+        if let (true, Some(t)) = (music_style, &track) {
+            let area = if composite {
+                (config.margins.left, config.margins.top, ui.width(), ui.height())
+            } else {
+                (0, 0, fb.width(), fb.height())
+            };
+            let stats = music_screen::Stats {
+                cpu: Some(sys.global_cpu_info().cpu_usage()),
+                cpu_temp: latest_cpu_temp,
+                gpu: latest_gpu_percent,
+                gpu_temp: latest_gpu_data.temp_edge_c,
+                ram_mb: Some((sys.used_memory() / 1024 / 1024, sys.total_memory() / 1024 / 1024)),
+                net_kb: Some(latest_net_kb),
+                disk_mb: Some(latest_disk_mb),
+                time: Local::now().format("%H:%M:%S").to_string(),
+                uptime: format_uptime(System::uptime()),
+            };
+            music_layout_screen.draw(&mut fb, area, t, &bar_heights, peak_tracker.peaks(), &stats, &opts(), None);
+        }
         if steam_now && widget_data.is_some() {
             let area = if composite {
                 (config.margins.left, config.margins.top, ui.width(), ui.height())
@@ -2754,6 +2778,8 @@ fn main() -> anyhow::Result<()> {
                 latest_cpu_mhz,
                 color_mode,
             );
+        } else if music_style {
+            // painted above, on `fb`
         } else if music_screen_on {
             if let Some(t) = &track {
                 music.stats = music_screen::Stats {
@@ -2902,6 +2928,27 @@ fn preview_data() -> (layouts::WidgetData, gpu_amd::GpuAmdData, weather::Weather
     (wd, gpu, weather)
 }
 
+/// A made-up album cover for the previews of the music designs: a warm sunset over water.
+fn sample_cover() -> Arc<media::CoverArt> {
+    let n = 160u32;
+    let mut rgb = Vec::with_capacity((n * n * 3) as usize);
+    for y in 0..n {
+        for x in 0..n {
+            let (fx, fy) = (x as f32 / n as f32, y as f32 / n as f32);
+            let sun = (((fx - 0.5).powi(2) + (fy - 0.42).powi(2)).sqrt() < 0.2) as u8 as f32;
+            let sky = (0.15 + 0.8 * (1.0 - fy)).clamp(0.0, 1.0);
+            let water = if fy > 0.6 { 0.55 } else { 1.0 };
+            let (r, g, b) = (
+                (60.0 + 190.0 * sky + 40.0 * sun) * water,
+                (30.0 + 90.0 * sky + 120.0 * sun) * water,
+                (110.0 + 40.0 * (1.0 - sky) - 60.0 * sun) * water,
+            );
+            rgb.extend([r.clamp(0.0, 255.0) as u8, g.clamp(0.0, 255.0) as u8, b.clamp(0.0, 255.0) as u8]);
+        }
+    }
+    Arc::new(media::CoverArt { width: n, height: n, rgb })
+}
+
 fn render_preview(config: &Config, req: &PreviewReq) -> anyhow::Result<Framebuffer> {
     use std::sync::atomic::Ordering::Relaxed;
     i18n::set_language(config.language);
@@ -2924,6 +2971,7 @@ fn render_preview(config: &Config, req: &PreviewReq) -> anyhow::Result<Framebuff
     ACTIVE_PANEL.store(active_def.is_some() || game_style.is_some(), Relaxed);
     ACTIVE_ITEMS.store(layouts_list.get(idx).is_some_and(|(d, _)| d.name == "default2"), Relaxed);
     let music_on = req.state == PreviewState::Music && o.music_screen;
+    let music_style = music_on && o.music.layout != tiles::music::Layout::Classic;
     let is_idle = !music_on && (req.state != PreviewState::Playing || !ui_show.spectrum);
     let game_wanted = o.pixel_game && ui_show.clock && !music_on && !gaming_state && layouts_list.get(idx).map_or(true, |(d, _)| d.standard);
     GAME_STRIP.store(game_wanted, Relaxed);
@@ -2997,6 +3045,43 @@ fn render_preview(config: &Config, req: &PreviewReq) -> anyhow::Result<Framebuff
         let env = tiles::Env { fps: config.active_fps, ffmpeg: config.ffmpeg.as_deref(), effect: &config.ui.effect, secs: Some(req.secs) };
         tiles::game::GameScreen::new().draw(&mut fb, area, &wd, Some(&game_info::GameInfo::sample()), "", color_mode, &o.game, &o.tiles, &env);
     }
+    // Spectrum of the sample music: a few moving humps.
+    let bars: Vec<f32> = (0..NUM_BARS)
+        .map(|i| {
+            let x = i as f32 / NUM_BARS as f32;
+            let a = ((x * 9.0 + req.secs as f32 * 1.3).sin() * 0.5 + 0.5) * (1.0 - x * 0.55);
+            (0.12 + 0.75 * a).clamp(0.0, 1.0)
+        })
+        .collect();
+    let mut peaks = spectrum::PeakTracker::new(NUM_BARS);
+    peaks.update(&bars, 0.1);
+
+    if music_style {
+        let area = if composite {
+            (config.margins.left, config.margins.top, ui.width(), ui.height())
+        } else {
+            (0, 0, fb.width(), fb.height())
+        };
+        let stats = music_screen::Stats {
+            cpu: Some(wd.cpu_pct),
+            cpu_temp: wd.cpu_temp,
+            gpu: wd.gpu_pct,
+            gpu_temp: wd.gpu_temp,
+            ram_mb: Some((wd.used_mb, wd.total_mb)),
+            net_kb: Some(wd.net_kb),
+            disk_mb: Some(wd.disk_mb),
+            time: Local::now().format("%H:%M:%S").to_string(),
+            uptime: format_uptime(System::uptime()),
+        };
+        let track = media::TrackInfo {
+            title: "Song title".into(),
+            artist: "Artist".into(),
+            album: "Album".into(),
+            cover: Some(sample_cover()),
+            timeline: Some(media::Timeline { position_ms: 83_000, duration_ms: 215_000, playing: true, sampled_at: Instant::now() }),
+        };
+        tiles::music::MusicScreen::new().draw(&mut fb, area, &track, &bars, peaks.peaks(), &stats, &o, Some(req.secs));
+    }
     if frame_now {
         let area = if composite {
             (config.margins.left, config.margins.top, ui.width(), ui.height())
@@ -3010,21 +3095,12 @@ fn render_preview(config: &Config, req: &PreviewReq) -> anyhow::Result<Framebuff
     }
     let target: &mut Framebuffer = if composite { &mut ui } else { &mut fb };
 
-    // Spectrum of the sample music: a few moving humps.
-    let bars: Vec<f32> = (0..NUM_BARS)
-        .map(|i| {
-            let x = i as f32 / NUM_BARS as f32;
-            let a = ((x * 9.0 + req.secs as f32 * 1.3).sin() * 0.5 + 0.5) * (1.0 - x * 0.55);
-            (0.12 + 0.75 * a).clamp(0.0, 1.0)
-        })
-        .collect();
-    let mut peaks = spectrum::PeakTracker::new(NUM_BARS);
-    peaks.update(&bars, 0.1);
-
     if game_style.is_some() {
         // painted above, on `fb`
     } else if gaming_state {
         draw_game_dashboard(target, &sys, wd.gpu_pct, &gpu_data, wd.cpu_temp, wd.cpu_power, wd.cpu_mhz, color_mode);
+    } else if music_style {
+        // painted above, on `fb`
     } else if music_on {
         let mut music = music_screen::MusicScreen::new();
         music.stats = music_screen::Stats {
@@ -3311,6 +3387,8 @@ struct UiOptions {
     dash: tiles::dash::Settings,
     /// The gaming screens (see `tiles/game.rs`).
     game: tiles::game::Settings,
+    /// The designs of the music screen (see `tiles/music.rs`).
+    music: tiles::music::Settings,
     /// The Steam cover flow (see `tiles/steam_flow.rs`).
     steam: tiles::steam_flow::Settings,
 }
@@ -3372,6 +3450,7 @@ impl Default for UiOptions {
             deepcool: deepcool::Settings::default(),
             dash: tiles::dash::Settings::default(),
             game: tiles::game::Settings::default(),
+            music: tiles::music::Settings::default(),
             steam: tiles::steam_flow::Settings::default(),
         }
     }

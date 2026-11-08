@@ -367,7 +367,7 @@ impl Settings {
 
 // -------------------------------------------------------------------- scene
 
-type R = (f32, f32, f32, f32);
+pub(super) type R = (f32, f32, f32, f32);
 
 /// The FPS the screen shows.
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -474,22 +474,22 @@ impl Scene<'_> {
 
 // ------------------------------------------------------------- drawing helpers
 
-fn txt(p: &mut Painter, x: f32, base: f32, s: &str, cap: f32, w: W, c: Rgb, a: u8) -> f32 {
+pub(super) fn txt(p: &mut Painter, x: f32, base: f32, s: &str, cap: f32, w: W, c: Rgb, a: u8) -> f32 {
     p.text(x, base, s, cap, w, c, a)
 }
 
-fn txt_c(p: &mut Painter, cx: f32, base: f32, s: &str, cap: f32, w: W, c: Rgb, a: u8) -> f32 {
+pub(super) fn txt_c(p: &mut Painter, cx: f32, base: f32, s: &str, cap: f32, w: W, c: Rgb, a: u8) -> f32 {
     let wd = p.width(s, cap, w);
     p.text(cx - wd / 2.0, base, s, cap, w, c, a)
 }
 
-fn txt_r(p: &mut Painter, rx: f32, base: f32, s: &str, cap: f32, w: W, c: Rgb, a: u8) -> f32 {
+pub(super) fn txt_r(p: &mut Painter, rx: f32, base: f32, s: &str, cap: f32, w: W, c: Rgb, a: u8) -> f32 {
     let wd = p.width(s, cap, w);
     p.text(rx - wd, base, s, cap, w, c, a)
 }
 
 /// Text with a soft halo (`strength` 0-100).
-fn glow_txt(p: &mut Painter, x: f32, base: f32, s: &str, cap: f32, w: W, c: Rgb, strength: u32) {
+pub(super) fn glow_txt(p: &mut Painter, x: f32, base: f32, s: &str, cap: f32, w: W, c: Rgb, strength: u32) {
     if strength > 0 && p.font == FontStyle::Smooth {
         let g = strength as f32 / 100.0;
         let d = (cap * 0.03).max(1.0);
@@ -511,19 +511,19 @@ fn glow_txt(p: &mut Painter, x: f32, base: f32, s: &str, cap: f32, w: W, c: Rgb,
     p.text(x, base, s, cap, w, c, 255);
 }
 
-fn glow_txt_c(p: &mut Painter, cx: f32, base: f32, s: &str, cap: f32, w: W, c: Rgb, strength: u32) {
+pub(super) fn glow_txt_c(p: &mut Painter, cx: f32, base: f32, s: &str, cap: f32, w: W, c: Rgb, strength: u32) {
     let wd = p.width(s, cap, w);
     glow_txt(p, cx - wd / 2.0, base, s, cap, w, c, strength);
 }
 
 /// Cuts `s` with dots so it fits `max_w`.
-fn fit_clip(p: &Painter, s: &str, cap: f32, max_w: f32, w: W) -> String {
+pub(super) fn fit_clip(p: &Painter, s: &str, cap: f32, max_w: f32, w: W) -> String {
     dash::clip(p, s, cap, max_w, w)
 }
 
 impl Layer {
     /// A straight line with round ends.
-    fn line(&mut self, x0: f32, y0: f32, x1: f32, y1: f32, thick: f32, rgb: Rgb, alpha: u8) {
+    pub(super) fn line(&mut self, x0: f32, y0: f32, x1: f32, y1: f32, thick: f32, rgb: Rgb, alpha: u8) {
         let half = thick / 2.0;
         let (bx0, bx1) = ((x0.min(x1) - half - 1.0).floor() as i32, (x0.max(x1) + half + 1.0).ceil() as i32);
         let (by0, by1) = ((y0.min(y1) - half - 1.0).floor() as i32, (y0.max(y1) + half + 1.0).ceil() as i32);
@@ -546,7 +546,7 @@ impl Layer {
     /// from `start` over `sweep` degrees and is filled up to `frac` of it. `color(t)`: t = 0-1
     /// along the whole sweep.
     #[allow(clippy::too_many_arguments)]
-    fn gauge(&mut self, cx: f32, cy: f32, r_out: f32, thick: f32, start: f32, sweep: f32, frac: f32, color: &dyn Fn(f32) -> Rgb, alpha: u8) {
+    pub(super) fn gauge(&mut self, cx: f32, cy: f32, r_out: f32, thick: f32, start: f32, sweep: f32, frac: f32, color: &dyn Fn(f32) -> Rgb, alpha: u8) {
         let frac = frac.clamp(0.0, 1.0);
         if frac <= 0.0 || alpha == 0 || r_out <= 1.0 {
             return;
@@ -592,7 +592,7 @@ impl Layer {
     }
 
     /// Corner brackets around a rectangle.
-    fn brackets(&mut self, r: R, len: f32, thick: f32, rgb: Rgb, alpha: u8) {
+    pub(super) fn brackets(&mut self, r: R, len: f32, thick: f32, rgb: Rgb, alpha: u8) {
         let (x, y, w, h) = r;
         let len = len.min(w / 2.0).min(h / 2.0);
         for (cx, cy, sx, sy) in [(x, y, 1.0, 1.0), (x + w, y, -1.0, 1.0), (x, y + h, 1.0, -1.0), (x + w, y + h, -1.0, -1.0)] {
@@ -615,7 +615,7 @@ impl Layer {
 
     /// A polyline over a fixed vertical scale `lo..hi`, with the area under it fading out.
     #[allow(clippy::too_many_arguments)]
-    fn chart(&mut self, r: R, data: &[f32], lo: f32, hi: f32, rgb: Rgb, thick: f32, fill_alpha: u8, end_dot: bool) {
+    pub(super) fn chart(&mut self, r: R, data: &[f32], lo: f32, hi: f32, rgb: Rgb, thick: f32, fill_alpha: u8, end_dot: bool) {
         let (x, y, w, h) = r;
         if data.len() < 2 || w < 6.0 || h < 6.0 || hi <= lo {
             return;
@@ -661,7 +661,7 @@ impl Layer {
 }
 
 /// A rounded bar: a faint track and a fill running from colour `a` to colour `b`.
-fn bar(p: &mut Painter, r: R, frac: f32, a: Rgb, b: Rgb, track: (Rgb, u8)) {
+pub(super) fn bar(p: &mut Painter, r: R, frac: f32, a: Rgb, b: Rgb, track: (Rgb, u8)) {
     let (x, y, w, h) = r;
     if w < 2.0 || h < 1.0 {
         return;
@@ -676,7 +676,7 @@ fn bar(p: &mut Painter, r: R, frac: f32, a: Rgb, b: Rgb, track: (Rgb, u8)) {
 
 /// A bar made of blocks: `n` of them, the first ones lit up to `frac`.
 #[allow(clippy::too_many_arguments)]
-fn blocks(p: &mut Painter, r: R, frac: f32, n: usize, gap: f32, color: &dyn Fn(f32) -> Rgb, round: f32, off: (Rgb, u8)) {
+pub(super) fn blocks(p: &mut Painter, r: R, frac: f32, n: usize, gap: f32, color: &dyn Fn(f32) -> Rgb, round: f32, off: (Rgb, u8)) {
     let (x, y, w, h) = r;
     if n == 0 || w < 2.0 {
         return;
@@ -695,11 +695,11 @@ fn blocks(p: &mut Painter, r: R, frac: f32, n: usize, gap: f32, color: &dyn Fn(f
 }
 
 /// A hairline.
-fn hair(p: &mut Painter, r: R, rgb: Rgb, alpha: u8) {
+pub(super) fn hair(p: &mut Painter, r: R, rgb: Rgb, alpha: u8) {
     p.layer.fill_rrect((r.0, r.1, r.2.max(1.0), r.3.max(1.0)), 0.0, &move |_| rgb, alpha);
 }
 
-fn is_tall((_, _, w, h): R) -> bool {
+pub(super) fn is_tall((_, _, w, h): R) -> bool {
     h > w * 1.1
 }
 
@@ -741,7 +741,7 @@ fn mini_stat(p: &mut Painter, x: f32, top: f32, label: &str, value: &str, cap: f
 }
 
 /// "H A D E S"
-fn spaced(s: &str) -> String {
+pub(super) fn spaced(s: &str) -> String {
     s.chars().map(|c| c.to_string()).collect::<Vec<_>>().join(" ")
 }
 

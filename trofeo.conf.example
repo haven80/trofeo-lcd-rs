@@ -365,6 +365,24 @@ language = en
 # glow), artist / title / album, a progress bar with times, and the spectrum on the side.
 # Colors come from the cover. It replaces the status lines while it is shown.
 # music_screen = false
+# The design of the screen:
+#   classic   = the card described above (cover, text, spectrum)
+#   vinyl     = a record that spins (the cover is its label) and a tonearm that follows the track
+#   poster    = the cover big, the title in huge letters, a mirrored spectrum
+#   minimal   = only the title, centred, with a faint wave behind it
+#   radial    = rays of the spectrum around the cover, the progress as a circle
+#   equalizer = LED blocks with the peaks held (green / yellow / red)
+#   wave      = soft layered waves, the cover and the title above them
+#   cassette  = a tape: the reels turn and swap their tape as the track goes on
+#   vu        = two analogue VU meters and a small display, like an amplifier
+# The new designs use music_bg, music_progress and music_stats below like the card does.
+# music_layout = classic
+# music_clock = true           # new designs: the clock in a corner
+# music_album = true           # new designs: the album name under the artist
+# music_glow = 50              # new designs: 0-100, glow around the cover and the title
+# music_colors = #FF2BD6, #00E5FF   # new designs: your colors instead of those of the cover
+# music_font = auto            # auto | smooth | pixel
+# music_text_color = #FFFFFF   # new designs: the color of the text
 # Background behind the card:
 #   gradient = the cover's dominant color fading to near-black (default, Spotify-like)
 #   blur     = the cover itself, blurred      color = one flat color from the cover

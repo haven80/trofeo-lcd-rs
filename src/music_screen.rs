@@ -176,7 +176,7 @@ pub struct Stats {
 }
 
 /// `(label, value)` for each wanted item that has data, in the wanted order.
-fn footer_segments(items: &[StatItem], st: &Stats, o: &UiOptions) -> Vec<(String, String)> {
+pub(crate) fn footer_segments(items: &[StatItem], st: &Stats, o: &UiOptions) -> Vec<(String, String)> {
     let tr = crate::i18n::t();
     let with_temp = |pct: String, t: Option<String>| match t {
         Some(t) => format!("{pct} {t}"),
@@ -347,7 +347,7 @@ fn corner_coverage(x: u32, y: u32, size: u32, r: f32) -> f32 {
 }
 
 /// The record drawn when a track has no cover.
-fn placeholder(size: u32, accent: Rgb) -> RgbImage {
+pub(crate) fn placeholder(size: u32, accent: Rgb) -> RgbImage {
     let s = size as f32;
     RgbImage::from_fn(size, size, |x, y| {
         let (fx, fy) = (x as f32 + 0.5 - s / 2.0, y as f32 + 0.5 - s / 2.0);
@@ -513,6 +513,20 @@ fn build_cache(w: u32, h: u32, cover: &Option<Arc<CoverArt>>, bg: Bg) -> Cache {
         }
     }
     Cache { cover: cover.clone(), size: (w, h), bg, accent, backdrop: Some(bd), keyed_cover: None }
+}
+
+/// Only the background of the screen (no cover, no glow), for the designs of `tiles/music.rs`:
+/// the accent of the cover and, unless the mode is `none` / `effect` (painted live), the picture.
+pub(crate) fn background(w: u32, h: u32, cover: &Option<Arc<CoverArt>>, bg: Bg) -> (Rgb, Option<Framebuffer>) {
+    let source: Option<RgbImage> = cover.as_ref().and_then(|c| RgbImage::from_raw(c.width, c.height, c.rgb.clone()));
+    let tiny: Option<RgbImage> = source.as_ref().map(|img| imageops::resize(img, 24, 24, FilterType::Triangle));
+    let accent = tiny.as_ref().map(|t| accent_from_rgb(t.as_raw())).unwrap_or(DEFAULT_ACCENT);
+    if bg.mode == BgMode::None || bg.mode == BgMode::Effect {
+        return (accent, None);
+    }
+    let mut bd = new_fb(w, h);
+    paint_background(&mut bd, &bg, accent, source.as_ref());
+    (accent, Some(bd))
 }
 
 // ---------------------------------------------------------------------------

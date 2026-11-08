@@ -157,6 +157,7 @@ pub const DASH_PALETTES: &[&str] = &[
     "default", "pastel", "fluo", "neon", "candy", "sunset", "ocean", "aurora", "fire", "forest", "ice", "mono", "rainbow", "matrix", "amber",
     "violet", "crimson", "snow", "lagoon", "deep", "tropical", "midnight", "dusk", "ember", "mint", "rose", "slate",
 ];
+pub const MUSIC_LAYOUTS: &[&str] = &["classic", "vinyl", "poster", "minimal", "radial", "equalizer", "wave", "cassette", "vu"];
 pub const GAMING_LAYOUTS: &[&str] = &["classic", "arena", "zen", "cockpit", "tactical", "neon", "telemetry", "quest", "arcade"];
 pub const GAMING_BG: &[&str] = &["design", "global", "color", "gradient", "effect", "image"];
 pub const STEAM_BG: &[&str] = &["blur", "global", "color", "gradient", "effect", "image"];
@@ -824,6 +825,13 @@ pub fn fields() -> Vec<Field> {
     add(Field::new("music_screen", "music", "Music card", "Scheda musica", Bool)
         .def("false")
         .help("While a track plays: cover, title, progress bar and spectrum", "Mentre suona un brano: copertina, titolo, barra di avanzamento e spettro"));
+    add(Field::new("music_layout", "music", "Design of the music screen", "Grafica della schermata musica", Choice(MUSIC_LAYOUTS))
+        .def("classic")
+        .when("music_screen", music_on)
+        .help(
+            "classic = the card with cover, text and spectrum; vinyl = a spinning record and tonearm; poster = huge title; minimal = only the title; radial = rays around the cover; equalizer = LED bars; wave = soft waves; cassette = a tape with turning reels; vu = analogue meters",
+            "classic = la scheda con copertina, testo e spettro; vinyl = disco che gira con braccio; poster = titolo enorme; minimal = solo il titolo; radial = raggi attorno alla copertina; equalizer = barre a LED; wave = onde morbide; cassette = una cassetta con bobine che girano; vu = strumenti analogici",
+        ));
     add(Field::new("music_bg", "music", "Background", "Sfondo", Choice(MUSIC_BG)).def("gradient").when("music_screen", music_on));
     add(Field::new("music_bg_brightness", "music", "Background brightness", "Luminosità dello sfondo", int(0, 100)).def("40").when("music_screen", music_on));
     add(Field::new("music_bg_blur", "music", "Blur", "Sfocatura", int(0, 100)).def("70").when("music_screen", music_on));
@@ -833,8 +841,27 @@ pub fn fields() -> Vec<Field> {
     add(Field::new("music_spectrum_color", "music", "Spectrum color", "Colore dello spettro", Text)
         .def("cover")
         .when("music_screen", music_on)
-        .help("cover, main, a color, several colors, or palette names", "cover, main, un colore, più colori o nomi di palette"));
+        .help("Classic card only. cover, main, a color, several colors, or palette names", "Solo scheda classic. cover, main, un colore, più colori o nomi di palette"));
     add(Field::new("music_stats", "music", "Small info at the bottom", "Info in basso", Multi(MUSIC_STATS)).def("cpu, gpu, ram").when("music_screen", music_on));
+    add(Field::new("music_clock", "music", "Clock", "Orologio", Bool)
+        .def("true")
+        .when("music_screen", music_on)
+        .help("In the new designs (not classic)", "Nei nuovi design (non classic)"));
+    add(Field::new("music_album", "music", "Album name", "Nome dell'album", Bool)
+        .def("true")
+        .when("music_screen", music_on)
+        .help("Under the artist, in the new designs", "Sotto l'artista, nei nuovi design"));
+    add(Field::new("music_glow", "music", "Glow around the cover and the title (%)", "Alone attorno a copertina e titolo (%)", int(0, 100))
+        .def("50")
+        .when("music_screen", music_on));
+    add(Field::new("music_colors", "music", "Own colors", "Colori propri", ColorList)
+        .when("music_screen", music_on)
+        .help(
+            "Used by the new designs instead of the colors taken from the cover (equalizer, vu and cassette have colors of their own)",
+            "Usati dai nuovi design al posto dei colori ricavati dalla copertina (equalizer, vu e cassette hanno colori propri)",
+        ));
+    add(Field::new("music_font", "music", "Font", "Font", Choice(&["auto", "smooth", "pixel"])).def("auto").when("music_screen", music_on));
+    add(Field::new("music_text_color", "music", "Text color", "Colore del testo", Color).when("music_screen", music_on).help("Empty = white", "Vuoto = bianco"));
 
     // ---- pixel game
     add(Field::new("pixel_game", "game", "Pixel game under the clock", "Mini gioco sotto l'orologio", Bool).def("true"));

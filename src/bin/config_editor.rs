@@ -1547,6 +1547,10 @@ impl App {
             // this section is about the in-game screen: show it
             self.state = PreviewState::Gaming;
         }
+        if self.section == "music" && self.pv_section != self.section {
+            // this section is about the music screen: show it
+            self.state = PreviewState::Music;
+        }
         if self.section == "frame" || self.section == "tiles" || self.section == "steam" {
             let name = self.section.clone();
             let names = self.layout_names();

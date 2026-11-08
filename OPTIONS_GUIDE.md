@@ -543,6 +543,13 @@ spectrum_rainbow_speed = 10
 | Key | CLI | Values | Default |
 |---|---|---|---|
 | `music_screen` | `--music-screen` | `true`/`false` | `false` |
+| `music_layout` | `--music-layout` | `classic` / `vinyl` / `poster` / `minimal` / `radial` / `equalizer` / `wave` / `cassette` / `vu` | `classic` |
+| `music_clock` | `--music-clock` | `true`/`false` (new designs) | `true` |
+| `music_album` | `--music-album` | `true`/`false` (new designs) | `true` |
+| `music_glow` | `--music-glow` | `0`-`100` (new designs) | `50` |
+| `music_colors` | `--music-colors` | one or more colors (new designs) | from the cover |
+| `music_font` | `--music-font` | `auto` / `smooth` / `pixel` | `auto` |
+| `music_text_color` | `--music-text-color` | color | white |
 | `music_bg` | `--music-bg` | `gradient` / `blur` / `color` / `solid` / `none` / `effect` | `gradient` |
 | `music_bg_brightness` | `--music-bg-brightness` | `0`-`100` | `40` |
 | `music_bg_blur` | `--music-bg-blur` | `0`-`100` (only `blur`) | `70` |
@@ -560,6 +567,47 @@ the accent color (artist line, progress bar, spectrum) is taken
 from the cover, so every album gets its own look. Titles too long to fit scroll.
 In portrait orientation the cover goes on top, the text below it and the
 spectrum at the bottom. When the music stops the normal screen/layout comes back.
+
+- **Designs** (`music_layout`, *applies live*). Besides the classic card there are eight more
+  designs, picked in the settings editor (Music section) or with `music_layout = ...`. All of them show
+  the cover, title, artist, album, the progress bar with the times (`music_progress`), the spectrum, the
+  small system line at the bottom (`music_stats`) and the clock (`music_clock`), on the background chosen
+  with `music_bg` (the gradient or the blurred cover work very well). The colours come from the cover;
+  `music_colors` replaces them (the equalizer, the vu and the cassette have colours of their own). The
+  spectrum is drawn by each design in its own way, so `spectrum_style` and `music_spectrum_color` are for
+  the classic card only. In portrait orientation the designs stack: picture, text, spectrum.
+
+**`vinyl`** — a record that spins (the cover is its label) with a tonearm that moves along the track.
+
+![vinyl](img/music-vinyl.png)
+
+**`poster`** — the cover big and the title in huge letters, with a mirrored spectrum.
+
+![poster](img/music-poster.png)
+
+**`minimal`** — only the title, centred, with a faint wave behind it and a thin progress line.
+
+![minimal](img/music-minimal.png)
+
+**`radial`** — the spectrum as rays around the cover, the progress as a circle.
+
+![radial](img/music-radial.png)
+
+**`equalizer`** — a hi-fi equaliser of LED blocks (green, yellow, red) with the peaks held.
+
+![equalizer](img/music-equalizer.png)
+
+**`wave`** — soft layered waves under the cover and the title.
+
+![wave](img/music-wave.png)
+
+**`cassette`** — a tape: the reels turn and swap their tape as the track goes on.
+
+![cassette](img/music-cassette.png)
+
+**`vu`** — two analogue VU meters and a small display, like an amplifier.
+
+![vu](img/music-vu.png)
 
 - The card replaces the status lines and the ticker while it is shown (it is a
   full screen of its own). The in-game dashboard still wins while you are gaming.
