@@ -907,6 +907,13 @@ pub fn fields() -> Vec<Field> {
             "Only for the FPS the Radeon driver reports (games where Windows gives no frame events, such as exclusive-fullscreen DX9 games). Some of them read double: set 2 to halve it. 1 = as the driver says",
             "Solo per gli FPS riportati dal driver Radeon (giochi per cui Windows non da eventi di frame, come i giochi DX9 a schermo intero esclusivo). Alcuni leggono il doppio: imposta 2 per dimezzare. 1 = come dice il driver",
         ));
+    add(Field::new("start_in_tray", "system", "Start minimised in the tray", "Avvia ridotto nella tray", Bool)
+        .def("false")
+        .restart()
+        .help(
+            "Windows. When the program starts, the console window goes away and an icon appears in the tray: a click shows or hides the window, the right button opens a menu (show / hide, exit)",
+            "Windows. All'avvio la finestra della console scompare e compare un'icona nella tray: un clic mostra o nasconde la finestra, il tasto destro apre un menu (mostra / nascondi, esci)",
+        ));
     add(Field::new("update_check", "system", "Tell me when a new version is out", "Avvisami quando esce una nuova versione", Bool)
         .def("false")
         .restart()
@@ -977,6 +984,13 @@ pub fn group_title(group: &str) -> (&str, &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_tray_option_is_off_by_default_and_needs_a_restart() {
+        let f = fields();
+        let t = f.iter().find(|x| x.key == "start_in_tray").expect("start_in_tray is in the schema");
+        assert!(t.default == "false" && t.restart);
+    }
 
     #[test]
     fn keys_are_unique_and_sections_exist() {

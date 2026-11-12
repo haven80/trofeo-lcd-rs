@@ -617,9 +617,6 @@ fn draw_equalizer(p: &mut Painter, sc: &Scene, r: R) {
     let ph = progress_h(sc, pcap, 5.0);
     let zone = (x + pad, top, w - 2.0 * pad, y + h - pad - ph - top - pad * 0.5);
     // the LED columns
-    let pcap = small * 0.95;
-    let ph = progress_h(sc, pcap, 5.0);
-    let zone = (x + pad, y + pad + row_h + pad * 0.9, w - 2.0 * pad, y + h - pad - ph - (y + pad + row_h + pad * 0.9) - pad * 0.5);
     if zone.3 > 20.0 && zone.2 > 40.0 {
         let cell_w = (zone.3 * 0.11).clamp(12.0, 34.0);
         let n = ((zone.2 / (cell_w * 1.25)) as usize).clamp(12, 64);

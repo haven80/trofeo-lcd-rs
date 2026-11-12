@@ -125,6 +125,12 @@ language = en
 # figure is used when it gives one. "trofeo_lcd --diag" prints both, and the busy engines.
 # gpu_usage_source = auto        # auto | windows (always the Windows counter, as before 2.7.1)
 
+# --- Tray icon ------------------------------------------------------------------
+# Windows: start minimised. The console window goes away as soon as the program runs and an
+# icon appears in the tray: a click shows / hides the window, the right button opens a menu
+# (show / hide, exit). Needs a restart. Same as the --start-in-tray flag.
+# start_in_tray = false
+
 # --- New version notice ----------------------------------------------------------
 # Off by default. When on, the program looks on GitHub at start-up (one small request, nothing about
 # your computer is sent, nothing is downloaded) and, if a newer version exists, shows a banner at the
@@ -540,7 +546,7 @@ language = en
 # restarting (orientation, margins, background, language, colors, layouts, brightness, etc.).
 # If the file has an error, the previous configuration stays valid and the reason is
 # written to trofeo-errors.txt (next to trofeo_lcd.exe).
-# Only deepcool, fps_monitor, openrgb, hide_console, screenshot_key, weather_city,
+# Only deepcool, fps_monitor, openrgb, hide_console, start_in_tray, screenshot_key, weather_city,
 # ticker_source and ticker_refresh_min require a restart. weather_unit, the "weather"
 # show/hide/size/position/color/backdrop options, and ticker_position/ticker_size/
 # ticker_color/ticker_backdrop/ticker_width all apply live, like everything else.

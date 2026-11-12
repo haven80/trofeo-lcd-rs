@@ -20,7 +20,9 @@ whose driver was rewritten byte-for-byte from
 See **[NOTICE.md](./NOTICE.md)** for the full provenance and a summary of
 what this fork adds on top of the original.
 
-**New in 2.14.0 — 12-hour clock.** `clock_format = 12h` (settings editor: *Look*, "Time format") shows the time as `2:05 PM` on every clock of the program; `clock_ampm = false` drops the AM / PM.
+**New in 2.15.0 — start minimised in the tray, and a 12-hour clock.** `start_in_tray = true` (or `--start-in-tray`; settings editor, *System*) hides the console window once the program is running and leaves an icon in the tray: a click shows or hides the window, the right button opens a menu with *Open settings editor*, *Show / Hide window* and *Exit*. Off by default, Windows only. And, from 2.14.0, `clock_format = 12h` shows the time as `2:05 PM` on every clock (`clock_ampm = false` drops the AM / PM). See [the options guide](./OPTIONS_GUIDE.md#start-minimised-in-the-tray-restart-required-windows).
+
+**2.14.0 — 12-hour clock.** `clock_format = 12h` (settings editor: *Look*, "Time format") shows the time as `2:05 PM` on every clock of the program; `clock_ampm = false` drops the AM / PM.
 
 **2.13.0 — eight new designs for the music screen.** `music_layout = vinyl | poster | minimal | radial | equalizer | wave | cassette | vu` (or pick it in the settings editor, Music section) replaces the card with a spinning record and tonearm, a poster with a huge title, a minimal title, rays around the cover, an LED equaliser, soft waves, a cassette with turning reels, or two analogue VU meters. They use the same `music_bg`, `music_progress` and `music_stats` as the card, with `music_colors`, `music_font`, `music_clock`, `music_album` and `music_glow` on top. See [the options guide](./OPTIONS_GUIDE.md#music-screen-now-playing-card).
 
@@ -294,6 +296,7 @@ The table below covers just the handful of flags that only exist on the command 
 | `--lcd-test` | `0416:5302` screens (Trofeo Vision 6.86 ...): shows numbered test pictures (5 s each), asks which one is upright and writes `hid_mount` / `hid_header` into `trofeo.conf` (the settings editor has a button for it) | off |
 | `--weather-city <NAME>` | Fixed city for the weather module | auto (IP-based) |
 | `--hide-console` | Hide the console window (Windows) | disabled |
+| `--start-in-tray` | Hide the console window and leave an icon in the tray that shows it again (Windows); same as `start_in_tray = true` | disabled |
 | `-k, --screenshot-key` | Global hotkey to save the current LCD frame as a lossless PNG screenshot (f1-f12, printscreen) | off |
 | `--preview-png <FILE>` | Draw one frame with sample data into a PNG and exit — no USB, audio or sensors (this is what the settings editor uses; with `--preview-state`, `--preview-layout`, `--preview-time`) | off |
 
@@ -996,7 +999,7 @@ the screen to your list with one click).
 
 ### Live reload
 
-`trofeo.conf` is re-read every second; saved changes apply without restarting (a broken file is ignored and the previous settings stay). Only `deepcool`, `fps_monitor`, OpenRGB, `hide_console`, `screenshot_key`, `weather_city`, `ticker_source` and `ticker_refresh_min` need a restart. If a saved file is invalid, the previous settings stay active and the reason is written to `trofeo-errors.txt` next to the executable. The [settings editor](#settings-editor-trofeo_config) relies on this: save in the editor and the LCD updates by itself.
+`trofeo.conf` is re-read every second; saved changes apply without restarting (a broken file is ignored and the previous settings stay). Only `deepcool`, `fps_monitor`, OpenRGB, `hide_console`, `start_in_tray`, `screenshot_key`, `weather_city`, `ticker_source` and `ticker_refresh_min` need a restart. If a saved file is invalid, the previous settings stay active and the reason is written to `trofeo-errors.txt` next to the executable. The [settings editor](#settings-editor-trofeo_config) relies on this: save in the editor and the LCD updates by itself.
 
 ### Per-item control
 

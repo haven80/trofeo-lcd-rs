@@ -39,6 +39,7 @@ mod steam;
 mod frame;
 mod tiles;
 mod ticker;
+mod tray;
 mod update;
 mod weather;
 mod weather_icon;
@@ -183,6 +184,9 @@ struct Config {
     /// shortcut without showing a window. Does not write logs to any file.
     /// Only applies on Windows — ignored on other OSes (with a warning).
     hide_console: bool,
+    /// `start_in_tray` / `--start-in-tray`: once running, the console goes away and a tray icon
+    /// shows / hides it again (Windows only, see `tray.rs`). Off by default.
+    start_in_tray: bool,
     /// DeepCool Digital integration (sends CPU data to the DeepCool
     /// cooler/case display via HID) — enabled by default, can be disabled with
     /// `--no-deepcool`.
@@ -433,6 +437,9 @@ fn print_help() {
          \x20\x20--spectrum-rainbow-speed <DEG/S>  Hue scroll of the rainbow palette (default 30, 0 = static)\n\
          \x20\x20--config <FILE>          Config file (default: trofeo.conf in the program's\n\
          \x20\x20                          folder or the working folder)\n\
+         \x20\x20--start-in-tray           Start minimised: the console goes away and an icon in\n\
+         \x20\x20                          the tray shows / hides it (or use start_in_tray = true\n\
+         \x20\x20                          in the config file). Only applies on Windows.\n\
          \x20\x20--hide-console            Hide the terminal window as soon as the program\n\
          \x20\x20                          starts running. Handy when run via a shortcut/\n\
          \x20\x20                          Task Scheduler at login. Does not write logs\n\
@@ -544,6 +551,7 @@ fn parse_args() -> anyhow::Result<Config> {
     let mut openrgb_device: Option<String> = None;
     let mut openrgb_poll_ms = DEFAULT_OPENRGB_POLL_MS;
     let mut hide_console = false;
+    let mut start_in_tray_cli = false;
     let mut deepcool_enabled = true;
     let mut deepcool_update_ms = DEFAULT_DEEPCOOL_UPDATE_MS;
     let mut screenshot_key: Option<(u32, String)> = None;
@@ -597,6 +605,7 @@ fn parse_args() -> anyhow::Result<Config> {
                 deepcool_update_ms = next_u64(&mut args, "--deepcool-update-ms")?;
             }
             "--hide-console" => hide_console = true,
+            "--start-in-tray" => start_in_tray_cli = true,
             "--flip" => flip_cli = Some(true),
             "--margin" => margin_all = Some(next_u64(&mut args, "--margin")? as u32),
             "--margin-top" => m_top = Some(next_u64(&mut args, "--margin-top")? as u32),
@@ -841,6 +850,7 @@ fn parse_args() -> anyhow::Result<Config> {
     if !(1.0..=10.0).contains(&fps_driver_divisor) {
         anyhow::bail!("fps_driver_divisor: must be between 1 and 10 (got {fps_driver_divisor})");
     }
+    let start_in_tray = start_in_tray_cli || file.get_bool("start_in_tray").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(false);
     let update_check = file.get_bool("update_check").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(false);
     let update_check_hours = file.get_u32("update_check_hours").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(0);
     if update_check_hours > 720 {
@@ -870,6 +880,7 @@ fn parse_args() -> anyhow::Result<Config> {
         openrgb_device,
         openrgb_poll_ms,
         hide_console,
+        start_in_tray,
         deepcool_enabled,
         deepcool_update_ms,
         screenshot_key,
@@ -2067,6 +2078,10 @@ fn main() -> anyhow::Result<()> {
 
     let lcd = LyLcd::open()?;
     let mut hs = lcd.handshake()?;
+    // Everything that could fail at start-up is behind us: now the window can go to the tray.
+    if config.start_in_tray {
+        tray::start(ConfigFile::find_path(config.config_explicit.as_deref()));
+    }
     hs.rotate_180 = ROTATE_180_OVERRIDE;
     hs.rotation = config.orientation.output_rotation(config.flip);
     hs.brightness = config.brightness;
@@ -2348,6 +2363,7 @@ fn main() -> anyhow::Result<()> {
                             || new_cfg.fps_monitor != config.fps_monitor
                             || new_cfg.openrgb_device != config.openrgb_device
                             || new_cfg.hide_console != config.hide_console
+                            || new_cfg.start_in_tray != config.start_in_tray
                             || new_cfg.screenshot_key != config.screenshot_key
                             || new_cfg.weather_city != config.weather_city
                             || new_cfg.ticker_source != config.ticker_source
@@ -2381,7 +2397,7 @@ fn main() -> anyhow::Result<()> {
                                 println!("Configuration reloaded.");
                                 report_config_error("");
                                 if restart_needed {
-                                    println!("(deepcool, fps_monitor, openrgb, hide_console, screenshot_key, weather_city, ticker_source, ticker_refresh_min and the update_* keys require a restart)");
+                                    println!("(deepcool, fps_monitor, openrgb, hide_console, start_in_tray, screenshot_key, weather_city, ticker_source, ticker_refresh_min and the update_* keys require a restart)");
                                 }
                                 config = new_cfg;
                             }
@@ -5218,7 +5234,7 @@ mod layout_tests {
         }
         // every key of the editor is one the program reads from the config file
         let from_cli_or_file = |k: &str| is_override_key(k) || ["orientation", "flip", "panel_size", "background", "background_dim", "ffmpeg", "language",
-            "hid_mount", "hid_header", "color", "silence_threshold", "silence_timeout_ms", "weather_city", "ticker_source", "ticker_refresh_min", "gpu_usage_source", "fps_source", "fps_driver_divisor", "update_check", "update_check_hours", "update_notice_secs", "margin", "margin_top", "margin_bottom", "margin_left", "margin_right"].contains(&k);
+            "hid_mount", "hid_header", "color", "silence_threshold", "silence_timeout_ms", "weather_city", "ticker_source", "ticker_refresh_min", "gpu_usage_source", "fps_source", "fps_driver_divisor", "update_check", "update_check_hours", "update_notice_secs", "start_in_tray", "margin", "margin_top", "margin_bottom", "margin_left", "margin_right"].contains(&k);
         for f in fields() {
             assert!(from_cli_or_file(&f.key), "{} is not a key of the program", f.key);
         }

@@ -85,7 +85,7 @@ default.
 
 Of the options that actually live in `trofeo.conf`, everything reloads live
 *except* `deepcool`, `fps_monitor`, `weather_city`, `ticker_source`,
-`ticker_refresh_min` and the three `update_*` keys — change one of these in the file and the program tells
+`ticker_refresh_min`, `start_in_tray` and the three `update_*` keys — change one of these in the file and the program tells
 you on the next reload that a restart is needed, while the rest of the file
 still applies live.
 
@@ -1463,6 +1463,24 @@ nothing else prints anywhere visible.
 ```
 trofeo_lcd.exe --hide-console
 ```
+
+## Start minimised in the tray *(restart required, Windows)*
+
+| Key | CLI | Values | Default |
+|---|---|---|---|
+| `start_in_tray` | `--start-in-tray` | `true`/`false` | `false` |
+
+With `start_in_tray = true` (settings editor: *System*, "Start minimised in the tray"), once the program is
+running — the screen is found and working — its console window goes away and an **icon appears in the notification
+area** of the taskbar. A click on the icon shows or hides the window again. The right button opens a menu:
+**Open settings editor** (starts `trofeo_config.exe`, which must be in the same folder, on the configuration file in use),
+**Show / Hide window**, **Exit**. Exit shows the window again and quits the program.
+
+- Nothing changes unless you turn it on. It needs a restart.
+- If the program is started from Windows Terminal, the window that is hidden is the whole Terminal window (with all its tabs).
+  The autostart task (`scripts/install-autostart.ps1 -Arguments "--start-in-tray"`) runs in its own console, which is the clean way.
+- With `--hide-console` too there is no window to show: the icon still gives the editor and Exit.
+- On other systems the option is ignored, with a warning.
 
 ## Other flags (not settings, but useful)
 
