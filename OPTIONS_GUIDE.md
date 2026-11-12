@@ -1047,11 +1047,16 @@ percent_decimals = 1
 
 | Key | CLI | Values | Default |
 |---|---|---|---|
+| `clock_format` | `--clock-format` | `24h` / `12h` | `24h` |
+| `clock_ampm` | `--clock-ampm` | `true`/`false` (only with `12h`) | `true` |
 | `clock_time_size` | `--clock-time-size` | `1`-`60` | `20` |
 | `clock_date_size` | `--clock-date-size` | `1`-`30` | `6` |
 | `clock_backdrop` | `--clock-backdrop` | `true`/`false` | follows `text_backdrop` |
 
+`clock_format = 12h` writes the time as `2:05:09 PM` on **every** clock of the program: the big clock, the status line, the clock layouts, the tiles, `deck` / `cards` / `orbit` / `console`, the gaming, Steam and music screens, and the `time` item of the music footer. `clock_ampm = false` drops the AM / PM (`2:05:09`). The date is not affected.
+
 ```ini
+clock_format = 12h
 clock_time_size = 28
 clock_date_size = 8
 clock_backdrop = true

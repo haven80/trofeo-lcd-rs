@@ -786,6 +786,12 @@ pub fn fields() -> Vec<Field> {
     add(Field::new("clock_color", "look", "Big clock", "Orologio grande", Color));
     add(Field::new("text_backdrop", "look", "Panel behind the text", "Pannello dietro il testo", Bool).def("false"));
     add(Field::new("clock_backdrop", "look", "Panel behind the clock", "Pannello dietro l'orologio", Bool));
+    add(Field::new("clock_format", "look", "Time format", "Formato dell'ora", Choice(&["24h", "12h"]))
+        .def("24h")
+        .help("12h = 2:05 PM instead of 14:05, on every clock of the program", "12h = 2:05 PM invece di 14:05, su tutti gli orologi del programma"));
+    add(Field::new("clock_ampm", "look", "Show AM / PM", "Mostra AM / PM", Bool)
+        .def("true")
+        .when("clock_format", &["12h"]));
     add(Field::new("clock_time_size", "look", "Clock size", "Dimensione dell'orologio", int(1, 60)).def("20"));
     add(Field::new("clock_date_size", "look", "Date size", "Dimensione della data", int(1, 30)).def("6"));
     add(Field::new("net_unit", "look", "Network unit", "Unità della rete", Choice(&["kb", "mb", "auto"])).def("kb"));

@@ -1027,7 +1027,7 @@ fn view(spec: TileSpec, d: &WidgetData, s: &Settings, now: &chrono::DateTime<Loc
         Kind::Clock => {
             v.label = case(i18n::weekday(now));
             v.extra = case(i18n::day_month_year(now));
-            v.value = now.format(if s.clock_seconds { "%H:%M:%S" } else { "%H:%M" }).to_string();
+            v.value = crate::fmt_clock(now, s.clock_seconds);
             v.look = Look::Bar;
         }
         Kind::Cpu => {

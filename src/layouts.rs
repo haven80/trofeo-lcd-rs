@@ -375,7 +375,7 @@ fn build_view(w: Widget, d: &WidgetData, color_mode: ColorMode) -> View {
         },
         Clock => View {
             label: i18n::weekday(&now),
-            value: now.format("%H:%M:%S").to_string(),
+            value: crate::fmt_clock(&now, true),
             detail: i18n::day_month_year(&now),
             gauge: None,
             value_color: opts().clock_color.or_else(|| Some(accent_color(color_mode))),

@@ -920,6 +920,26 @@ const OVERRIDE_KEYS: &[&str] = &[
     "panel", "panel_size", "font", "font_weight",
 ];
 
+/// The time of day as every clock of the program writes it: `14:05:09` or, with
+/// `clock_format = 12h`, `2:05:09 PM` (`clock_ampm = false` drops the AM / PM).
+fn fmt_clock(now: &chrono::DateTime<Local>, seconds: bool) -> String {
+    let o = opts();
+    clock_text(now.hour(), now.minute(), now.second(), seconds, o.clock_12h, o.clock_ampm)
+}
+
+fn clock_text(h: u32, m: u32, s: u32, seconds: bool, twelve: bool, ampm: bool) -> String {
+    let secs = if seconds { format!(":{s:02}") } else { String::new() };
+    if !twelve {
+        return format!("{h:02}:{m:02}{secs}");
+    }
+    let h12 = match h % 12 {
+        0 => 12,
+        v => v,
+    };
+    let suffix = if !ampm { "" } else if h < 12 { " AM" } else { " PM" };
+    format!("{h12}:{m:02}{secs}{suffix}")
+}
+
 /// Network (`net_unit`) and RAM (`mem_unit`) units.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum NetUnit {
@@ -984,7 +1004,7 @@ fn item_key(key: &str) -> Option<(usize, &str)> {
 }
 
 fn is_override_key(key: &str) -> bool {
-    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "fps_item" || key == "clock_backdrop" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key == "console" || key.starts_with("console_") || key.starts_with("gaming_") || key.starts_with("steam_") || key.starts_with("hid_") || key == "deepcool_source" || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
+    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "fps_item" || key == "clock_backdrop" || key == "clock_format" || key == "clock_ampm" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key == "console" || key.starts_with("console_") || key.starts_with("gaming_") || key.starts_with("steam_") || key.starts_with("hid_") || key == "deepcool_source" || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
 }
 
 /// Style for a single item of the info block.
@@ -1197,6 +1217,12 @@ fn parse_ui_options(file: &ConfigFile) -> anyhow::Result<UiOptions> {
             Some(v) => anyhow::bail!("percent_decimals: must be 0 or 1 (got {v})"),
         },
         clock_backdrop: file.get_bool("clock_backdrop").map_err(|e| anyhow::anyhow!(e))?,
+        clock_12h: match file.get("clock_format").map(|v| v.trim().to_ascii_lowercase()).as_deref() {
+            None | Some("24h") | Some("24") => false,
+            Some("12h") | Some("12") => true,
+            Some(v) => anyhow::bail!("clock_format: '{v}' not valid (24h | 12h)"),
+        },
+        clock_ampm: file.get_bool("clock_ampm").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(true),
         clock_time_size: parse_size_opt(file, "clock_time_size", 20)?,
         clock_date_size: parse_size_opt(file, "clock_date_size", 6)?,
         show,
@@ -2740,7 +2766,7 @@ fn main() -> anyhow::Result<()> {
                 ram_mb: Some((sys.used_memory() / 1024 / 1024, sys.total_memory() / 1024 / 1024)),
                 net_kb: Some(latest_net_kb),
                 disk_mb: Some(latest_disk_mb),
-                time: Local::now().format("%H:%M:%S").to_string(),
+                time: fmt_clock(&Local::now(), true),
                 uptime: format_uptime(System::uptime()),
             };
             music_layout_screen.draw(&mut fb, area, t, &bar_heights, peak_tracker.peaks(), &stats, &opts(), None);
@@ -2790,7 +2816,7 @@ fn main() -> anyhow::Result<()> {
                     ram_mb: Some((sys.used_memory() / 1024 / 1024, sys.total_memory() / 1024 / 1024)),
                     net_kb: Some(latest_net_kb),
                     disk_mb: Some(latest_disk_mb),
-                    time: Local::now().format("%H:%M:%S").to_string(),
+                    time: fmt_clock(&Local::now(), true),
                     uptime: format_uptime(System::uptime()),
                 };
                 music.draw(target, t, &bar_heights, peak_tracker.peaks(), &opts());
@@ -3070,7 +3096,7 @@ fn render_preview(config: &Config, req: &PreviewReq) -> anyhow::Result<Framebuff
             ram_mb: Some((wd.used_mb, wd.total_mb)),
             net_kb: Some(wd.net_kb),
             disk_mb: Some(wd.disk_mb),
-            time: Local::now().format("%H:%M:%S").to_string(),
+            time: fmt_clock(&Local::now(), true),
             uptime: format_uptime(System::uptime()),
         };
         let track = media::TrackInfo {
@@ -3111,7 +3137,7 @@ fn render_preview(config: &Config, req: &PreviewReq) -> anyhow::Result<Framebuff
             ram_mb: Some((wd.used_mb, wd.total_mb)),
             net_kb: Some(wd.net_kb),
             disk_mb: Some(wd.disk_mb),
-            time: Local::now().format("%H:%M:%S").to_string(),
+            time: fmt_clock(&Local::now(), true),
             uptime: format_uptime(System::uptime()),
         };
         let track = media::TrackInfo {
@@ -3304,6 +3330,10 @@ struct UiOptions {
     text_backdrop: bool,
     items: [ItemStyle; 12],
     /// Maximum scale of the large clock's time and date.
+    /// `clock_format = 12h`: every clock shows 2:05 PM instead of 14:05.
+    clock_12h: bool,
+    /// With 12h, the AM / PM after the time (`clock_ampm`).
+    clock_ampm: bool,
     clock_time_size: u32,
     clock_date_size: u32,
     /// Panel behind the large clock (None = follows `text_backdrop`).
@@ -3415,6 +3445,8 @@ impl Default for UiOptions {
             net_unit: NetUnit::Kb,
             mem_gb: false,
             nowplaying_label: true,
+            clock_12h: false,
+            clock_ampm: true,
             clock_time_size: 20,
             clock_date_size: 6,
             weather_fahrenheit: false,
@@ -3898,7 +3930,7 @@ fn draw_idle_clock(fb: &mut Framebuffer, color_mode: ColorMode) {
 
     // Each line is resized to fit within the canvas width.
     let max_w = width.saturating_sub(40);
-    let time_str = now.format("%H:%M:%S").to_string();
+    let time_str = fmt_clock(&now, true);
     let mut lines: Vec<(String, u32)> = vec![(time_str, o.clock_time_size)];
     if o.show.clock_date {
         if is_portrait(fb) {
@@ -4049,7 +4081,7 @@ fn draw_status_lines(
     let used_mb = sys.used_memory() / 1024 / 1024;
     let total_mb = sys.total_memory() / 1024 / 1024;
     let uptime_str = format_uptime(System::uptime());
-    let time_str = now.format("%H:%M:%S").to_string();
+    let time_str = fmt_clock(&now, true);
     let date_str = now.format("%Y-%m-%d").to_string();
 
     let gpu_str = gpu_percent.map_or_else(|| "N/A".to_string(), fmt_pct);
@@ -4885,6 +4917,23 @@ mod layout_tests {
         assert!(!music_screen_active(true, false, false, true)); // player reports nothing
         assert!(!music_screen_active(true, true, true, true)); // gaming dashboard wins
         assert!(!music_screen_active(true, true, false, false)); // silence / paused
+    }
+
+    #[test]
+    fn the_clock_can_be_written_in_12_hours() {
+        assert_eq!(clock_text(14, 5, 9, true, false, true), "14:05:09");
+        assert_eq!(clock_text(0, 5, 9, false, false, true), "00:05");
+        assert_eq!(clock_text(14, 5, 9, true, true, true), "2:05:09 PM");
+        assert_eq!(clock_text(0, 30, 0, false, true, true), "12:30 AM");
+        assert_eq!(clock_text(12, 0, 0, false, true, true), "12:00 PM");
+        assert_eq!(clock_text(23, 59, 0, false, true, false), "11:59");
+        assert_eq!(clock_text(9, 7, 0, false, true, true), "9:07 AM");
+        let o = parse_ui_options(&ConfigFile::parse("clock_format = 12h\nclock_ampm = no\n").unwrap()).unwrap();
+        assert!(o.clock_12h && !o.clock_ampm);
+        let d = parse_ui_options(&ConfigFile::parse("").unwrap()).unwrap();
+        assert!(!d.clock_12h && d.clock_ampm);
+        assert!(parse_ui_options(&ConfigFile::parse("clock_format = 13h\n").unwrap()).is_err());
+        assert!(is_override_key("clock_format") && is_override_key("clock_ampm"));
     }
 
     #[test]

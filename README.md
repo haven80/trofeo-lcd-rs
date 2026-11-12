@@ -20,7 +20,9 @@ whose driver was rewritten byte-for-byte from
 See **[NOTICE.md](./NOTICE.md)** for the full provenance and a summary of
 what this fork adds on top of the original.
 
-**New in 2.13.0 — eight new designs for the music screen.** `music_layout = vinyl | poster | minimal | radial | equalizer | wave | cassette | vu` (or pick it in the settings editor, Music section) replaces the card with a spinning record and tonearm, a poster with a huge title, a minimal title, rays around the cover, an LED equaliser, soft waves, a cassette with turning reels, or two analogue VU meters. They use the same `music_bg`, `music_progress` and `music_stats` as the card, with `music_colors`, `music_font`, `music_clock`, `music_album` and `music_glow` on top. See [the options guide](./OPTIONS_GUIDE.md#music-screen-now-playing-card).
+**New in 2.14.0 — 12-hour clock.** `clock_format = 12h` (settings editor: *Look*, "Time format") shows the time as `2:05 PM` on every clock of the program; `clock_ampm = false` drops the AM / PM.
+
+**2.13.0 — eight new designs for the music screen.** `music_layout = vinyl | poster | minimal | radial | equalizer | wave | cassette | vu` (or pick it in the settings editor, Music section) replaces the card with a spinning record and tonearm, a poster with a huge title, a minimal title, rays around the cover, an LED equaliser, soft waves, a cassette with turning reels, or two analogue VU meters. They use the same `music_bg`, `music_progress` and `music_stats` as the card, with `music_colors`, `music_font`, `music_clock`, `music_album` and `music_glow` on top. See [the options guide](./OPTIONS_GUIDE.md#music-screen-now-playing-card).
 
 **2.12.0 — FPS panel in deck, cards, orbit and console.** `fps` is now a panel like `cpu` or `gpu`: `deck = cpu, gpu, fps, ram`, `orbit = cpu, gpu, fps`, `console = gpu, fps, cpu`, `cards = cpu, gpu | fps, ram` (or pick it in the settings editor, Deck, Cards, Orbit and Console). It shows the FPS of the running game with a graph, the frame time and the GPU load, and "no game" otherwise.
 

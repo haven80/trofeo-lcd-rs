@@ -697,7 +697,7 @@ pub(super) fn panel(kind: PKind, d: &WidgetData, hw: &lhm::Readings, s: &Setting
         PKind::Clock => {
             p.title = case(i18n::weekday(now));
             p.sub = case(i18n::day_month_year(now));
-            p.hero = now.format(if ts.clock_seconds { "%H:%M:%S" } else { "%H:%M" }).to_string();
+            p.hero = crate::fmt_clock(now, ts.clock_seconds);
             if let Some(w) = &d.weather {
                 let f = o.weather_fahrenheit;
                 let unit = if smooth { if f { "\u{b0}F" } else { "\u{b0}C" } } else if f { "F" } else { "C" };

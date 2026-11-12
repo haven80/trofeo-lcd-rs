@@ -515,7 +515,7 @@ impl SteamScreen {
             return;
         }
         let now = Local::now();
-        let clock = now.format("%H:%M").to_string();
+        let clock = crate::fmt_clock(&now, false);
         let sig = format!("{:.4}|{area:?}|{s:?}|{n}|{clock}|{}|{:?}|{}", cpos, self.cards.len(), color_mode, lib.map_or(0, |l| l.games.len()));
         if sig != self.sig {
             if self.layer.w != aw as usize || self.layer.h != ah as usize {

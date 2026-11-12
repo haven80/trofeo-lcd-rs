@@ -527,6 +527,10 @@ language = en
 # Units: network in KB/S (default), MB/S, or auto (KB below 1 MB/S, then MB); RAM in MB or GB
 # net_unit = mb
 # mem_unit = gb
+# Time format of every clock (big clock, status line, layouts, tiles, deck, gaming, music...):
+#   24h = 14:05 (default)    12h = 2:05 PM
+# clock_format = 24h
+# clock_ampm = true           # 12h only: the AM / PM after the time
 # Big clock (default screen): size of the time and date
 # clock_backdrop = true         # a panel behind the big clock
 # clock_time_size = 20        # 1..60

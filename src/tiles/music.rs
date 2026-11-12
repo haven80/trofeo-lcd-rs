@@ -999,7 +999,7 @@ impl MusicScreen {
             peaks,
             vu: *vu,
             spin: *spin,
-            clock: chrono::Local::now().format("%H:%M").to_string(),
+            clock: crate::fmt_clock(&chrono::Local::now(), false),
             footer: music_screen::footer_segments(items, stats, o),
         };
         if layer.w != aw as usize || layer.h != ah as usize {

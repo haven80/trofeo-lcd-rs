@@ -1172,7 +1172,7 @@ impl GameScreen {
             _ => (None, None, None),
         };
         let fps = FpsView { now: fps_now, avg, min, max };
-        let clock = now.format("%H:%M").to_string();
+        let clock = crate::fmt_clock(&now, false);
         let beat = (secs as u64) % 2 == 0;
         let game_sig = game.map(|g| (g.name.clone(), g.session().as_secs(), g.mem_mb.map(|m| m / 64), g.window, g.playtime_min, g.store, g.fps));
         let new_sig = format!("{s:?}|{area:?}|{items:?}|{fps:?}|{series:?}|{game_sig:?}|{cover_path:?}|{clock}|{hint}|{:?}|{}", color_mode, s.layout == Layout::Arcade && beat);
