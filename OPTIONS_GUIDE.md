@@ -1043,6 +1043,20 @@ mem_unit = gb
 percent_decimals = 1
 ```
 
+## Fade between screens
+
+| Key | CLI | Values | Default |
+|---|---|---|---|
+| `screen_fade_ms` | `--screen-fade-ms` | `0`-`5000` (milliseconds, `0` = off) | `0` |
+| `screen_fade_style` | `--screen-fade-style` | `cross` / `black` | `cross` |
+
+Whenever the screen on the display changes — the layout rotation moves to the next layout, the music screen starts or ends, the gaming screen starts or ends, the spectrum replaces the clock — the old picture melts into the new one instead of cutting. `screen_fade_ms` is the length of the fade: `300`–`800` feels natural. `0` (the default) switches the feature off completely: nothing is copied or blended, so it costs nothing. `screen_fade_style = cross` dissolves one picture into the other; `black` fades the old one out to black and then fades the new one in. The program draws at its active frame rate during a fade so it looks smooth, then goes back to the idle rate. The update banner is not part of the fade. Applies live when the file is saved.
+
+```ini
+screen_fade_ms = 600
+screen_fade_style = cross
+```
+
 ## Big clock
 
 | Key | CLI | Values | Default |

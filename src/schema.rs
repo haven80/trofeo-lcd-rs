@@ -792,6 +792,12 @@ pub fn fields() -> Vec<Field> {
     add(Field::new("clock_ampm", "look", "Show AM / PM", "Mostra AM / PM", Bool)
         .def("true")
         .when("clock_format", &["12h"]));
+    add(Field::new("screen_fade_ms", "look", "Fade between screens (ms, 0 = off)", "Dissolvenza tra le schermate (ms, 0 = spenta)", int(0, 5000))
+        .def("0")
+        .help("when the screen changes (layout rotation, music, gaming) the old picture melts into the new one; 0 = a plain cut, which costs nothing", "quando la schermata cambia (rotazione dei layout, musica, gaming) la vecchia immagine sfuma nella nuova; 0 = stacco netto, che non costa nulla"));
+    add(Field::new("screen_fade_style", "look", "Fade style", "Stile della dissolvenza", Choice(&["cross", "black"]))
+        .def("cross")
+        .help("cross = the pictures dissolve into each other; black = fade out to black, then fade in", "cross = le immagini si dissolvono l'una nell'altra; black = sfuma al nero e poi riappare"));
     add(Field::new("clock_time_size", "look", "Clock size", "Dimensione dell'orologio", int(1, 60)).def("20"));
     add(Field::new("clock_date_size", "look", "Date size", "Dimensione della data", int(1, 30)).def("6"));
     add(Field::new("net_unit", "look", "Network unit", "Unità della rete", Choice(&["kb", "mb", "auto"])).def("kb"));

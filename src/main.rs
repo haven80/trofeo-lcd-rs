@@ -33,6 +33,7 @@ mod netdisk;
 mod openrgb_sync;
 mod pawnio;
 mod effect;
+mod fade;
 mod pixel_game;
 mod spectrum;
 mod steam;
@@ -1015,7 +1016,7 @@ fn item_key(key: &str) -> Option<(usize, &str)> {
 }
 
 fn is_override_key(key: &str) -> bool {
-    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "fps_item" || key == "clock_backdrop" || key == "clock_format" || key == "clock_ampm" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key == "console" || key.starts_with("console_") || key.starts_with("gaming_") || key.starts_with("steam_") || key.starts_with("hid_") || key == "deepcool_source" || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
+    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "fps_item" || key == "clock_backdrop" || key == "clock_format" || key == "clock_ampm" || key == "screen_fade_ms" || key == "screen_fade_style" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key == "console" || key.starts_with("console_") || key.starts_with("gaming_") || key.starts_with("steam_") || key.starts_with("hid_") || key == "deepcool_source" || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
 }
 
 /// Style for a single item of the info block.
@@ -1234,6 +1235,15 @@ fn parse_ui_options(file: &ConfigFile) -> anyhow::Result<UiOptions> {
             Some(v) => anyhow::bail!("clock_format: '{v}' not valid (24h | 12h)"),
         },
         clock_ampm: file.get_bool("clock_ampm").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(true),
+        screen_fade_ms: match file.get_u32("screen_fade_ms").map_err(|e| anyhow::anyhow!(e))? {
+            None => 0,
+            Some(v) if v <= fade::MAX_MS => v,
+            Some(v) => anyhow::bail!("screen_fade_ms: must be 0..{} (got {v})", fade::MAX_MS),
+        },
+        screen_fade_style: match file.get("screen_fade_style") {
+            None => fade::Style::Cross,
+            Some(v) => fade::Style::parse(v).ok_or_else(|| anyhow::anyhow!("screen_fade_style: '{}' not valid (cross | black)", v.trim()))?,
+        },
         clock_time_size: parse_size_opt(file, "clock_time_size", 20)?,
         clock_date_size: parse_size_opt(file, "clock_date_size", 6)?,
         show,
@@ -2304,6 +2314,7 @@ fn main() -> anyhow::Result<()> {
     let mut ui_layouts = config.ui.layouts.clone();
     let mut layouts_started = Instant::now();
     let mut layout_index = usize::MAX;
+    let mut screen_fade = fade::Fade::new();
     let mut layout_marquee = Marquee::new();
     let mut tiles_screen = tiles::TilesScreen::new();
     let mut frame_screen = frame::FrameScreen::new();
@@ -2541,6 +2552,20 @@ fn main() -> anyhow::Result<()> {
             (true, _) if !opts().tiles.fill_palettes.is_empty() => target_fps.max(5.0),
             _ => target_fps,
         };
+        // Fade between screens (`screen_fade_ms`, off by default): which screen is this frame?
+        // A different one than the last frame starts the fade, drawn at a steady pace.
+        let fade_ms = opts().screen_fade_ms;
+        let screen_id: u64 = if gaming_active && ui_show.dashboard {
+            1 + ((game_style.map_or(0, |s| s as u64) + 1) << 8)
+        } else if music_screen_on {
+            2 + ((music_style as u64) << 8)
+        } else if active_def.is_some() {
+            3 + ((layout_index as u64) << 8)
+        } else {
+            4 + ((is_idle as u64) << 8) + ((layout_index as u64) << 16)
+        };
+        screen_fade.begin(screen_id, fade_ms, opts().screen_fade_style, Instant::now());
+        let target_fps = if screen_fade.active(Instant::now()) { target_fps.max(config.active_fps) } else { target_fps };
         let target_frame_time = Duration::from_secs_f32(1.0 / target_fps);
 
         let bars = compute_bars(&samples, &hann, fft.as_ref(), &bar_bins, &mut running_max);
@@ -2893,6 +2918,9 @@ fn main() -> anyhow::Result<()> {
                 .then_some((PANEL_KEY, PANEL_COLOR, config.ui.panel_opacity));
             fb.blit_ui(&ui, config.margins.left, config.margins.top, UI_KEY, panel);
         }
+
+        // Fade between screens: blends this picture with the previous one (not the banner).
+        screen_fade.finish(fb.as_bytes_mut(), fade_ms, Instant::now());
 
         // The "new version available" banner, on top of everything, for a few seconds.
         if let Some(v) = update_monitor.take_new() {
@@ -3350,6 +3378,9 @@ struct UiOptions {
     clock_12h: bool,
     /// With 12h, the AM / PM after the time (`clock_ampm`).
     clock_ampm: bool,
+    /// Fade between screens, in ms (0 = off): see `fade.rs`.
+    screen_fade_ms: u32,
+    screen_fade_style: fade::Style,
     clock_time_size: u32,
     clock_date_size: u32,
     /// Panel behind the large clock (None = follows `text_backdrop`).
@@ -3463,6 +3494,8 @@ impl Default for UiOptions {
             nowplaying_label: true,
             clock_12h: false,
             clock_ampm: true,
+            screen_fade_ms: 0,
+            screen_fade_style: fade::Style::Cross,
             clock_time_size: 20,
             clock_date_size: 6,
             weather_fahrenheit: false,
@@ -4950,6 +4983,17 @@ mod layout_tests {
         assert!(!d.clock_12h && d.clock_ampm);
         assert!(parse_ui_options(&ConfigFile::parse("clock_format = 13h\n").unwrap()).is_err());
         assert!(is_override_key("clock_format") && is_override_key("clock_ampm"));
+    }
+
+    #[test]
+    fn the_screen_fade_is_off_by_default_and_checked() {
+        let d = parse_ui_options(&ConfigFile::parse("").unwrap()).unwrap();
+        assert_eq!((d.screen_fade_ms, d.screen_fade_style), (0, fade::Style::Cross));
+        let o = parse_ui_options(&ConfigFile::parse("screen_fade_ms = 600\nscreen_fade_style = black\n").unwrap()).unwrap();
+        assert_eq!((o.screen_fade_ms, o.screen_fade_style), (600, fade::Style::Black));
+        assert!(parse_ui_options(&ConfigFile::parse("screen_fade_ms = 5001\n").unwrap()).is_err());
+        assert!(parse_ui_options(&ConfigFile::parse("screen_fade_style = wipe\n").unwrap()).is_err());
+        assert!(is_override_key("screen_fade_ms") && is_override_key("screen_fade_style"));
     }
 
     #[test]
