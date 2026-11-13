@@ -1,0 +1,47 @@
+name: Gallery - show your design
+description: Show how your screen looks (posted from the "Share your design" page of the settings editor)
+title: "[Gallery] "
+labels: ["gallery"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing! Your post becomes part of the project's gallery.
+        Please make sure the picture does not show anything you don't want to make public (song titles, game names, your city...).
+  - type: input
+    id: panel
+    attributes:
+      label: Screen model
+      description: For example Trofeo Vision 9.16 / 11.3 / 6.86
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Program version
+      description: Filled in by the editor
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Picture of your screen
+      description: Drag the picture file here (the editor opens its folder for you).
+    validations:
+      required: true
+  - type: textarea
+    id: settings
+    attributes:
+      label: Settings of the look
+      description: Paste what the editor copied for you (the "Copy the settings" button), so others can try your design.
+      render: ini
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Anything you want to say about it (optional).
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Before posting
+      options:
+        - label: I checked that the picture shows nothing private, and I agree to have it shown in the gallery.
+          required: true
