@@ -16,6 +16,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
+use trofeo_lcd::share;
 use trofeo_lcd::conf_edit::ConfDoc;
 use trofeo_lcd::schema::{self, Field, Kind};
 
@@ -528,7 +529,7 @@ fn run_as_invoker(cmd: &mut std::process::Command) {
 }
 
 /// Runs the main program once to draw a frame of `text` (the configuration being edited).
-fn render_preview(exe: &Path, text: &str, workdir: &Path, state: PreviewState, layout: usize, secs: f64) -> Result<Rendered, String> {
+fn render_preview(exe: &Path, text: &str, workdir: &Path, state: PreviewState, layout: usize, secs: f64, keep: Option<&Path>) -> Result<Rendered, String> {
     let tmp = std::env::temp_dir();
     let id = std::process::id();
     let conf = tmp.join(format!("trofeo_config_{id}.conf"));
@@ -575,6 +576,12 @@ fn render_preview(exe: &Path, text: &str, workdir: &Path, state: PreviewState, l
     }
     let bytes = std::fs::read(&png).map_err(|e| format!("no picture was produced: {e}"))?;
     let _ = std::fs::remove_file(&png);
+    if let Some(dest) = keep {
+        if let Some(d) = dest.parent() {
+            let _ = std::fs::create_dir_all(d);
+        }
+        std::fs::write(dest, &bytes).map_err(|e| format!("cannot save the picture: {e}"))?;
+    }
     let img = image::load_from_memory(&bytes).map_err(|e| format!("cannot read the picture: {e}"))?.to_rgba8();
     let size = [img.width() as usize, img.height() as usize];
     Ok(Rendered { image: egui::ColorImage::from_rgba_unmultiplied(size, img.as_raw()) })
@@ -1205,6 +1212,25 @@ struct App {
     frames: u32,
     shot_requested: bool,
     lcd_test: LcdTest,
+    share: ShareState,
+}
+
+/// The "Share your design" section: the picture taken and what is going on.
+#[derive(Default)]
+struct ShareState {
+    png: Option<PathBuf>,
+    tex: Option<egui::TextureHandle>,
+    /// A screenshot was asked of the running program: (when, the file it should write).
+    waiting: Option<(Instant, PathBuf)>,
+    message: Option<(String, bool)>,
+}
+
+/// Reads a PNG into a texture.
+fn load_png_texture(ctx: &egui::Context, path: &Path) -> Result<egui::TextureHandle, String> {
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    let img = image::load_from_memory(&bytes).map_err(|e| e.to_string())?.to_rgba8();
+    let size = [img.width() as usize, img.height() as usize];
+    Ok(ctx.load_texture("share", egui::ColorImage::from_rgba_unmultiplied(size, img.as_raw()), egui::TextureOptions::LINEAR))
 }
 
 fn default_path() -> PathBuf {
@@ -1238,6 +1264,7 @@ impl App {
             frames: 0,
             shot_requested: false,
             lcd_test: LcdTest::new(),
+            share: ShareState::default(),
         };
         app.load(&path);
         app
@@ -1366,7 +1393,7 @@ impl App {
                 let secs = if self.animate { self.anim_start.elapsed().as_secs_f64() } else { 4.0 };
                 let ctx2 = ctx.clone();
                 std::thread::spawn(move || {
-                    let r = render_preview(&exe, &text, &workdir, state, layout, secs);
+                    let r = render_preview(&exe, &text, &workdir, state, layout, secs, None);
                     let _ = tx.send(r);
                     ctx2.request_repaint();
                 });
@@ -1522,8 +1549,149 @@ impl App {
         ui.label(RichText::new(tr(l, "(n) = settings you changed", "(n) = impostazioni che hai cambiato")).weak().small());
     }
 
+    /// "Share your design": a picture of the screen, the settings of the look, and the GitHub page.
+    fn share_form(&mut self, ui: &mut egui::Ui) {
+        let l = self.lang;
+        let dir = self.path.parent().map(Path::to_path_buf).unwrap_or_default();
+        ui.heading(tr(l, "Share your design", "Condividi il tuo design"));
+        ui.add_space(4.0);
+        ui.label(tr(
+            l,
+            "Show your screen in the project's gallery on GitHub (you need a GitHub account). Take a picture of what is on the screen now, check it, copy the settings that make up the look, and drop both in the page that opens. Nothing is sent from here: you are the one who posts it.",
+            "Mostra il tuo schermo nella galleria del progetto su GitHub (serve un account GitHub). Fai una foto di quello che c'è ora sullo schermo, controllala, copia le impostazioni che compongono l'aspetto e trascina il tutto nella pagina che si apre. Da qui non parte niente: la pubblicazione la fai tu.",
+        ));
+        ui.add_space(4.0);
+        ui.colored_label(
+            Color32::from_rgb(255, 190, 90),
+            tr(
+                l,
+                "The picture is public. Look at it before posting: the title of the song playing, the name of a game, the city of the weather or other names may be on the screen. The preview of this editor uses made-up values instead.",
+                "L'immagine è pubblica. Guardala prima di pubblicare: sullo schermo possono esserci il titolo del brano in riproduzione, il nome di un gioco, la città del meteo o altri nomi. L'anteprima di questo editor usa invece valori inventati.",
+            ),
+        );
+        ui.add_space(8.0);
+        // a screenshot that was asked of the running program
+        if let Some((since, png)) = self.share.waiting.clone() {
+            if !share::request_path(&dir).exists() && png.exists() {
+                match load_png_texture(ui.ctx(), &png) {
+                    Ok(t) => {
+                        self.share.tex = Some(t);
+                        self.share.png = Some(png);
+                        self.share.message = Some((tr(l, "Done. Look at the picture below.", "Fatto. Guarda l'immagine qui sotto.").to_string(), false));
+                    }
+                    Err(e) => self.share.message = Some((e, true)),
+                }
+                self.share.waiting = None;
+            } else if since.elapsed() > Duration::from_secs(6) {
+                let _ = std::fs::remove_file(share::request_path(&dir));
+                self.share.waiting = None;
+                self.share.message = Some((
+                    tr(
+                        l,
+                        "The program did not answer. trofeo_lcd must be running with this same configuration file (and be version 2.17 or newer).",
+                        "Il programma non ha risposto. trofeo_lcd deve essere in esecuzione con questo stesso file di configurazione (e dalla versione 2.17 in poi).",
+                    )
+                    .to_string(),
+                    true,
+                ));
+            } else {
+                ui.ctx().request_repaint_after(Duration::from_millis(200));
+            }
+        }
+        ui.horizontal_wrapped(|ui| {
+            let busy = self.share.waiting.is_some();
+            if ui.add_enabled(!busy, egui::Button::new(tr(l, "Take a picture of my screen", "Fai una foto del mio schermo"))).clicked() {
+                let png = share::gallery_dir(&dir).join(share::png_name());
+                match share::write_request(&dir, &png) {
+                    Ok(()) => {
+                        self.share.waiting = Some((Instant::now(), png));
+                        self.share.message = None;
+                    }
+                    Err(e) => self.share.message = Some((format!("{e}"), true)),
+                }
+            }
+            let can_preview = self.preview.exe.is_some();
+            if ui
+                .add_enabled(can_preview && !busy, egui::Button::new(tr(l, "Use the preview instead", "Usa invece l'anteprima")))
+                .on_hover_text(tr(l, "Made-up values: nothing personal on it", "Valori inventati: niente di personale"))
+                .clicked()
+            {
+                if let Some(exe) = self.preview.exe.clone() {
+                    let png = share::gallery_dir(&dir).join(share::png_name());
+                    match render_preview(&exe, &self.ed.doc.to_text(), &dir, self.state, self.layout_idx, 4.0, Some(&png)) {
+                        Ok(_) => match load_png_texture(ui.ctx(), &png) {
+                            Ok(t) => {
+                                self.share.tex = Some(t);
+                                self.share.png = Some(png);
+                                self.share.message = Some((tr(l, "Done. Look at the picture below.", "Fatto. Guarda l'immagine qui sotto.").to_string(), false));
+                            }
+                            Err(e) => self.share.message = Some((e, true)),
+                        },
+                        Err(e) => self.share.message = Some((e, true)),
+                    }
+                }
+            }
+            if busy {
+                ui.label(RichText::new(tr(l, "waiting for the program...", "in attesa del programma...")).weak());
+            }
+        });
+        if let Some((m, err)) = &self.share.message {
+            ui.colored_label(if *err { Color32::from_rgb(255, 120, 120) } else { Color32::from_rgb(120, 220, 140) }, m);
+        }
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+            if let Some(t) = &self.share.tex {
+                let sz = t.size_vec2();
+                let scale = (ui.available_width() / sz.x).min(1.0).max(0.05);
+                ui.add_space(6.0);
+                ui.add(egui::Image::new(egui::load::SizedTexture::new(t.id(), sz * scale)).rounding(4.0));
+            }
+            if let Some(png) = self.share.png.clone() {
+                ui.add_space(8.0);
+                ui.label(RichText::new(tr(l, "Settings of the look", "Impostazioni dell'aspetto")).strong().color(Color32::from_rgb(140, 190, 255)));
+                ui.separator();
+                ui.label(RichText::new(tr(
+                    l,
+                    "Only what you changed in the look of the screens. No files, folders, city, sensors or system settings.",
+                    "Solo quello che hai cambiato nell'aspetto delle schermate. Niente file, cartelle, città, sensori o impostazioni di sistema.",
+                )).weak().small());
+                let text = share::settings_text(&self.ed.doc, &self.fields);
+                let mut shown = if text.is_empty() { tr(l, "(everything is at its default)", "(tutto è ai valori predefiniti)").to_string() } else { text.clone() };
+                ui.add(egui::TextEdit::multiline(&mut shown).font(egui::TextStyle::Monospace).desired_width(f32::INFINITY).desired_rows(6));
+                ui.add_space(6.0);
+                ui.horizontal_wrapped(|ui| {
+                    if ui.button(tr(l, "Copy the settings", "Copia le impostazioni")).clicked() {
+                        ui.ctx().copy_text(text.clone());
+                        self.share.message = Some((tr(l, "Copied. Paste them (Ctrl+V) in the page.", "Copiate. Incollale (Ctrl+V) nella pagina.").to_string(), false));
+                    }
+                    if ui.button(tr(l, "Open the folder with the picture", "Apri la cartella con l'immagine")).clicked() {
+                        if let Some(d) = png.parent() {
+                            share::open(&d.to_string_lossy());
+                        }
+                    }
+                    if ui.button(tr(l, "Open the GitHub page", "Apri la pagina di GitHub")).clicked() {
+                        share::open(&share::issue_url(env!("CARGO_PKG_VERSION")));
+                    }
+                });
+                ui.add_space(4.0);
+                ui.label(RichText::new(tr(
+                    l,
+                    "In the page: drag the picture file into the box for the picture, paste the settings in the box for the settings, then send.",
+                    "Nella pagina: trascina il file dell'immagine nella casella dell'immagine, incolla le impostazioni nella casella delle impostazioni, poi invia.",
+                )).weak());
+            }
+            ui.add_space(10.0);
+            if ui.link(tr(l, "See the gallery of the other users", "Guarda la galleria degli altri utenti")).clicked() {
+                share::open(share::GALLERY_LIST);
+            }
+        });
+    }
+
     fn form(&mut self, ui: &mut egui::Ui) {
         let l = self.lang;
+        if self.section == "share" {
+            self.share_form(ui);
+            return;
+        }
         if self.section == "raw" {
             let text = self.raw_text.get_or_insert_with(|| self.ed.doc.to_text());
             ui.label(RichText::new(tr(l, "The file as text. Edit freely; the changes apply as you type.", "Il file come testo. Modificalo liberamente; le modifiche valgono man mano che scrivi.")).weak());

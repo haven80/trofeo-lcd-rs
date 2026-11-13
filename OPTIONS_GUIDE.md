@@ -1481,6 +1481,17 @@ nothing else prints anywhere visible.
 trofeo_lcd.exe --hide-console
 ```
 
+## Share your design
+
+The settings editor has a page of its own, **Share your design** (last in the list), to show your screen in the project's gallery on GitHub. It has no setting in `trofeo.conf`.
+
+1. Press **Take a picture of my screen**. The editor asks the running `trofeo_lcd` (it must be running with the same configuration file, version 2.17 or newer) to save the picture it is showing; within a second the picture appears in the editor. The files go to a `gallery` folder next to `trofeo.conf`. **Use the preview instead** makes the picture from the editor's preview, which uses made-up values.
+2. **Look at the picture.** It is public once posted: the title of the song playing, the name of a game, the city of the weather or other names may be on it.
+3. **Copy the settings** copies the settings of the look that you set (screens, colors, fonts, tiles, music design...). Files, folders, the weather city, the sensors and the system settings are never included.
+4. **Open the GitHub page**: the gallery form of the project. Drag the picture file into the box for it, paste the settings, and send. You need a GitHub account; the program does not send anything by itself and keeps no token.
+
+The gallery is the list of issues with the label `gallery`: <https://github.com/haven80/trofeo-lcd-rs/issues?q=is%3Aissue+label%3Agallery>. Behind the button, the editor writes a small file `trofeo_share.request` next to the configuration file and the program, which looks for it twice a second, saves the picture and removes it.
+
 ## Start minimised in the tray *(restart required, Windows)*
 
 | Key | CLI | Values | Default |

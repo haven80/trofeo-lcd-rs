@@ -58,7 +58,7 @@ use trofeo_lcd::i18n::Lang;
 use trofeo_lcd::layout::{Anchor, BgLayout, Fit, Show};
 use trofeo_lcd::i18n;
 use trofeo_lcd::{Framebuffer, LyLcd, Orientation};
-use trofeo_lcd::{hotkey, png_save, smooth_font};
+use trofeo_lcd::{hotkey, png_save, share, smooth_font};
 
 /// Number of EQ bars drawn.
 const NUM_BARS: usize = 48;
@@ -2325,6 +2325,9 @@ fn main() -> anyhow::Result<()> {
     let mut layouts_started = Instant::now();
     let mut layout_index = usize::MAX;
     let mut screen_fade = fade::Fade::new();
+    let share_dir: Option<std::path::PathBuf> =
+        ConfigFile::find_path(config.config_explicit.as_deref()).and_then(|p| p.parent().map(std::path::Path::to_path_buf));
+    let mut last_share_check = Instant::now();
     let mut layout_marquee = Marquee::new();
     let mut tiles_screen = tiles::TilesScreen::new();
     let mut frame_screen = frame::FrameScreen::new();
@@ -2440,6 +2443,20 @@ fn main() -> anyhow::Result<()> {
                     Err(e) => eprintln!("Failed to save screenshot: {e}"),
                 }
                 last_snap = Instant::now();
+            }
+        }
+
+        // "Share your design" (settings editor): a request file next to the configuration file
+        // asks for a PNG of what is on the screen. Looked for twice a second; costs nothing else.
+        if last_share_check.elapsed() >= Duration::from_millis(500) {
+            last_share_check = Instant::now();
+            if let Some(dir) = &share_dir {
+                if let Some(png) = share::take_request(dir) {
+                    match png_save::save_to(&fb, &png) {
+                        Ok(()) => println!("Picture for the gallery saved: {}", png.display()),
+                        Err(e) => eprintln!("Failed to save the picture for the gallery: {e}"),
+                    }
+                }
             }
         }
 

@@ -127,6 +127,7 @@ pub const SECTIONS: &[(&str, &str, &str)] = &[
     ("game", "Pixel game", "Mini gioco"),
     ("online", "Weather and news", "Meteo e notizie"),
     ("system", "System", "Sistema"),
+    ("share", "Share your design", "Condividi il tuo design"),
 ];
 
 pub const POSITIONS: &[&str] =
@@ -1017,7 +1018,8 @@ mod tests {
             assert!(!x.en.is_empty() && !x.it.is_empty(), "{}: a label is missing", x.key);
         }
         for (id, _, _) in SECTIONS {
-            assert!(f.iter().any(|x| x.section == *id), "section {id} is empty");
+            // "share" is a page of buttons of the editor, not a list of settings
+            assert!(*id == "share" || f.iter().any(|x| x.section == *id), "section {id} is empty");
         }
     }
 

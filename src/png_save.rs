@@ -108,6 +108,11 @@ pub fn save(fb: &Framebuffer, prefix: &str) -> io::Result<PathBuf> {
     Ok(path)
 }
 
+/// Save the picture at exactly `path` (used by "Share your design").
+pub fn save_to(fb: &Framebuffer, path: &std::path::Path) -> io::Result<()> {
+    std::fs::write(path, encode(fb))
+}
+
 /// Path to the user's Desktop folder.
 #[cfg(windows)]
 fn desktop_dir() -> io::Result<PathBuf> {
