@@ -358,6 +358,12 @@ pub fn fields() -> Vec<Field> {
             "JPEG screens of the 0416:5302 family (Trofeo Vision 6.86): the size in the frame header is that of the picture sent (raster) or the panel's own (panel). Changed only if --lcd-test shows a partial picture",
             "Schermi JPEG della famiglia 0416:5302 (Trofeo Vision 6.86): la dimensione nell'intestazione è quella dell'immagine inviata (raster) o quella del pannello (panel). Da cambiare solo se --lcd-test mostra un'immagine parziale",
         ));
+    add(Field::new("hid_resend_ms", "screen", "Repeat the picture every (ms, 0 = off)", "Ripeti l'immagine ogni (ms, 0 = spento)", int(0, 1000))
+        .def("0")
+        .help(
+            "Screens of the 0416:5302 family: if the whole screen blinks, dims or goes blank between pictures, send the last picture again every this many milliseconds (try 10). 0 = off",
+            "Schermi della famiglia 0416:5302: se tutto lo schermo lampeggia, si abbassa di luminosità o si spegne tra un'immagine e l'altra, rimanda l'ultima immagine ogni tot millisecondi (prova 10). 0 = spento",
+        ));
     add(Field::new("hid_rgb565", "screen", "Pixel order of the small screens", "Ordine dei pixel degli schermi piccoli", Choice(&["auto", "little", "big"]))
         .def("auto")
         .help(

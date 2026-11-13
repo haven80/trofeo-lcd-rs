@@ -375,6 +375,9 @@ pub struct LyLcd {
     /// notes above about 0x01 vs 0x09).
     ep_write: u8,
     ep_read: u8,
+    /// The last frame written to a HID screen (header + JPEG, padded), kept so it can be
+    /// sent again (`hid_resend_ms`).
+    last_hid: std::sync::Mutex<Vec<u8>>,
 }
 
 /// Endpoint info detected on one interface — used by `open()` and
@@ -444,6 +447,7 @@ impl LyLcd {
                 variant,
                 ep_write,
                 ep_read,
+                last_hid: std::sync::Mutex::new(Vec::new()),
             });
         }
         Self::open_hid()
@@ -458,7 +462,7 @@ impl LyLcd {
         let dev = api
             .open(hid2::VENDOR_ID, hid2::PRODUCT_ID)
             .map_err(|e| LcdError::Hid(format!("cannot open 0416:5302 ({e}). Close the vendor program (TRCC) if it is running; on Linux install the udev rule")))?;
-        Ok(Self { handle: None, hid: Some(dev), iface: 0, variant: Variant::Hid2, ep_write: 0, ep_read: 0 })
+        Ok(Self { handle: None, hid: Some(dev), iface: 0, variant: Variant::Hid2, ep_write: 0, ep_read: 0, last_hid: std::sync::Mutex::new(Vec::new()) })
     }
 
     pub fn variant(&self) -> Variant {
@@ -640,7 +644,26 @@ impl LyLcd {
             report[1 + chunk.len()..].fill(0);
             dev.write(&report).map_err(|e| LcdError::Hid(e.to_string()))?;
         }
+        if let Ok(mut last) = self.last_hid.lock() {
+            last.clear();
+            last.extend_from_slice(frame);
+        }
         Ok(())
+    }
+
+    /// Send the last frame of a HID screen again, unchanged (no new picture is drawn or
+    /// encoded). Some panels blank when no data arrives for a moment: see `hid_resend_ms`.
+    /// Returns `false` when there is no frame yet (or this is not a HID screen).
+    pub fn resend_last_hid(&self) -> Result<bool> {
+        if self.variant != Variant::Hid2 {
+            return Ok(false);
+        }
+        let frame = match self.last_hid.lock() {
+            Ok(g) if !g.is_empty() => g.clone(),
+            _ => return Ok(false),
+        };
+        self.write_frame_hid(&frame)?;
+        Ok(true)
     }
 
     /// Send a single frame. For this panel, `payload` must be already-encoded

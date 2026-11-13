@@ -211,6 +211,9 @@ struct Config {
     hid_mount: Option<trofeo_lcd::Rotation>,
     /// HID screens: write the panel's own size in the frame header (`hid_header = panel`).
     hid_header_panel: bool,
+    /// HID screens: send the last frame again every this many ms while no new one is ready
+    /// (`hid_resend_ms`, 0 = off).
+    hid_resend_ms: u32,
     /// HID screens with RGB565 pictures: `Some(true)` = big-endian pixels, `None` = by model.
     hid_big_endian: Option<bool>,
     /// Margins (px) to keep the interface away from the screen edges.
@@ -334,6 +337,7 @@ fn print_help() {
          \x20\x20                          pictures, asks which is upright, writes hid_mount/hid_header\n\
          \x20\x20--hid-mount <D>          0416:5302: auto | 0 | 90 | 180 | 270 (degrees); --hid-header\n\
          \x20\x20                          raster|panel; --hid-rgb565 auto|little|big (small screens)\n\
+         \x20\x20--hid-resend-ms <N>      0416:5302: send the last picture again every N ms (0 = off)\n\
          \x20\x20--orientation <O>       'landscape' (default) or 'portrait' (screen mounted upright)\n\
          \x20\x20--panel <MODEL>         trofeo-9.16 (default, 1920x462) or trofeo-11.3 (1920x400)\n\
          \x20\x20--panel-size <WxH>      Picture size in pixels for any other panel (e.g. 1920x440)\n\
@@ -795,6 +799,11 @@ fn parse_args() -> anyhow::Result<Config> {
         Some(v) if v == "panel" => true,
         Some(v) => anyhow::bail!("hid_header: '{v}' not valid (raster | panel)"),
     };
+    let hid_resend_ms = match file.get_u32("hid_resend_ms").map_err(|e| anyhow::anyhow!(e))? {
+        None => 0,
+        Some(v) if v <= 1000 => v,
+        Some(v) => anyhow::bail!("hid_resend_ms: must be 0..1000 (got {v})"),
+    };
     let hid_big_endian = match file.get("hid_rgb565").map(|v| v.trim().to_ascii_lowercase()) {
         None => None,
         Some(v) if v == "auto" || v.is_empty() => None,
@@ -891,6 +900,7 @@ fn parse_args() -> anyhow::Result<Config> {
         flip,
         hid_mount,
         hid_header_panel,
+        hid_resend_ms,
         hid_big_endian,
         margins,
         language,
@@ -2941,7 +2951,19 @@ fn main() -> anyhow::Result<()> {
         // active — can differ each iteration), without forcing it if it's
         // actually slower than that.
         let elapsed = frame_start.elapsed();
-        if elapsed < target_frame_time {
+        if config.hid_resend_ms > 0 && lcd.variant() == trofeo_lcd::Variant::Hid2 {
+            // Some panels blank when no data arrives for a moment: until the next picture is
+            // due, the last one is sent again every `hid_resend_ms`.
+            let step = Duration::from_millis(config.hid_resend_ms as u64);
+            while frame_start.elapsed() < target_frame_time {
+                let t = Instant::now();
+                lcd.resend_last_hid()?;
+                let left = target_frame_time.saturating_sub(frame_start.elapsed());
+                if t.elapsed() < step {
+                    std::thread::sleep((step - t.elapsed()).min(left));
+                }
+            }
+        } else if elapsed < target_frame_time {
             std::thread::sleep(target_frame_time - elapsed);
         }
     }
@@ -4986,6 +5008,13 @@ mod layout_tests {
     }
 
     #[test]
+    fn the_hid_resend_option_is_a_known_key_and_off_by_default() {
+        assert!(is_override_key("hid_resend_ms"));
+        let f = trofeo_lcd::schema::fields().into_iter().find(|f| f.key == "hid_resend_ms").expect("in the editor");
+        assert_eq!(f.default, "0");
+    }
+
+    #[test]
     fn the_screen_fade_is_off_by_default_and_checked() {
         let d = parse_ui_options(&ConfigFile::parse("").unwrap()).unwrap();
         assert_eq!((d.screen_fade_ms, d.screen_fade_style), (0, fade::Style::Cross));
@@ -5278,7 +5307,7 @@ mod layout_tests {
         }
         // every key of the editor is one the program reads from the config file
         let from_cli_or_file = |k: &str| is_override_key(k) || ["orientation", "flip", "panel_size", "background", "background_dim", "ffmpeg", "language",
-            "hid_mount", "hid_header", "color", "silence_threshold", "silence_timeout_ms", "weather_city", "ticker_source", "ticker_refresh_min", "gpu_usage_source", "fps_source", "fps_driver_divisor", "update_check", "update_check_hours", "update_notice_secs", "start_in_tray", "margin", "margin_top", "margin_bottom", "margin_left", "margin_right"].contains(&k);
+            "hid_mount", "hid_header", "hid_resend_ms", "color", "silence_threshold", "silence_timeout_ms", "weather_city", "ticker_source", "ticker_refresh_min", "gpu_usage_source", "fps_source", "fps_driver_divisor", "update_check", "update_check_hours", "update_notice_secs", "start_in_tray", "margin", "margin_top", "margin_bottom", "margin_left", "margin_right"].contains(&k);
         for f in fields() {
             assert!(from_cli_or_file(&f.key), "{} is not a key of the program", f.key);
         }

@@ -20,7 +20,9 @@ whose driver was rewritten byte-for-byte from
 See **[NOTICE.md](./NOTICE.md)** for the full provenance and a summary of
 what this fork adds on top of the original.
 
-**New in 2.16.0 — a fade between screens.** `screen_fade_ms = 600` (settings editor, *Colors and text*) makes the old picture melt into the new one whenever the screen changes: the layout rotation, the music screen, the gaming screen, the spectrum. `screen_fade_style = black` fades out to black first. **Off by default** (`0`), and when it is off it costs nothing. See [the options guide](./OPTIONS_GUIDE.md#fade-between-screens).
+**New in 2.16.1 — `hid_resend_ms` for 6.86 screens that blink or go blank.** If the whole screen dims, blinks or disappears between pictures, `hid_resend_ms = 10` (settings editor, *Screen*) sends the last picture again every 10 ms until the next one is ready. Off by default, not verified on hardware yet. See [the options guide](./OPTIONS_GUIDE.md#trofeo-vision-686-and-the-04165302-family).
+
+**2.16.0 — a fade between screens.** `screen_fade_ms = 600` (settings editor, *Colors and text*) makes the old picture melt into the new one whenever the screen changes: the layout rotation, the music screen, the gaming screen, the spectrum. `screen_fade_style = black` fades out to black first. **Off by default** (`0`), and when it is off it costs nothing. See [the options guide](./OPTIONS_GUIDE.md#fade-between-screens).
 
 **2.15.0 — start minimised in the tray, and a 12-hour clock.** `start_in_tray = true` (or `--start-in-tray`; settings editor, *System*) hides the console window once the program is running and leaves an icon in the tray: a click shows or hides the window, the right button opens a menu with *Open settings editor*, *Show / Hide window* and *Exit*. Off by default, Windows only. And, from 2.14.0, `clock_format = 12h` shows the time as `2:05 PM` on every clock (`clock_ampm = false` drops the AM / PM). See [the options guide](./OPTIONS_GUIDE.md#start-minimised-in-the-tray-restart-required-windows).
 

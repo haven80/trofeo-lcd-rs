@@ -19,6 +19,7 @@ flip = false
 # which asks for the number and writes these values for you.
 # hid_mount = auto        # auto | 0 | 90 | 180 | 270: turns the picture for the way the panel is mounted
 # hid_header = raster     # raster | panel: size written in the frame header (JPEG screens)
+# hid_resend_ms = 0       # 0..1000: if the whole screen blinks, dims or goes blank between pictures, send the last one again every N ms (try 10). 0 = off
 # hid_rgb565 = auto       # auto | little | big: pixel byte order of the small 320x240 screens (RGB565)
 
 # --- Margins (pixels) --------------------------------------------------------
