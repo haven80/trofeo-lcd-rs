@@ -2951,19 +2951,9 @@ fn main() -> anyhow::Result<()> {
         // active — can differ each iteration), without forcing it if it's
         // actually slower than that.
         let elapsed = frame_start.elapsed();
-        if config.hid_resend_ms > 0 && lcd.variant() == trofeo_lcd::Variant::Hid2 {
-            // Some panels blank when no data arrives for a moment: until the next picture is
-            // due, the last one is sent again every `hid_resend_ms`.
-            let step = Duration::from_millis(config.hid_resend_ms as u64);
-            while frame_start.elapsed() < target_frame_time {
-                let t = Instant::now();
-                lcd.resend_last_hid()?;
-                let left = target_frame_time.saturating_sub(frame_start.elapsed());
-                if t.elapsed() < step {
-                    std::thread::sleep((step - t.elapsed()).min(left));
-                }
-            }
-        } else if elapsed < target_frame_time {
+        // HID screens that blank between pictures: a thread keeps sending the last one.
+        lcd.set_hid_resend_ms(config.hid_resend_ms);
+        if elapsed < target_frame_time {
             std::thread::sleep(target_frame_time - elapsed);
         }
     }

@@ -20,7 +20,7 @@ whose driver was rewritten byte-for-byte from
 See **[NOTICE.md](./NOTICE.md)** for the full provenance and a summary of
 what this fork adds on top of the original.
 
-**New in 2.16.1 — `hid_resend_ms` for 6.86 screens that blink or go blank.** If the whole screen dims, blinks or disappears between pictures, `hid_resend_ms = 10` (settings editor, *Screen*) sends the last picture again every 10 ms until the next one is ready. Off by default, not verified on hardware yet. See [the options guide](./OPTIONS_GUIDE.md#trofeo-vision-686-and-the-04165302-family).
+**New in 2.16.2 — `hid_resend_ms` for 6.86 screens that blink or go blank.** If the whole screen dims, blinks or disappears between pictures, `hid_resend_ms = 1` (settings editor, *Screen*) keeps sending the last picture from a thread of its own, also while the next one is being drawn. Off by default; it helped on the one screen it was tried on. See [the options guide](./OPTIONS_GUIDE.md#trofeo-vision-686-and-the-04165302-family).
 
 **2.16.0 — a fade between screens.** `screen_fade_ms = 600` (settings editor, *Colors and text*) makes the old picture melt into the new one whenever the screen changes: the layout rotation, the music screen, the gaming screen, the spectrum. `screen_fade_style = black` fades out to black first. **Off by default** (`0`), and when it is off it costs nothing. See [the options guide](./OPTIONS_GUIDE.md#fade-between-screens).
 

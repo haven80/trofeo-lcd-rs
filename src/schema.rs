@@ -361,8 +361,8 @@ pub fn fields() -> Vec<Field> {
     add(Field::new("hid_resend_ms", "screen", "Repeat the picture every (ms, 0 = off)", "Ripeti l'immagine ogni (ms, 0 = spento)", int(0, 1000))
         .def("0")
         .help(
-            "Screens of the 0416:5302 family: if the whole screen blinks, dims or goes blank between pictures, send the last picture again every this many milliseconds (try 10). 0 = off",
-            "Schermi della famiglia 0416:5302: se tutto lo schermo lampeggia, si abbassa di luminosità o si spegne tra un'immagine e l'altra, rimanda l'ultima immagine ogni tot millisecondi (prova 10). 0 = spento",
+            "Screens of the 0416:5302 family: if the whole screen blinks, dims or goes blank between pictures, keep sending the last picture every this many milliseconds, also while the next one is being drawn (try 1). 0 = off",
+            "Schermi della famiglia 0416:5302: se tutto lo schermo lampeggia, si abbassa di luminosità o si spegne tra un'immagine e l'altra, continua a inviare l'ultima immagine ogni tot millisecondi, anche mentre disegna la prossima (prova 1). 0 = spento",
         ));
     add(Field::new("hid_rgb565", "screen", "Pixel order of the small screens", "Ordine dei pixel degli schermi piccoli", Choice(&["auto", "little", "big"]))
         .def("auto")

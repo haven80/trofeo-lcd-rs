@@ -111,7 +111,7 @@ byte; for a model that is not in the program's table the console says so and `pa
 |---|---|---|---|
 | `hid_mount` | `--hid-mount` | `auto` \| `0` \| `90` \| `180` \| `270` (degrees the picture is turned for the way the panel is mounted) | `auto` |
 | `hid_header` | `--hid-header` | `raster` (the size of the picture sent) \| `panel` (the panel's own size); JPEG screens | `raster` |
-| `hid_resend_ms` | `--hid-resend-ms` | `0`-`1000` (milliseconds; `0` = off): send the last picture again every this many ms until the next one is ready | `0` |
+| `hid_resend_ms` | `--hid-resend-ms` | `0`-`1000` (milliseconds; `0` = off): keep sending the last picture every this many ms, from a thread of its own | `0` |
 | `hid_rgb565` | `--hid-rgb565` | `auto` \| `little` \| `big`: byte order of the pixels of the small RGB565 screens (`auto` = by model) | `auto` |
 | — | `--lcd-test` | numbered test pictures, 5 s each; then it asks for the number of the upright one and writes the values into `trofeo.conf` | |
 
@@ -122,7 +122,7 @@ corner, the arrow pointing right); the values are filled in, then press Save. Wi
 `trofeo_lcd --lcd-test` and type the number. The values apply live. `orientation` and `flip` work on top of them,
 as on the other screens. Close the vendor program (TRCC) first: only one program can drive the screen.
 
-**If the whole screen blinks, dims or goes blank.** Some units seem to blank the picture when no data reaches them for a moment (reported on a 6.86 with model byte SUB = 1: at 2–15 fps everything disappears, at 120 fps the picture only dims). `hid_resend_ms = 10` makes the program send the last picture again every 10 ms while the next one is not ready, which keeps the stream going without drawing or encoding anything new (it costs some USB traffic: the picture is a few tens of KB each time). It applies live. `0` (default) is off. This is not verified on hardware yet: please tell if it helps.
+**If the whole screen blinks, dims or goes blank.** Some units seem to blank the picture when no data reaches them for a moment (reported on a 6.86 with model byte SUB = 1: at 2–15 fps everything disappears, at 120 fps the picture only dims). `hid_resend_ms` makes a thread of its own keep sending the last picture every this many milliseconds, **also while the next picture is being drawn and encoded**, so the panel never waits for data. The new picture goes out as soon as it is ready, between two repeats. `1` was the best value on the screen it was tried on (higher values made the flicker worse); it costs USB traffic and a little CPU, since the picture is a few tens of KB each time. It applies live. `0` (default) is off.
 
 `auto` mount is `90` for a 6.86 whose model byte SUB is 2 and for the RGB565 screens, `0` otherwise. RGB565 screens need
 a 240×320 raster, so only 90 and 270 give a picture. Not supported: screens that do not answer the handshake (some
