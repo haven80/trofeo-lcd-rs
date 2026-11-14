@@ -286,7 +286,7 @@ language = en
 # --- Fans and sensors: LibreHardwareMonitor ------------------------------------------
 # Intel CPUs: the built-in CPU sensor reads AMD Ryzen only, so on Windows the CPU temperature and power of an
 # Intel CPU come from LibreHardwareMonitor too (start it as administrator, Options > Remote Web Server > Run).
-# "trofeo_lcd --diag" shows which CPU sensor the program found ("none" on Intel). See README: "Which sensors you need".
+# "trofeo_lcd --diag" shows which CPU sensor the program found ("none" on Intel). See docs/SENSORS.md ("Which sensors you need and what to install").
 # Fan speeds (and the motherboard / disk temperature) come from LibreHardwareMonitor:
 # start it AS ADMINISTRATOR, then Options > Remote Web Server > Run (port 8085) and leave it open.
 # Nothing happens when it is not running. "trofeo_lcd --lhm-list" shows what it reports and which

@@ -1120,7 +1120,7 @@ gaming, cpu, gpu, tiles, deck, cards, orbit, console, steam, frame, weather, new
 - `default2` = the standard screen with [per-item](#per-item-control) styling.
 - `news` = the [ticker](#ticker)'s headlines, big and scrolling, full screen.
 - `tiles` = the [glass tiles](#tiles-layout) dashboard.
-- `steam` = the [Steam cover flow](#steam-cover-flow): your installed Steam games as covers in perspective.
+- `steam` = the [Steam cover flow](#steam-cover-flow-applies-live): your installed Steam games as covers in perspective.
 - `frame` = the [digital picture frame](#digital-frame): a collage of the pictures of a folder.
 - Everything else replaces the clock with big panel(s); the top status block
   and spectrum turn off (use `show = nowplaying, time` etc. to add lines back
@@ -1210,8 +1210,8 @@ tiles_palette_stagger = 70
 *Which reading needs what?* AMD Ryzen CPU temperature and power are read by the program itself (Windows: PawnIO
 and Administrator; Linux: `k10temp` and RAPL). **Intel CPUs have no built-in reader**: on Windows their
 temperature and power come from LibreHardwareMonitor, on Linux they stay empty. NVIDIA and Radeon cards are read
-through their drivers. The full table and the set-up steps are in the README,
-[Which sensors you need and what to install](README.md#which-sensors-you-need-and-what-to-install).
+through their drivers. The full table and the set-up steps are in the docs,
+[Which sensors you need and what to install](docs/SENSORS.md).
 
 Fan speeds come from [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor)'s
 web server: start it **as administrator**, then *Options → Remote Web Server → Run* (port 8085) and
@@ -1659,5 +1659,5 @@ trofeo_lcd.exe --screenshot-key f9 --openrgb-device Aorus --hide-console
 
 See also [`trofeo.conf.example`](./trofeo.conf.example) for the same options
 as inline comments you can uncomment directly, and the main
-[`README.md`](./README.md) for setup, second-monitor mode, and build
-instructions.
+[`README.md`](./README.md) for setup, and the [`docs/`](./docs/README.md) folder for
+the second-monitor mode, the sensors, autostart and build instructions.

@@ -1,17 +1,17 @@
 # trofeo_lcd
+
 ![overview](img/overview.png)
 ![overview2](img/overview2.jpeg)
-![overview2](img/overview3.jpeg)
-![overview2](img/overview4.jpeg)
-![overview2](img/overview5.jpeg)
-![overview2](img/overview6.jpeg)
-
+![overview3](img/overview3.jpeg)
+![overview4](img/overview4.jpeg)
+![overview5](img/overview5.jpeg)
+![overview6](img/overview6.jpeg)
 
 **A lightweight, open-source alternative to the official Thermalright TRCC
 software.** Audio visualizer + system info monitor for the
-**Thermalright Trofeo Vision 9.16 LCD** (USB `0416:5408`, "LY" protocol) and
-the **Trofeo Vision 11.3 LCD** (1920×400, same USB ID and protocol) and the
-**Trofeo Vision 6.86 LCD** (1280×480, USB `0416:5302`, confirmed by its users) — see
+**Thermalright Trofeo Vision 9.16 LCD** (USB `0416:5408`, "LY" protocol), the
+**Trofeo Vision 11.3 LCD** (1920×400, same USB ID and protocol) and the
+**Trofeo Vision 6.86 LCD** (1280×480, USB `0416:5302`) — see
 [Supported panels](#supported-panels).
 
 This project is a fork of [sukualam/trofeo-lcd](https://github.com/sukualam/trofeo-lcd),
@@ -20,65 +20,36 @@ whose driver was rewritten byte-for-byte from
 See **[NOTICE.md](./NOTICE.md)** for the full provenance and a summary of
 what this fork adds on top of the original.
 
-**New in 2.18.0 — a clearer settings editor.** A **search box** at the top of the list finds any setting by its name, its key (`clock_format`) or its hint, in English or Italian, and lets you change it right there; the sections are **grouped by theme** (Screen and sensors, Look, Screens, Music and games, Online, System, Share); **Settings I changed** shows only what is written in your file, each with its `x` to go back to the default; after saving, a notice says which of the changed settings **need a restart** of `trofeo_lcd`; and on *Share your design* you can **import** a design pasted from the gallery. See [the options guide](./OPTIONS_GUIDE.md#settings-editor-trofeo_config).
+## What's new
 
-**2.17.0 — share your design in the gallery.** The settings editor has a new page, *Share your design* (last in the list): it asks the running program for a picture of what is on the screen, shows it so you can check it, copies the settings that make up the look (no files, folders, city, sensors or system settings) and opens the project's gallery form on GitHub, where you drop the picture and paste the settings. The gallery is the list of issues with the label `gallery`: [see it here](https://github.com/haven80/trofeo-lcd-rs/issues?q=is%3Aissue+label%3Agallery). Nothing is sent by the program: you post it yourself, with your own GitHub account. See [the options guide](./OPTIONS_GUIDE.md#share-your-design).
+**2.18.1 — the documentation is reorganised.** This README is now a short introduction; the rest is in the [docs](./docs/README.md) folder.
 
-**2.16.2 — `hid_resend_ms` for 6.86 screens that blink or go blank.** If the whole screen dims, blinks or disappears between pictures, `hid_resend_ms = 1` (settings editor, *Screen*) keeps sending the last picture from a thread of its own, also while the next one is being drawn. Off by default; it helped on the one screen it was tried on. See [the options guide](./OPTIONS_GUIDE.md#trofeo-vision-686-and-the-04165302-family).
+**2.18.0 — a clearer settings editor.** A search box finds any setting by its name, its key or
+its hint; the sections are grouped by theme; *Settings I changed* lists what is written in your
+file; after saving, a notice says which changes need a restart; and you can import a design from
+the gallery.
 
-**2.16.0 — a fade between screens.** `screen_fade_ms = 600` (settings editor, *Colors and text*) makes the old picture melt into the new one whenever the screen changes: the layout rotation, the music screen, the gaming screen, the spectrum. `screen_fade_style = black` fades out to black first. **Off by default** (`0`), and when it is off it costs nothing. See [the options guide](./OPTIONS_GUIDE.md#fade-between-screens).
+**2.17.0 — share your design.** A new page of the settings editor takes a picture of what is on
+your screen, copies the settings that make up the look (nothing personal) and opens the project's
+gallery form on GitHub. See [the gallery](#the-gallery).
 
-**2.15.0 — start minimised in the tray, and a 12-hour clock.** `start_in_tray = true` (or `--start-in-tray`; settings editor, *System*) hides the console window once the program is running and leaves an icon in the tray: a click shows or hides the window, the right button opens a menu with *Open settings editor*, *Show / Hide window* and *Exit*. Off by default, Windows only. And, from 2.14.0, `clock_format = 12h` shows the time as `2:05 PM` on every clock (`clock_ampm = false` drops the AM / PM). See [the options guide](./OPTIONS_GUIDE.md#start-minimised-in-the-tray-restart-required-windows).
+**2.16 — a fade between screens, and a fix for 6.86 screens that blink.** `screen_fade_ms = 600`
+makes the old picture melt into the new one whenever the screen changes (off by default).
+`hid_resend_ms = 1` keeps a Trofeo Vision 6.86 whose picture blinks or goes blank fed with data
+(off by default).
 
-**2.14.0 — 12-hour clock.** `clock_format = 12h` (settings editor: *Look*, "Time format") shows the time as `2:05 PM` on every clock of the program; `clock_ampm = false` drops the AM / PM.
+Every version in detail: [docs/HISTORY.md](./docs/HISTORY.md) and the
+[releases](https://github.com/haven80/trofeo-lcd-rs/releases).
 
-**2.13.0 — eight new designs for the music screen.** `music_layout = vinyl | poster | minimal | radial | equalizer | wave | cassette | vu` (or pick it in the settings editor, Music section) replaces the card with a spinning record and tonearm, a poster with a huge title, a minimal title, rays around the cover, an LED equaliser, soft waves, a cassette with turning reels, or two analogue VU meters. They use the same `music_bg`, `music_progress` and `music_stats` as the card, with `music_colors`, `music_font`, `music_clock`, `music_album` and `music_glow` on top. See [the options guide](./OPTIONS_GUIDE.md#music-screen-now-playing-card).
-
-**2.12.0 — FPS panel in deck, cards, orbit and console.** `fps` is now a panel like `cpu` or `gpu`: `deck = cpu, gpu, fps, ram`, `orbit = cpu, gpu, fps`, `console = gpu, fps, cpu`, `cards = cpu, gpu | fps, ram` (or pick it in the settings editor, Deck, Cards, Orbit and Console). It shows the FPS of the running game with a graph, the frame time and the GPU load, and "no game" otherwise.
-
-**2.11.0 — the FPS in your own layout.** If you don't want a separate gaming screen, `fps_item = true` (a checkbox in the settings editor, *Single items*) adds an "FPS 144" item to the standard screens (`default`, `default2`) while a game gives FPS; with `gaming_screen = false` you keep your layout and get the FPS in it. In per-item mode it has its own size, position and color (`fps_size`, `fps_position`, `fps_color`, `fps_backdrop`). See [the options guide](./OPTIONS_GUIDE.md#what-to-show--show--hide).
-
-![FPS item in a standard screen](img/standard-fps-items.png)
-
-**2.10.3 — `fps_driver_divisor`, for games Windows gives no frame events for.** With the 2.10.2 diagnostics the doubled FPS was traced: half of the `Present` calls are window checks (`DXGI_PRESENT_TEST`) and 2.10.2 no longer counts them, so DX11, DX12 and Vulkan games read right. An exclusive-fullscreen DX9 game gives Windows no frame events at all, so only the Radeon driver's figure is left, and it read double there (122 for a game capped at 60). `fps_driver_divisor = 2` (config file, applies live) halves that figure and only that one; the default `1` changes nothing. See [In-game FPS dashboard](./OPTIONS_GUIDE.md#in-game-fps-dashboard-restart-required).
-
-**2.10.2 — doubled FPS on Radeon: the diagnostic showed what is going on, and the program now guards against it.** The `--fps-diag` output of a Radeon RX 6700 XT showed that the Windows events carry about 2.1 `Present` calls for every frame the AMD overlay and PresentMon count, from two threads on a single swap chain, while the driver's own figure was close to the real one. So the extra calls are not frames. Now the calls made with the `DXGI_PRESENT_TEST` flag (a window check that draws nothing, which PresentMon also ignores) are not counted, the driver's figure is steadied against its occasional jumps, and with `fps_source = auto` the driver's figure is used whenever the event count reads far above it. `--fps-diag` now also prints the flags of the calls and what the screen would show. See [In-game FPS dashboard](./OPTIONS_GUIDE.md#in-game-fps-dashboard-restart-required).
-
-**2.10.1 — a second attempt at the doubled FPS on Radeon cards, and a tool to find out for sure.** 2.9.4 fixed one possible cause and a user's test showed the number was still doubled (RX 6700 XT, tested with a DX12 and a Vulkan game). Two things were still unaccounted for, so both are handled: on Radeon cards the program showed the *driver's* own FPS figure first and only used the Windows events when the driver gave none, and the Windows events themselves can report one frame twice (the same `Present` raising the event again from inside), which PresentMon filters out and this program did not. Now the frames counted from the Windows events come first (with nested calls merged, like PresentMon), the driver's figure is the fallback, and `fps_source = auto | etw | driver` picks one. If the number is still wrong, `trofeo_lcd.exe --fps-diag` (as administrator, game in front) prints what every source reads. See [In-game FPS dashboard](./OPTIONS_GUIDE.md#in-game-fps-dashboard-restart-required).
-
-**2.10.0 — eight gaming screens, the name of the game, and a Steam cover flow.** The big squares you saw while gaming are now just one of nine designs (`gaming_layout = classic | arena | zen | cockpit | tactical | neon | telemetry | quest | arcade`), each one drawn for landscape and portrait and fully adjustable (colors, font, background, which readings, the FPS graph). The program now finds out **which game is running** — from the program in the foreground, and for Steam games from your library — and shows its name, the time since it started, the hours played on Steam, the window resolution and the RAM it uses. And `layout = steam` is a new screen of its own: your installed Steam games as a **cover flow**, the box art sliding by in perspective with a reflection over the blurred cover or any background of the program. See [the gaming screens](#gaming-screens) and [the Steam cover flow](#steam-cover-flow). New in this version and not yet tried on every PC: see the notes under each section.
-
-**2.9.4 — the FPS counter no longer shows double on Windows.** On some systems (reported on an AMD RX 6700 XT) the FPS read correctly for the first second and then doubled. The cause was that Windows delivers the frame events in batches of about a second and the program dated them when the batch arrived instead of when the frame happened. Every frame is now dated with its own timestamp, so the number is the real rate whatever the batches. Nothing to configure.
-
-**New in 2.9.3 — fixes for the Windows autostart and the settings editor.** The autostart script no longer fails with *"Cannot bind argument to parameter 'Path' because it is an empty string"* and finds `trofeo_lcd.exe` by itself (also one folder up, where the release zip puts it); the README explains it step by step, including the quotes needed around folders with spaces. The settings editor now **remembers its language** instead of always starting in Italian, and no longer stops with *"The requested operation requires elevation (os error 740)"* when `trofeo_lcd.exe` is set to run as administrator. See [Autostart on Windows](#autostart-on-windows).
-
-**2.9.1 — the gaming screen can be switched off.** `gaming_screen = false` (a checkbox in the settings editor) keeps your own screen while you play instead of switching to the in-game dashboard, and the switch now waits for the GPU to stay busy for a few seconds (`gaming_delay`), so a one-second spike on the desktop no longer flashes it. The README also explains how to run the autostart scripts when Windows blocks them. See [the gaming screen](./OPTIONS_GUIDE.md#the-automatic-gaming-screen-applies-live).
-
-**2.9.0 — a console-style look: a new background and a new layout, and `deck`, `cards` and `orbit` finally work in portrait.** `background_effect = veil` is slow, silky bands of light drifting over a deep night gradient with a few floating specks (six new night palettes: `midnight`, `dusk`, `ember`, `mint`, `rose`, `slate`). `layout = console` is a bar with the names and the clock over a row of tiles: the tile in focus grows, lights up in its colour and shows a graph and its readings, the others stay small and dim. The focus can **rotate** by itself, **follow the busiest part of the PC** or be **off**, and the colours come from the same presets as the other layouts. In portrait, `deck`, `cards`, `orbit` and `console` now stack their parts in a column (before, `deck`, `cards` and `orbit` were squeezed into thin strips). See [Veil](#backgrounds-solid-color-and-animated-effects), [Console](#deck-cards-orbit-and-console) and [Orientation](#orientation-landscape--portrait).
-
-**2.7.1 — fixes for Radeon cards:** the **GPU usage** now comes from the Radeon driver (what the Radeon software shows) instead of the Windows counter, which only sees the 3D engine and could read about 40 % lower; and the **GPU hot spot** now shows in the `deck`, `cards` and `orbit` layouts on cards that do not report their power (such as the RX 9070 XT). See [Which sensors you need](#which-sensors-you-need-and-what-to-install).
-
-**2.7.0 — two new liquid backgrounds, and the water can follow your PC and your music.** `background_effect = sea` is a sunset over layers of waves with foam and the sun's glitter, `ink` is clouds of coloured ink curling in water. The aquarium and the sea can **rise and fall with the CPU, GPU or RAM load** (`effect_level_source`), and the aquarium, sea and ink can **move with the music** (`effect_reactive`). See [Animated background](#backgrounds-solid-color-and-animated-effects).
-
-**2.6.1 — the aquarium can be turned upside down** (`effect_flip = true`, or *Upside down* in the editor): the water hangs from the top of the panel.
-
-**2.6.0 — a notice when a new version is out** (optional, off by default): the program looks on GitHub at start-up and, if a newer version exists, shows a banner at the bottom of the screen for a few seconds. Switch it on in the settings editor (System section) or with `update_check = true`. See [New version notice](#new-version-notice).
-
-**2.5.1 — a new README section, [Which sensors you need and what to install](#which-sensors-you-need-and-what-to-install)**: what to install for each reading (PawnIO for AMD CPUs, LibreHardwareMonitor for Intel CPUs and the fans, the graphics driver for the card) and what to run when a value is missing.
-
-**2.5.0 — the Trofeo Vision 6.86 is confirmed working**, and the other screens of its family
-(USB `0416:5302`) are open to try: other sizes with JPEG pictures, and the small 320×240 screens with RGB565
-pictures. The settings editor has a **screen test** (Screen section) that finds the orientation for you, and the
-program can also be started with `--lcd-test`. See [Supported panels](#supported-panels).
+## What it shows
 
 The display **adapts automatically to what your computer is doing** — no
-manual switching needed. The Trofeo LCD shows one of these views below
+manual switching needed. The Trofeo LCD shows one of these views
 depending on the moment:
 
 **Idle** — audio is quiet, so the EQ bars are low and the top bar shows
 system info: CPU usage & real-time frequency, RAM, uptime, clock and date.
-Under the clock, a little self-playing **pixel-art game** runs
-(see [Pixel game](#pixel-game-under-the-clock)).
+Under the clock, a little self-playing **pixel-art game** runs.
 
 ![Idle — EQ idle & system info](img/idle.png)
 
@@ -86,229 +57,60 @@ Under the clock, a little self-playing **pixel-art game** runs
 
 **Media** — a song is playing: the stripes follow the music, and the top bar
 shows the now-playing track (title/artist/album from the media controls).
-With `music_screen = true` the whole panel becomes a Spotify-style now-playing card.
+With `music_screen = true` the whole panel becomes a now-playing card, in one of nine designs.
+
 ![Music_Screen — now playing](img/anteprima_musica_varianti.png)
 
-
 **Gaming** — a game is in the foreground: game info is detected and the
-system status (CPU/GPU/RAM/temp) stays readable while playing.
+system status (CPU/GPU/RAM/temp) stays readable while playing. The gaming screen is optional
+(`gaming_screen = false` keeps your own screen while you play); see the
+[options guide](./OPTIONS_GUIDE.md#the-automatic-gaming-screen-applies-live).
 
 ![Gaming — foreground game info](img/gaming.png)
 
-**The gaming screen is optional.** When the GPU stays busy for a few seconds the screen switches to the in-game
-dashboard by itself. If you prefer to keep your own screen while you play (for example a `tiles` layout with the
-FPS and the temperatures), set `gaming_screen = false` — it is a checkbox in the settings editor, under *Gaming screen*. `gaming_delay` (default 3 s) keeps a short GPU spike on the desktop from flashing the gaming screen, and
-`gaming_gpu_percent` and `gaming_hold` tune the threshold and how long it stays. See the
-[options guide](./OPTIONS_GUIDE.md#the-automatic-gaming-screen-applies-live).
-
-**Don't like editing text files?** Start **`trofeo_config`**, the graphical
-[settings editor](#settings-editor-trofeo_config): menus, sliders and color pickers for every
-option, and a live preview of the display drawn by the real program.
-
-![The settings editor](img/config-editor.png)
-
 ## Features
 
-- EQ bars (48) from currently playing audio (WASAPI loopback on Windows,
-  PulseAudio/PipeWire on Linux), colored green→yellow→red — or any of 9 color
-  palettes and 5 drawing styles.
-- System info: CPU %, real-time CPU frequency, RAM, uptime, clock & date.
-- **Settings editor** (`trofeo_config`): a small graphical program to create and edit
-  `trofeo.conf` — every option in sections, with a **live preview drawn by the real
-  program**. It only edits the file: it is not needed (and not in memory) while the display
-  runs (see [Settings editor](#settings-editor-trofeo_config)).
-- **Music screen**: a Spotify-style now-playing card (album cover, artist/title,
-  progress bar, spectrum, colors taken from the cover).
-- **Two fonts for every text**: the classic blocky pixel font, or smooth anti-aliased
-  **Poppins** in all screens (`font = smooth`) — see [Font](#font).
-- **Pixel game** under the clock: a self-playing pixel-art platformer (a knight
-  or a cat) that reacts to CPU load, music, network/disk bursts, the hour, and
-  the real weather and time of day.
-- **Tiles layout**: a modern glass dashboard (rounded tiles with big numbers, bars and
-  rings) where you pick the tiles, the font (smooth or pixel), the bar colors and the
-  background — and, if you like, a **color of its own for every tile, taken from the color
-  presets**, drifting and fading from preset to preset (see
-  [Tiles layout](#tiles-layout-glass-dashboard)).
-- **Fan speeds** from [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor):
-  RPM of the CPU fan, the case fans, the pump and the GPU on the tiles, in the status line and on
-  the **DeepCool case display** (frequency and RPM in turn, `deepcool_mode = alternate`) — see
-  [Fans and sensors](#fans-and-sensors-librehardwaremonitor).
-- **Deck, Cards, Orbit and Console**: four more full screens with graphs of the last minutes —
-  instrument columns, colourful cards, concentric rings and a console-style row of tiles with a
-  focus that moves (see [Deck, Cards, Orbit and Console](#deck-cards-orbit-and-console)).
-- **Gaming screens and the Steam cover flow**: nine designs for the in-game screen (arena, zen, cockpit, tactical, neon,
-  telemetry, quest, arcade, classic) with the name of the game and facts about it, and `layout = steam`, a cover flow
-  of your Steam library (see [Gaming screens](#gaming-screens) and [Steam cover flow](#steam-cover-flow)).
-- **Digital picture frame**: `layout = frame` turns the LCD into a photo frame — a collage of
-  the pictures of a folder, either a tidy **mosaic** or scattered **polaroid** prints, one
-  picture changing at a time over a blurred copy of the photo, with slim glass tiles (clock,
-  CPU, GPU, RAM, ...) at the sides, at almost no CPU cost (see
-  [Digital frame](#digital-frame-picture-collage)).
-- **Backgrounds**: an image, GIF or video; a **solid color** (any color name or hex code);
-  or an **animated effect** with no file needed — plasma, aurora, lava lamp, silk waves, a
-  minimal **matrix / digital rain**, an **aquarium** seen from the side with a moving water
-  surface, light rays, caustics and bubbles, a **network** of nodes and thin lines, or a turning
-  **globe**. Rain, aquarium, network and globe also come in a **white (light) variant**. Colors from pastel to fluorescent, or your own; adjustable speed
-  and brightness, at almost no CPU cost (see
-  [Backgrounds](#backgrounds-solid-color-and-animated-effects)).
-- Can also drive a **DeepCool** display (sends CPU data over HID).
-- **Second monitor mode** (`trofeo_screen`): the LCD becomes a real second
-  monitor.
-- Current **weather** (temperature + a stylized condition icon) and a
-  **7-day forecast strip**, auto-detected from your IP or a city you set.
-- **News ticker**: RSS/Atom feeds, any plain-text URL, or a local file — as a
-  scrolling line on top of any screen, and/or its own full panel.
-- Sync EQ bar color with an **OpenRGB** device.
-- Adaptive FPS: drops to idle when silent → saves CPU.
+- **Audio visualizer**: 48 EQ bars from whatever is playing (WASAPI loopback on Windows,
+  PulseAudio/PipeWire on Linux), with colour palettes and drawing styles.
+- **System info**: CPU, GPU, RAM, temperatures, fan speeds, network, disk, clock and date,
+  weather and a news ticker.
+- **Full screens to choose from**: tiles, deck, cards, orbit, console, a digital picture frame,
+  a Steam cover flow, nine gaming screens and nine music screens, rotating on a timer if you like.
+- **Backgrounds**: an image, GIF or video, a solid colour or an animated effect (plasma, aurora,
+  aquarium, network, globe, ...).
+- **A settings editor** with a live preview, a search box, and a way to share your design.
+- Fade between screens, 12-hour clock, start minimised in the tray, a DeepCool display driver,
+  a second-monitor mode, and adaptive FPS to keep the load low.
 
-## Usage
+The complete list: [docs/FEATURES.md](./docs/FEATURES.md).
+
+## Install
+
+**Windows.** Download the latest `trofeo-lcd-X.Y.Z-windows.zip` from the
+[releases](https://github.com/haven80/trofeo-lcd-rs/releases), unzip it and run `trofeo_lcd.exe`.
+Close the vendor program (TRCC) first: only one program can drive the screen. The zip has three
+programs: `trofeo_lcd.exe` (the display), `trofeo_config.exe` (the settings editor) and
+`trofeo_screen.exe` (second-monitor mode).
+
+- Windows may flag the executables as a virus: it is a false positive. See
+  [Troubleshooting](./docs/TROUBLESHOOTING.md).
+- To read AMD CPU temperature and power, install [PawnIO](https://github.com/namazso/PawnIO) and run as
+  Administrator. Intel CPUs, fans and a few other readings need LibreHardwareMonitor instead:
+  [Which sensors you need and what to install](./docs/SENSORS.md).
+- To start it with Windows: [Autostart on Windows](./docs/AUTOSTART.md).
+
+**Linux.** Build it from source (below). It needs `pkg-config` and the PulseAudio headers to build,
+and `playerctl` for song titles. For USB access without `sudo`, install `99-trofeo-lcd.rules`.
+
+**From source** (any system with [Rust](https://www.rust-lang.org/tools/install)):
 
 ```bash
 cargo build --release
 ./target/release/trofeo_lcd      # Windows: .\target\release\trofeo_lcd.exe
 ```
 
-`cargo build --release` builds all three programs: `trofeo_lcd` (the display),
-`trofeo_screen` (second-monitor mode) and `trofeo_config` (the settings editor).
-
-**Windows** — to read AMD CPU temp/power, install
-[PawnIO](https://github.com/namazso/PawnIO) and run as Administrator. Intel CPUs, fans and a few
-other readings need LibreHardwareMonitor instead — see
-[Which sensors you need and what to install](#which-sensors-you-need-and-what-to-install).
-
-**Linux** — needs `pkg-config` + PulseAudio headers to build, and
-`playerctl` for song titles. For USB access without `sudo`, install
-`99-trofeo-lcd.rules` (see the file's contents).
-
-### Which sensors you need and what to install
-
-Most readings work on their own. A few need a helper program, and which one depends on your
-hardware. If a value shows `N/A`, stays empty, or a tile never appears, find it in this table.
-
-| What | Needs | What to install |
-|---|---|---|
-| CPU load, frequency, RAM, network, disk, clock, weather, music | nothing | nothing |
-| **NVIDIA** graphics card (temperature, load, power, fan, memory) | the NVIDIA driver | the normal NVIDIA driver (it contains `nvml.dll`) |
-| **AMD Radeon** graphics card (temperature, load, power, fan, hot spot) | the Radeon driver | the normal AMD Adrenalin driver. The usage % is the driver's own figure; `gpu_usage_source = windows` goes back to the Windows counter. Some cards (the RX 9070 XT) do not report their power: the power tile stays empty, the rest works |
-| **AMD Ryzen** CPU temperature and power | PawnIO + Administrator | [PawnIO](https://github.com/namazso/PawnIO), then start the program **as administrator** |
-| **Intel** CPU temperature and power | LibreHardwareMonitor | see below |
-| Fans (CPU, case, pump), motherboard and disk temperature, GPU hot spot | LibreHardwareMonitor | see below |
-| Any CPU the built-in reader does not know (it covers Ryzen Zen 1 to 4; if `--diag` says `Sensor chosen: none`) | LibreHardwareMonitor | see below |
-
-**Do Intel users have to use LibreHardwareMonitor?** For the **CPU temperature and power on
-Windows, yes.** The program's own CPU sensor reads AMD Ryzen only, so on an Intel CPU those two
-values stay empty until LibreHardwareMonitor provides them. Everything else (CPU load and
-frequency, RAM, network, disk, and the graphics card) does not need it. On **Linux** the CPU
-temperature of an Intel processor is not read at all, and LibreHardwareMonitor does not exist
-there, so those two values stay empty.
-
-**Setting up LibreHardwareMonitor (Windows), once:**
-
-1. Download [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases)
-   and unzip it anywhere.
-2. Start it **as administrator** (right click → *Run as administrator*). Without administrator
-   rights it cannot read the sensors.
-3. Open *Options → Remote Web Server → Run*. The default port is `8085`; if you change it, set
-   `lhm_url` to match (see [Fans and sensors](#fans-and-sensors-librehardwaremonitor)).
-4. Leave it running, it can sit in the tray. Tick *Run on Windows Startup* and
-   *Start Minimized* in its *Options* menu if you want it to start with the PC.
-
-Nothing else to configure: when the program sees the web server it takes the CPU temperature and
-power from it (only when its own sensor has nothing, so AMD users with PawnIO are not affected),
-plus the fans, motherboard and disk temperature and the GPU hot spot.
-
-**If a value is still missing:**
-
-- `trofeo_lcd --diag` prints what the program's own sensors find (on Windows also the GPU usage from the driver and from the Windows counter, and which GPU engines are busy): the NVIDIA card, the Radeon card and the CPU sensor it picked (`Sensor chosen: none` on an Intel CPU, which is normal and means LibreHardwareMonitor is needed).
-- `trofeo_lcd --lhm-list` prints everything LibreHardwareMonitor reports and which sensor each
-  role uses. If the list is empty, the web server is not running (step 3) or is on another port.
-  If your board names a sensor differently, point the role at it with `lhm_cpu_fan = "Fan #2"`
-  and the other `lhm_*` keys.
-- A tile can only show what it is told to: check that the item is in `tiles`, `show` or the
-  screen you picked (the settings editor lists them all).
-- Two programs cannot drive the same screen: close the vendor software (TRCC) first.
-
-### Settings editor (`trofeo_config`)
-
-![The settings editor](img/config-editor.png)
-
-Don't want to edit `trofeo.conf` by hand? Start `trofeo_config` (Windows: `trofeo_config.exe`,
-in the same folder as `trofeo_lcd.exe`). It opens the `trofeo.conf` next to it — or the file you
-pass as its first argument (`trofeo_config my.conf`), or any file with *Open...* — and shows
-every setting, in sections gathered by theme (screen and sensors; look; screens; music and games; online; system; share), plus a *Raw file* view for anything else.
-Can't find a setting? Type a word in the **search box** at the top of the list (`12h`, `color`, `fade`, or the name of a key): the matching settings of every section appear and can be changed in place.
-
-![Searching for a setting](img/config-editor-search.png)
-
-- **Live preview, drawn by the real program.** The picture at the top is made by
-  `trofeo_lcd` itself (the editor runs it with `--preview-png` and shows the frame), with
-  sample data — clock, CPU/GPU values, a song — so backgrounds, effects, layouts, tiles, fonts
-  and colors look exactly as they will on the LCD. It never touches the USB device, the audio
-  or the sensors. Pick *Nothing playing*, *Music playing (spectrum)* or *Music card*, choose
-  which screen of a rotation to look at, and tick *Animate* to see the movement. If a value is
-  wrong, the real program's own error message is shown instead.
-- **Only what you change is written.** Settings left at their default stay out of the file;
-  the small `x` next to a setting takes it out again; `*` marks the ones that need a restart
-  of `trofeo_lcd` (after saving, a notice lists the ones you just changed), and a number shows
-  how many settings of a section you changed. **Settings I changed** gathers all of them in one list.
-- **Your file stays yours.** Comments and lines the editor doesn't touch are kept exactly as
-  they are, new settings are added under an "Added by the settings editor" comment, and the
-  previous file is copied to `trofeo.conf.bak` the first time you save in each session.
-- **The display follows by itself.** A running `trofeo_lcd` re-reads the file every second,
-  so saved changes appear on the LCD without a restart (see [Live reload](#live-reload)).
-- **Not resident.** The editor is a separate program that only reads and writes the file:
-  close it when you are done, `trofeo_lcd` does not need it.
-- Needs `trofeo_lcd.exe` in the same folder for the preview (the rest works without it).
-  The window is in English or Italian: switch at the top right and the editor remembers your choice (it is saved in `trofeo_config.ini` next to the program); the first time it starts in the language of `language` in your `trofeo.conf` (Italian if that is `it`), otherwise in the language of the system, otherwise in English. On Linux the *Open / Save as*
-  dialogs are replaced by a box where you type the path.
-
-Details in the **[Options guide](./OPTIONS_GUIDE.md#settings-editor-trofeo_config)**.
-
-### Windows Defender / antivirus false positive
-
-Windows may flag `trofeo_lcd.exe`, `trofeo_screen.exe` or `trofeo_config.exe` as a virus (often a
-generic detection like `Trojan:Win32/Wacatac`) and delete it on download or
-on first run. **This is a false positive**, common for small, unsigned Rust
-executables that do low-level system things — raw USB/HID access (DeepCool
-integration), a global hotkey (screenshot), ETW tracing (FPS monitor), and
-screen capture (`trofeo_screen`) — each of which happens to match a pattern
-heuristic antivirus engines associate with malware, even though the full
-source is public and does none of it maliciously.
-
-- A VirusTotal scan of a recent build (~70 engines) is here:
-  [virustotal.com/gui/file/75265a7e...](https://www.virustotal.com/gui/file/75265a7e271ed8a5e82cf0fd20a7c2fa3b122cc878bbe66ec90dfe704d16fe60)
-  — if you get a similar result on a newer build, it's safe to trust the
-  same way.
-- If Windows deletes the file, restore it from **Windows Security → Virus &
-  threat protection → Protection history** (don't disable real-time
-  protection to work around this).
-- Releases published from this repo are built directly from source by
-  [GitHub Actions](./.github/workflows/release.yml) (public build log), not
-  compiled on a personal machine — you can compare the workflow output to
-  what you downloaded, or just build it yourself with `cargo build --release`.
-- If you'd rather report it, Microsoft's false-positive submission page is
-  <https://www.microsoft.com/en-us/wdsi/filesubmission>.
-
-## Main options
-
-For every option the program supports — config-file keys and command-line
-flags, with defaults, valid values and examples — see the
-**[Options guide](./OPTIONS_GUIDE.md)**, or open the [settings editor](#settings-editor-trofeo_config).
-The table below covers just the handful of flags that only exist on the command line.
-
-| Option | Purpose | Default |
-|---|---|---|
-| `--idle-fps` / `--active-fps` | FPS when idle / has sound | `2` / `15` |
-| `--update-demo` | Show the [new version banner](#new-version-notice) now, with a made-up version | off |
-| `--no-deepcool` | Turn off DeepCool integration | enabled |
-| `--deepcool-update-ms` | DeepCool send interval (100–2000 ms) | `1000` |
-| `--openrgb-device <NAME>` | Sync color with an OpenRGB device | disabled |
-| `--lcd-test` | `0416:5302` screens (Trofeo Vision 6.86 ...): shows numbered test pictures (5 s each), asks which one is upright and writes `hid_mount` / `hid_header` into `trofeo.conf` (the settings editor has a button for it) | off |
-| `--weather-city <NAME>` | Fixed city for the weather module | auto (IP-based) |
-| `--hide-console` | Hide the console window (Windows) | disabled |
-| `--start-in-tray` | Hide the console window and leave an icon in the tray that shows it again (Windows); same as `start_in_tray = true` | disabled |
-| `-k, --screenshot-key` | Global hotkey to save the current LCD frame as a lossless PNG screenshot (f1-f12, printscreen) | off |
-| `--preview-png <FILE>` | Draw one frame with sample data into a PNG and exit — no USB, audio or sensors (this is what the settings editor uses; with `--preview-state`, `--preview-layout`, `--preview-time`) | off |
+`cargo build --release` builds all three programs. The code is described in
+[docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md).
 
 ## Supported panels
 
@@ -318,782 +120,56 @@ The table below covers just the handful of flags that only exist on the command 
 | Trofeo Vision 11.3 | 1920×400 | recognised automatically, or `panel = trofeo-11.3` |
 | Trofeo Vision 6.86 | 1280×480 | recognised automatically (USB `0416:5302`), or `panel = trofeo-6.86` |
 
-**Trofeo Vision 6.86 (confirmed working).** It is a different device from the 9.16": USB ID `0416:5302`
-and the "HID Type 2" protocol (a 20-byte header plus a JPEG, sent in 512-byte reports), taken from the
-open-source [thermalright-trcc-linux](https://github.com/Lexonight1/thermalright-trcc-linux) project.
-It is recognised by itself and works as it is for most units. If the picture comes out turned, rotated or
-partial, find the right orientation with the **screen test**: close the vendor program (TRCC), open the settings
-editor, go to **Screen** and press *Start the screen test*. Numbered pictures appear on the screen; click the
-number of the one that is upright (readable text, `TOP LEFT` in the top left corner) and press Save. The same
-test runs from the command line with `trofeo_lcd --lcd-test` (it asks for the number and writes the values into
-`trofeo.conf`). The values are `hid_mount = 0 | 90 | 180 | 270` and `hid_header = raster | panel`; they apply live.
-The console prints what the screen answers (model bytes and size) — please paste it in an issue if something does
-not work. On Linux install `99-trofeo-lcd.rules` (it includes the 6.86).
-
-![the screen test in the settings editor](img/editor-screen-test.png)
-
-**Other screens of the same family (`0416:5302`, not verified).** The model is read from the screen at start-up and
-the picture size follows it, so other Vision screens that take JPEG pictures should work the same way (the
-console prints the model bytes and size; if a model is not in the program's table, set `panel_size`). The small
-**320×240** screens take **RGB565** pictures (a 240×320 raster): they are supported too, with `hid_mount` (90 or
-270) and `hid_rgb565 = little | big` found by the same screen test (4 pictures). Not supported: the screens that
-do not answer the handshake (some Frozen Warframe SE units restart on it) and the 320×320 RGB565 model.
-If you have one of these screens, tell us whether it works — see
-[the options](./OPTIONS_GUIDE.md#trofeo-vision-686-usb-04165302).
-
-The 11.3" panel uses the same USB ID (`0416:5408`) and the same handshake as the
-9.16", so it is **recognised automatically** from the handshake (byte 20 of the
-reply = 5). If it is not, or for any other size, set it by hand in `trofeo.conf`:
-
-```ini
-panel = trofeo-11.3        # trofeo-9.16 | trofeo-11.3
-# panel_size = 1920x400    # or any WIDTHxHEIGHT (wins over `panel`)
-```
-
-Every screen (default, layouts, music screen, pixel game, animated backgrounds)
-adapts to the panel size, in landscape and in portrait. At start-up the console
-prints `Connected: ... PM=.. SUB=..` and the canvas/panel size in use.
-**The 11.3" support has not been verified on real hardware yet**: if the picture
-is shifted, cropped or the panel stays black, please open an issue and paste
-those two console lines. For `trofeo_screen` (second-monitor mode) pass
-`--panel trofeo-11.3` and use a virtual display of 1920×400 (400×1920 in portrait).
-
-## Orientation (landscape / portrait)
-
-The 9.16" panel is physically 1920×462 (1920×400 for the 11.3"). If you mount it upright, use portrait:
-the UI is drawn on a 462×1920 canvas (400×1920 on the 11.3") and rotated for the panel. Set it in a
-config file (copy `trofeo.conf.example` to `trofeo.conf` next to the
-executable, or pass `--config <FILE>`) or on the command line:
-
-```bash
-./trofeo_lcd --orientation portrait          # display mounted upright
-./trofeo_lcd --orientation portrait --flip   # upright, but upside-down
-```
-
-`--flip` adds 180° in either orientation. Command-line options override the
-config file. In `trofeo_screen` portrait mode the virtual display must be
-**462×1920** (auto-detected by `--list-displays`).
-
-**Every layout works in portrait.** The classic layouts and `tiles` stack their panels in a column, and
-`deck`, `cards`, `orbit` and `console` (from 2.9.0) turn their columns and clusters into rows: `deck` gives each
-device a row, `cards` puts the cards one under the other (the groups of `cards = a | b, c` are read in order),
-`orbit` stacks the rings with the clock block last, and `console` stacks its tiles with the one in focus taller.
-The screenshots below are the preview of each layout on a 462×1920 panel (`orientation = portrait`).
-
-![Portrait: default, cpu-gpu, temps, overview, grid6](img/portrait-1.png)
-
-![Portrait: clock-center, io, music, gaming, cpu](img/portrait-2.png)
-
-![Portrait: gpu, weather, news, tiles, frame](img/portrait-3.png)
-
-![Portrait: deck, cards, orbit, console](img/portrait-4.png)
-
-## Margins, language, background
-
-Also settable in `trofeo.conf` (see `trofeo.conf.example`), in the [settings editor](#settings-editor-trofeo_config), or via CLI:
-
-- `--margin <PX>` (or `--margin-top/-bottom/-left/-right`): keep the UI away
-  from the screen edges. Works in `trofeo_screen` too.
-- `--language <en|it|de|es|fr|pt>` (default `en`): UI text and date names in
-  English, Italian, German, Spanish, French, or Portuguese. Accented letters
-  are written in ASCII-safe form since the bitmap font has no accent glyphs
-  (e.g. German spells out umlauts as `AE`/`OE`/`UE` and `ß` as `SS`; Italian,
-  Spanish, French and Portuguese drop the accent, with Italian keeping its
-  usual apostrophe-for-accent spelling on day names like `Lunedi'`).
-- `--background <FILE>`: JPEG/PNG/BMP image, animated GIF, or video. Video
-  needs **ffmpeg** (`ffmpeg.exe` next to the program, in `PATH`, or `--ffmpeg <PATH>`).
-  `--background-dim <0-100>` darkens it (default 40). With an animated
-  background the idle FPS is raised to the active FPS so it stays smooth.
-  A sample background (`img/sample_background.jpg`) is included in this repo
-  if you just want to try it: `background = img/sample_background.jpg` — it's
-  also what the [preset layout screenshots](#preset-layouts) below are shown over.
-- `background_color = black | #0B1D3A | …`: a **solid color** instead of a picture — a name
-  (`black`, `white`, `pink`, `navy`, `teal`, …) or a hex code. See
-  [Backgrounds](#backgrounds-solid-color-and-animated-effects).
-- `background_effect = plasma | aurora | lava | waves | matrix | rain | aquarium | sea | ink | veil | network | globe`: an
-  **animated background** with no file needed — see
-  [Backgrounds](#backgrounds-solid-color-and-animated-effects).
-  It replaces `background` while it is on.
-
-### What to show, where, and colors
-
-- **Music screen**: `music_screen = true` turns the panel into a Spotify-style
-  now-playing card while a track plays (nine designs, `music_layout`) — album cover with glow, artist/title,
-  progress bar, spectrum on the side, all tinted with the cover's colors. The
-  background is configurable (`music_bg = gradient | blur | color | solid | none | effect`,
-  with brightness / blur / fit options), and a small footer with CPU / GPU / RAM
-  load (`music_stats`, selectable). The spectrum color on this screen is its own
-  setting (`music_spectrum_color`: cover color, a fixed color, a gradient or presets). Needs the player's cover to be exposed by the
-  system (Windows media controls / `playerctl` on Linux).
-- **Spectrum looks**: `spectrum_style = bars | led | peaks | area | mirror | all`
-  and `spectrum_palette = rainbow | fire | ocean | sunset | neon | ice | matrix |
-  purple | all` (or your own `spectrum_gradient = #FF0080, #00FFFF`); lists
-  rotate on a timer. `layout_hold_on_music = true` keeps the first layout on
-  screen while music plays instead of rotating.
-- `show = cpu, gpu, …` / `hide = spectrum, clock_date, …` choose what is drawn
-  (`cpu gpu uptime time date mem net disk volume nowplaying weather ticker
-  spectrum clock clock_date dashboard`). Hiding `spectrum` keeps the big clock
-  on screen during playback.
-- `status_position`, `clock_position`, `spectrum_position` (+ `spectrum_width/height`),
-  `ticker_position` (+ `ticker_width`) take one of 9 anchors: `top-left`, `top`,
-  `top-right`, `center-left`, `center`, `center-right`, `bottom-left`, `bottom`,
-  `bottom-right`.
-- `text_color`, `clock_color`, `color` (bars): `#RRGGBB`, `R,G,B` or a name. Every color option
-  understands the same long list of names (`black white gray silver red darkred green darkgreen
-  lime olive blue navy lightblue skyblue yellow gold cyan teal turquoise magenta pink hotpink
-  salmon coral orange brown beige purple violet indigo lavender`, also in Italian), not case
-  sensitive: `dark green` = `darkgreen`.
-- `background_fit` (`cover|stretch|contain|original`), `background_position`,
-  `background_offset_x/y`.
-
-Every key is also a CLI flag (`--hide spectrum`, `--clock-position top-right`).
-
-### Font
-
-![The pixel font and the smooth font](img/font-smooth.png)
-
-All the text of the program — status lines, big clock and date, every layout, the music screen,
-the ticker, the weather panel — can be drawn in two fonts: `font = pixel` (the default, the
-blocky 5x7 font) or `font = smooth`, anti-aliased **Poppins** with mixed case, accents and the
-degree sign. Capital letters keep the height of the pixel font, so every screen keeps its
-proportions, and the edges stay smooth over a picture, an effect or a semi-transparent panel.
-`font_weight = auto | light | regular | medium` chooses the weight (auto: stronger for small
-text, lighter for the clock). The `tiles` layout keeps its own `tiles_font`. The characters of
-the matrix background and the pixel game are always pixel art. See the
-**[Options guide](./OPTIONS_GUIDE.md#font)**.
-
-```ini
-font = smooth
-```
-
-### Pixel game under the clock
-
-![Pixel game — scenes at different times of day and weather](img/pixel_game_scenes.png)
-
-On the default screen (and on `default2`, the per-item one) a strip of
-**pixel-art game** is drawn under the clock, which shrinks to make room. A
-little knight or cat (`pixel_game_hero = knight | cat | both`) runs through a
-scrolling landscape and jumps over rocks, bushes, crates, slimes and holes by
-itself, and the world reacts to your computer:
-
-- **CPU load** sets the running speed (a sprint with dust at high load);
-- **music** makes the hero hop on the bass, with notes floating up;
-- **network bursts** drop rows of coins and **disk bursts** a treasure chest;
-- **on the hour** there are fireworks and a victory dance;
-- the **sky follows the real time** (dawn, day, dusk, night with moon and stars)
-  and the **weather** from the weather module (clouds, rain, snow, fog, thunderstorms).
-
-It is on by default; `pixel_game = false` turns it off, `pixel_game_height = 20-70`
-sets how much room it takes and `pixel_game_hud = false` hides the coin counter.
-It never shows on the preset layout panels, the music screen or the in-game
-dashboard. Because an animation needs smooth frames, the idle screen runs at
-`--active-fps` while it is visible — see [Performance](#performance). Details in the
-**[Options guide](./OPTIONS_GUIDE.md#pixel-game-mini-platformer-under-the-clock)**.
-
-### Backgrounds: solid color and animated effects
-
-![Animated background effects — styles and palettes](img/effects.png)
-
-Instead of a picture, the background can be a **solid color** or a **slow, animated effect**
-that needs no file at all. It is drawn behind everything (clock, status lines, spectrum, the
-pixel game, layouts, tiles) and costs almost no CPU.
-
-**Solid color.** `background_color = black` (or any name, or a hex code such as `#0B1D3A`)
-fills the whole panel with one flat color. An image, GIF, video or effect, if you also set one,
-is shown instead.
-
-**Soft effects.** `background_effect = plasma | aurora | lava | waves`: colors that blend into
-each other and drift — a classic plasma, curtains of aurora, a lava lamp, silk-like ripples.
-Pick the colors with `effect_palette` (`pastel`, `fluo`, `neon`, `candy`, `sunset`,
-`ocean`, `aurora`, `fire`, `forest`, `ice`, `mono`, `rainbow` — several, or `all`,
-rotate with a cross-fade every `effect_palette_interval` seconds) or give your own with
-`effect_colors = #FF0080, #00FFFF`. `effect_speed` (0-100), `effect_scale` (25-400) and
-`effect_brightness` (0-100, lower keeps the text readable) shape the look. The same effect can
-also sit behind the music screen with `music_bg = effect`.
-
-**Matrix and rain.** `background_effect = matrix` is a minimal **digital rain**: columns of
-characters falling at different speeds, each with a bright head and a fading tail. `rain` is the
-same idea reduced to the bare minimum, thin streaks of light without characters. Both are
-sparse, so text stays readable. They have their own one-color palettes — `matrix` (green, the
-default), `amber` (old terminal), `violet`, `crimson` and `snow` (white) — and any other palette
-or your own `effect_colors` work too.
-
-![Matrix / digital rain](img/background-rain.png)
-
-**Aquarium.** `background_effect = aquarium` turns the panel into the glass of an aquarium seen
-from the side: a moving, slightly irregular **water surface** with a bright edge (you always see
-where the water ends), water that darkens with depth, slanting **rays of light**, shimmering
-**caustics** and **bubbles** that rise and fade at the surface. `effect_level = 0-100` sets how
-high the water reaches (`50` = half the panel). Water palettes: `lagoon` (turquoise, the
-default), `deep` (blue to navy) and `tropical` (green-turquoise) — any other palette works too,
-its lightest color becoming the surface. It also works in portrait. `effect_flip = true` turns it
-**upside down**: the water hangs from the top of the panel.
-
-![Aquarium](img/background-aquarium.png)
-
-**The water as a gauge, and moving with the music.** Two options make the aquarium and the sea
-alive. `effect_level_source = cpu` (or `gpu`, `ram`) makes the water level follow that load: a full
-tank means a busy PC, a nearly empty one an idle PC (it never goes below 5%, and it rises and falls
-smoothly over a second or so; `effect_level` is not used then). `effect_reactive = true` makes the
-surface rise with the bass of the music, the light rays brighten and, in the sea, the sun glows and the near waves
-grow; the ink spreads faster and thicker. In silence everything is calm. Both need nothing installed; a
-reactive effect refreshes at least 15 times a second (a load-driven one at least 10), whatever `effect_fps` says.
-
-```ini
-background_effect = aquarium
-effect_level_source = cpu        # none | cpu | gpu | ram
-effect_reactive = true           # the music moves the water
-```
-
-**Sea.** `background_effect = sea` is a sunset seen from the water: a sky that goes from night blue
-to orange at the horizon, the **sun** on the horizon with its glow, and five **layers of waves**, each
-larger and darker than the one behind (the far ones take the orange of the sky, the near ones the color of
-the water), with a light edge, **foam** on the nearest two and the sun's **glitter** on the water, a column
-that widens towards you. `effect_level` sets how much of the panel is sea (`50` = the horizon in the middle),
-the water takes the aquarium's palettes (`lagoon` by default, `deep`, `tropical`...). With
-`effect_theme = light` the sky is a clear day. It also works in portrait.
-
-![Sea](img/background-sea.png)
-
-![Sea, light variant](img/background-sea-light.png)
-
-**Ink.** `background_effect = ink` is clouds of coloured ink spreading and curling in dark water (or
-dark ink on white paper in the light variant). The colors come from the palette (`sunset` by default; `neon`,
-`ocean`, `aurora`, `fire` and `rainbow` look good too) and drift along it as the clouds move; `effect_scale`
-makes the swirls larger or smaller. Both the sea and the ink do a little more work than the other effects
-(about 15 ms a frame on a large screen): lower `effect_fps` if you want them lighter.
-
-![Ink](img/background-ink.png)
-
-![Ink with the neon palette](img/background-ink-neon.png)
-
-**Veil.** `background_effect = veil` is slow, silky bands of light that sway over a deep night gradient, with a few specks
-floating up like dust in a beam of light — calm, dark and easy to read text on. The palettes made for it are
-`midnight` (the default, blue), `dusk` (violet), `ember` (red-orange), `mint`, `rose` and `slate`; any other
-palette works too. `effect_level` is how many specks float about (`0` = none), `effect_scale` the width of the bands,
-`effect_reactive = true` lets the music widen the bands and brighten the specks. It costs only about 4 ms a frame.
-
-![Veil, midnight](img/background-veil.png)
-
-![Veil, ember](img/background-veil-ember.png)
-
-**Network and globe.** `background_effect = network` is a web of points drifting slowly,
-joined by thin lines while they are near each other, so the net keeps changing shape (a few nodes
-carry a ring). `globe` is the same on a sphere that turns and tilts slowly, the near side clearer
-than the far one. Only lines and dots, no text. `effect_level` sets how many nodes there are,
-`effect_scale` their spacing and size (and the size of the globe). They use the same palettes as
-the other effects — the default is `ice`; a one-colour palette such as `crimson` gives grey lines
-with red nodes, a several-colour one (`neon`, `rainbow`) nodes of different colors.
-
-![Network and globe](img/background-network.png)
-
-![Globe](img/background-globe.png)
-
-**Light (white) variants.** `effect_theme = light` gives `matrix`, `rain`, `aquarium`, `sea`, `ink`, `network`
-and `globe` a **white background**: dark characters and streaks on white paper, a white room with
-pale water that deepens in color toward the bottom, or grey-blue lines and nodes on white. `effect_brightness` then sets how saturated the colors
-are. Remember to give the text a dark color:
-
-```ini
-background_effect = aquarium
-effect_theme = light
-effect_palette = lagoon
-clock_color = #14323C
-text_color = #14323C
-```
-
-![Light variants](img/background-light.png)
-
-```ini
-background_effect = matrix            # a minimal digital rain...
-effect_palette = amber                # ...like an old terminal
-
-# background_effect = aquarium        # or an aquarium, water up to 60% of the height
-# effect_palette = deep
-# effect_level = 60
-
-# background_effect = network         # or nodes and thin lines (globe: a turning sphere)
-# effect_theme = light
-# effect_palette = crimson
-```
-
-It is built to be light: the picture is only calculated on a coarse grid and
-stretched through a color table (about a millisecond per frame; the aquarium, a few
-milliseconds), and `effect_fps` (default 8) keeps the number of frames low — see
-[Performance](#performance). Details and every key in the
-**[Options guide](./OPTIONS_GUIDE.md#animated-background-effect-plasma-aurora-lava-waves-matrix-rain-aquarium-sea-ink-veil-network-globe)**.
-
-### Brightness, DeepCool, FPS
-
-- `brightness = 0-100`: software dimming (no LY brightness command is known).
-- `deepcool = false` (or `--no-deepcool`): never touch the DeepCool display.
-- The **CH170 / CH270 / CH690 DIGITAL** case display can show the CPU frequency, the fan speed in RPM
-  (from [LibreHardwareMonitor](#fans-and-sensors-librehardwaremonitor)) or both in turn:
-  `deepcool_mode = freq | fan | alternate`, `deepcool_fan = cpu | case | pump | gpu | both`,
-  `deepcool_alternate = 6` (seconds). They apply live. The display also has a **GPU section**:
-  `deepcool_source = cpu | gpu | alternate` chooses CPU, GPU, or both in turn (with `alternate` the CPU
-  phases — frequency and/or RPM — are followed by the GPU). The way the display takes the RPM is not
-  documented by DeepCool: if the number does not show up on your model, tell us which one it is.
-- Game dashboard FPS works on any GPU via ETW (DirectX 9–12 games; run as
-  Administrator; Vulkan/OpenGL-native games are not covered). NVIDIA GPU
-  temperature/power/clock come from NVML (`nvml.dll`, shipped with the
-  driver), falling back to `nvidia-smi`. `--diag` prints what each source
-  returns.
-
-### Weather
-
-Current temperature and a small stylized condition icon (sun, cloud, rain,
-snow, fog, thunder...), from [Open-Meteo](https://open-meteo.com/) (free, no
-API key). By default the location is guessed from the machine's public IP
-address; set `weather_city = Milano` (or `--weather-city`) to use a fixed city
-instead — changing it needs a restart, since it re-spawns the background
-fetch thread. `weather_unit = c` (default) or `f` picks the temperature unit,
-and applies live. The weather can be shown two ways: as a per-item line named
-`weather` (see "Per-item control" below, `default2`), and/or as its own big
-panel (`layout = weather`, or e.g. `layout = default, weather` to rotate with
-the standard screen). If the network is unreachable or the location
-can't be resolved yet, the item just shows "N/A" until the first fetch
-succeeds; nothing else in the program is affected. `--diag` also prints the
-resolved location and a sample reading.
-
-The `weather` panel also shows a **7-day forecast strip** below the current
-conditions: one column per day, with the abbreviated day name, a small
-condition icon, the high/low temperature and (when the model provides it) the
-rain probability. It's automatic — no extra config — and comes from the same
-Open-Meteo request as the current conditions. In portrait mode the columns
-shrink to fit the narrower panel, same idea as everything else that adapts to
-orientation.
-
-### Ticker (news headlines, or any custom feed)
-
-![Ticker — chyron over the classic screen](img/ticker.png)
-
-Scrolling headlines from one or more sources, refreshed on a background
-thread (same idea as the weather module). Set one or more comma-separated
-`ticker_source` entries — each can be an **RSS/Atom feed URL** (headlines
-come from each item's title), **any other URL** (not a feed, so each
-non-empty line of the response becomes one item — point it at your own
-script or webhook), or a **local file path** (one item per non-empty line,
-re-read on every refresh). Two independent ways to show it, usable together:
-a scrolling line drawn on top of whatever else is on screen (`show`/`hide =
-ticker`, styled with `ticker_position`/`ticker_size`/`ticker_color`/
-`ticker_backdrop`/`ticker_width`), and/or its own full panel (`layout =
-news`). `ticker_source`/`ticker_refresh_min` (default 10 minutes) need a
-restart, like `weather_city`; everything else applies live.
-
-```ini
-ticker_source = https://www.ansa.it/sito/ansait_rss.xml
-ticker_refresh_min = 10
-show = ticker
-layout = default, news:20
-```
-
-See the **[Options guide](./OPTIONS_GUIDE.md#ticker)** for the full reference
-and more examples (combining feeds and files, styling the chyron, etc.).
-
-### Preset layouts
-
-`layout = default | cpu-gpu | temps | overview | grid6 | clock-center | io | music | gaming | cpu | gpu | weather | news | tiles | deck | cards | orbit | console | steam | frame`
-(`--layout list` prints them). All of them, shown here over a sample background
-(`background = img/sample_background.jpg`, `panel_opacity = 60`):
-
-| | | |
-|---|---|---|
-| ![cpu-gpu](img/layout-cpu-gpu.png)<br>`cpu-gpu` | ![temps](img/layout-temps.png)<br>`temps` | ![overview](img/layout-overview.png)<br>`overview` |
-| ![grid6](img/layout-grid6.png)<br>`grid6` | ![clock-center](img/layout-clock-center.png)<br>`clock-center` | ![io](img/layout-io.png)<br>`io` |
-| ![music](img/layout-music.png)<br>`music` | ![gaming](img/layout-gaming.png)<br>`gaming` | ![cpu](img/layout-cpu.png)<br>`cpu` |
-| ![gpu](img/layout-gpu.png)<br>`gpu` | ![weather](img/layout-weather.png)<br>`weather` | ![news](img/layout-news.png)<br>`news` |
-
-Several layouts separated by commas rotate every
-`layout_interval` seconds (`layout = cpu-gpu, temps, music`). Each entry can also carry its own
-duration with `name:seconds`, instead of splitting the time equally — `layout = default:30, weather:5`
-keeps the standard screen up for 30s straight, then the weather panel for 5s, then back to 30s of
-the standard screen (not alternating every 5s); an entry with no `:seconds` falls back to
-`layout_interval`. `default2` is the same screen but with the per-item styling below (`default`
-stays classic; per-item options without any `layout` imply `default2`). `default` is the standard
-screen (status lines, spectrum, big clock) and can be part of the rotation (`layout = default, cpu-gpu`).
-`trofeo_lcd.exe --diag` prints NVIDIA/AMD GPU sensor diagnostics. `text_backdrop = true` puts a panel
-behind the status lines and big clock (same opacity); `panel_opacity = 0-100`
-makes panels see-through over the background. Big panels replace the clock; portrait stacks
-them vertically. See `trofeo.conf.example`. In the [settings editor](#settings-editor-trofeo_config),
-the *Screens (layouts)* section builds the rotation with a list (add, reorder, seconds per screen)
-and the preview lets you look at each screen in turn.
-
-### Gaming screens
-
-While a game runs (the GPU stays busy) the LCD switches to a screen made for it. `gaming_layout` chooses among nine designs, all of them drawn for landscape and for portrait:
-
-| | | |
-|---|---|---|
-| ![arena](img/gaming-arena.png)<br>`arena` — elegant cards, big FPS, rings | ![zen](img/gaming-zen.png)<br>`zen` — minimal, the FPS over a soft graph | ![cockpit](img/gaming-cockpit.png)<br>`cockpit` — racing dials |
-| ![tactical](img/gaming-tactical.png)<br>`tactical` — HUD with brackets | ![neon](img/gaming-neon.png)<br>`neon` — synthwave sun and grid | ![telemetry](img/gaming-telemetry.png)<br>`telemetry` — an engineer's chart |
-| ![quest](img/gaming-quest.png)<br>`quest` — RPG panels, HP / MP bars | ![arcade](img/gaming-arcade.png)<br>`arcade` — pixel font, CREDIT 01, hi-score | ![classic](img/gaming-classic.png)<br>`classic` — the old big squares |
-
-Everything is adjustable, in the *Gaming screen* section of the settings editor (whose preview shows a game running) or in the file: the readings (`gaming_items`, up to four of cpu, gpu, ram, fans, net, disk), which number is big (`gaming_hero`), the FPS graph and its history, the FPS at the end of the gauges, the temperature that turns red, the glow, your own colors or a preset, the font, and the background (the design's own, the program's one, a color, a gradient, an animated effect or a picture).
-
-**The game.** The name comes from the program in the foreground: for Steam games from your library (`appmanifest` files), for games of the Epic, GOG and Xbox folders from the install folder, otherwise from the window title or the program's name. The facts under it (`gaming_details`) are the time since the game started, the hours played (Steam), the size of the game window, the RAM the game uses and the store. The cover (`gaming_cover`) is shown by the designs that have room for it. *This part reads the foreground window, so an unusual window title can give an odd name; set `gaming_info = false` to hide it.*
-
-### Steam cover flow
-
-`layout = steam` (or put `steam` in your list of screens, e.g. `layout = default:30, steam:20`) shows your **installed Steam games** as covers sliding by in perspective, with a reflection:
-
-![Steam cover flow](img/steam-coverflow.png)
-
-![Steam cover flow, aurora background and a stronger tilt](img/steam-coverflow-aurora.png)
-
-It reads the local Steam folder only (the registry and the usual folders, or `steam_path`): no account, no internet. The covers are the ones Steam has already cached for its library; a game without a cached cover gets a generated card with its initial and name. Tune it with `steam_interval` (seconds per game), `steam_speed` (how long the slide takes), `steam_side` (covers on each side), `steam_tilt`, `steam_reflection`, `steam_order` (recent, name, random), `steam_title` / `steam_details` (name, hours played, last time) and the background: `steam_bg = blur` (the cover in the middle, blurred) or `global | color | gradient | effect | image` for the same backgrounds as everywhere else (an animated one, a picture, ...), so the flow can sit over an aurora or a picture. The row rests on a game for `steam_interval` seconds and then slides to the next; while it rests the screen idles at a few frames a second. In the settings editor the *Steam cover flow* section has a folder picker and a real preview. *Not tried on every PC: if Steam is installed in an unusual place, set `steam_path`.*
-
-### Tiles layout (glass dashboard)
-
-![tiles](img/layout-tiles.png)
-
-`layout = tiles` shows rounded, semi-transparent tiles with big values, a progress
-bar or a ring and an optional second value — the clock, CPU/GPU load, temperatures
-and watts, RAM, network, disk, FPS, weather and the playing track. You choose
-**which tiles** to show and in which rows, the **font** (anti-aliased "smooth" or the
-classic pixel font), the **colors** of the bars and rings (all of them, or one
-tile at a time) and what is **behind** the tiles:
-
-```ini
-layout = tiles
-# Rows are separated by "|"; ":ring" draws a ring instead of a bar,
-# "clock:tall" makes the clock as tall as all the rows.
-tiles = clock:tall, cpu_temp, gpu_temp | ram:ring, cpu:ring, gpu:ring
-tiles_font = smooth                         # smooth | pixel
-tiles_theme = dark                          # dark | light
-tiles_bar_color = #00C8FF, #FF0080          # all bars and rings: one color or a gradient (default: auto)
-tile_gpu_color = #FFC800                    # ...and one tile on its own
-tiles_bg = gradient                         # global | color | gradient | effect | image
-tiles_bg_color = #1B2A4A, #4A1B3A
-```
-
-![tiles looks](img/tiles-looks.png)
-
-Tiles: `clock cpu cpu_temp cpu_watt gpu gpu_temp gpu_hotspot gpu_watt ram net disk fps weather music`, and, with
-[LibreHardwareMonitor](#fans-and-sensors-librehardwaremonitor), `cpu_fan case_fan pump gpu_fan fans mb_temp disk_temp`.
-Backgrounds: whatever the other screens use (`global`), a color, a gradient, the
-animated effects of [Backgrounds](#backgrounds-solid-color-and-animated-effects)
-(matrix, rain, the aquarium, the network and the globe included),
-or an image just for this screen. Works on 1920×462, 1920×400 and in portrait; the
-tiles are redrawn only when something changes, so even an animated background costs
-little. All the keys are in the [options guide](./OPTIONS_GUIDE.md#tiles-layout). In the
-[settings editor](#settings-editor-trofeo_config) the *Tiles* section lets you build the rows
-by picking each tile from a list and toggling *ring* / *tall*.
-
-#### Tile colors from the color presets
-
-![tiles with colors from the presets](img/tiles-palette.png)
-
-By default all the tiles share one fill color. With `tiles_palette` **every tile gets a color of
-its own** from the same color presets as the animated backgrounds (`pastel fluo neon candy sunset
-ocean aurora fire forest ice mono rainbow`, one-color and water presets, `custom` with your own
-`tiles_colors`, or `all`). The colors drift slowly along the preset, and when you list **several
-presets they fade from one to the next, tile by tile**: with `tiles_palette_stagger` the tiles
-change preset at different moments, so at any time the dashboard is a quilt of colors in the
-middle of different fades. The colors are kept dark enough for the white text (or pale enough
-for the dark text of `tiles_theme = light`), whatever the preset.
-
-```ini
-layout = tiles
-tiles_palette = pastel, ocean, sunset       # or: all | fire | custom ... (empty = one color for all)
-tiles_palette_interval = 20                 # seconds each preset stays before the next fades in
-tiles_palette_stagger = 50                  # 0 = all tiles change together ... 100 = spread over the interval
-# tiles_colors = #FF0080, #00C8FF           # your own colors, used by "custom"
-```
-
-It is cheap: the colors are quantized, so the tiles are redrawn only when a color really
-changes, and the screen asks for 5 frames a second.
-
-### Fans and sensors (LibreHardwareMonitor)
-
-![the fan tiles](img/tiles-fans.png)
-
-Fan speeds are not something Windows exposes, so they come from
-[LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (free, open
-source). Start it **as administrator**, open *Options → Remote Web Server → Run* (port 8085) and
-leave it open (it can sit in the tray). trofeo_lcd reads its web server every 2 seconds; when it is
-not running nothing happens and the fan items simply stay empty.
-
-What you get:
-
-- a **`CPU 1240 / CASE 780 RPM` line on the CPU tiles** (`tiles_rpm = true`);
-- tiles `cpu_fan`, `case_fan`, `pump`, `gpu_fan`, a **`fans`** tile listing all of them with a bar
-  each, and `mb_temp` (motherboard) and `disk_temp`;
-- `fan 1240rpm case 780rpm pump 2650rpm` in the CPU line of the status screens (`hide = cpu_fan,
-  case_fan, pump` removes them);
-- the fans in the [Deck, Cards, Orbit and Console](#deck-cards-orbit-and-console) screens;
-- the **DeepCool case display** (see [Brightness, DeepCool, FPS](#brightness-deepcool-fps));
-- the GPU fan on cards that the driver reports no fan for, and the CPU temperature and power on
-  CPUs the built-in sensor does not know.
-
-The program picks the sensors by their names (a fan called "CPU Fan" is the CPU fan, "Pump" the
-pump, the other fans are averaged as the case fans). If your board names them differently,
-`trofeo_lcd --lhm-list` prints everything LibreHardwareMonitor reports and which sensor each role
-uses, and `lhm_cpu_fan = "Fan #2"`, `lhm_case_fan`, `lhm_pump`, `lhm_mb_temp` point a role at a part
-of a sensor's name.
-
-```ini
-lhm = true                       # false = do not look for LibreHardwareMonitor
-lhm_url = http://127.0.0.1:8085
-lhm_interval = 2                 # seconds between readings
-tiles = clock:tall, cpu_temp, fans | ram:ring, cpu:ring, cpu_fan:ring, mb_temp
-tiles_rpm = true
-tiles_fan_max = 2500             # the RPM that fills a bar
-```
-
-### Deck, Cards, Orbit and Console
-
-Four more full screens from the same readings as the tiles, each with its own character and all
-of them chosen from the config (and from the *Deck, Cards, Orbit and Console* section of the settings editor).
-They draw a **graph of the last minutes** for the main reading, and take their accent colors from the
-presets of the animated backgrounds (`dash_palette`) or from your own list (`dash_colors`).
-
-**`layout = deck`**: instrument columns. A gauge line on top of every column, a big light value, a
-sparkline and four small readings in a grid — and, with LibreHardwareMonitor, the fan speeds.
-
-![deck](img/layout-deck.png)
-
-**`layout = cards`**: flat colourful cards in a mosaic. Each card melts into the colour of its
-neighbour and carries a ghost silhouette of its own history along the bottom. A column can hold
-several stacked cards.
-
-![cards](img/layout-cards.png)
-
-**`layout = orbit`**: a cluster of concentric rings per device (load, temperature, power; RAM,
-disk and network; every fan), with the readings beside it and a legend under it, and the clock,
-weather and track on the right.
-
-![orbit](img/layout-orbit.png)
-
-**`layout = console`**: a bar on top with the names of the tiles and the clock, and under it a row of
-tiles (up to 7). **One tile is in focus**: it grows, lights up in its colour with a soft glow and shows a graph of
-the last minutes and its readings; the others stay small and dim, with the value and a bar. Where the focus goes is
-your choice with `console_focus`: `rotate` (the tiles take turns, `console_interval` seconds each), `load` (the focus
-follows the busiest of CPU, GPU, RAM, network and disk — it only moves when another one is clearly ahead for a few
-seconds, so it does not flicker) or `none` (no focus: all the tiles show their details, side by side). The colours
-are the usual `dash_palette` / `dash_colors` / `dash_theme`, so the same layout can be midnight blue, violet,
-ember, mint or a light pastel one. The screen is redrawn about once a second, so the focus changes at that pace.
-
-![console, focus on the CPU, over the veil background](img/layout-console.png)
-
-![console, no focus: all the tiles with their details](img/layout-console-all.png)
-
-![console, the focus follows the load (here the GPU), ember colours](img/layout-console-load.png)
-
-![console, light theme](img/layout-console-light.png)
-
-**In portrait** (`orientation = portrait`) the tiles are stacked in a column instead of standing side by side: the
-tile in focus is the tall one, the bar on top keeps only the date and the clock.
-
-![console, portrait, no focus](img/layout-console-portrait.png)
-
-```ini
-layout = console
-console = cpu, gpu, ram, net, disk   # 1-7 of: cpu gpu ram fans net disk clock weather music fps
-console_focus = rotate               # rotate | load | none
-console_interval = 6                 # seconds per tile with rotate
-console_bar = true                   # the bar with the names and the clock
-dash_palette = midnight              # midnight dusk ember mint rose slate pastel ocean ...
-dash_bg = effect                     # the animated background behind it
-background_effect = veil
-effect_palette = midnight
-```
-
-```ini
-layout = deck
-deck = cpu, gpu, ram, clock          # 2-5 of: cpu gpu ram fans net disk clock weather music fps
-# layout = cards
-cards = clock | cpu | gpu | ram, disk | music, net    # "|" = next column, "," = stacked
-# layout = orbit
-orbit = cpu, gpu, ram                # 1-4 devices
-orbit_clock = true
-# layout = console
-console = cpu, gpu, ram, net, disk   # 1-7 tiles, the one in focus shows the details
-console_focus = rotate               # rotate | load | none
-dash_palette = sunset                # default | any preset of the animated backgrounds
-# dash_colors = #A76BFF, #38C6F4, #FF6FB1
-dash_graph = true
-dash_history = 90                    # seconds of history in the graphs
-dash_bg = gradient                   # global | color | gradient | effect | image
-dash_bg_color = #10142A, #241030
-```
-
-**Temperature or load, and the fan.** `dash_hero = temp | load` chooses what is shown big on the CPU and GPU
-panels (the other becomes a small reading and the graph follows it); on the cards `cards_fan = true` adds the
-fan RPM at the top right (LibreHardwareMonitor).
-
-![cards: temperature big](img/cards-temp-fan.png)
-
-![cards: load big](img/cards-load-fan.png)
-
-![tiles with the GPU hot spot](img/tiles-hotspot.png)
-
-**GPU hot spot.** The `gpu_hotspot` tile shows the hottest point of the GPU (junction) with the normal GPU
-temperature under it. On AMD cards it comes from the Radeon driver (ADL), or from
-[LibreHardwareMonitor](#fans-and-sensors-librehardwaremonitor) when the driver does not give it; it is also a small
-reading on the GPU panel of `deck`, `cards` and `orbit`, and in the status line with `show = gpu_hotspot`.
-Not verified on the RX 9070 series yet: `trofeo_lcd --diag` and `--lhm-list` show what is read.
-
-**Light, dark, see-through.** `dash_theme = light` gives a white panel with dark text and pastel cards;
-`dash_plate_color` and `dash_plate` set the colour and the opacity of the panel behind `deck` and `orbit`
-(lower it to see an animated background through it, `0` = no panel) and `cards_opacity` the opacity of the
-cards:
-
-![deck and cards, light theme](img/dash-light.png)
-
-![orbit and cards over an animated background](img/dash-glass.png)
-
-```ini
-layout = orbit
-background_effect = aurora
-dash_theme = light       # dark | light
-dash_plate = 35          # opacity of the panel, 0-100
-# dash_plate_color = #FFF4E0
-# cards_opacity = 45
-```
-
-The screens are redrawn about once a second (the graphs move that often) and only when something
-changed. All the keys are in the [options guide](./OPTIONS_GUIDE.md#deck-cards-orbit-and-console).
-
-### Digital frame (picture collage)
-
-![digital frame, mosaic](img/layout-frame-mosaic.png)
-
-![digital frame, polaroid](img/layout-frame-polaroid.png)
-
-`layout = frame` shows the pictures of a folder as a collage in the middle of the screen, with
-two slim columns of the glass tiles of the Tiles layout at the sides (by default the clock and
-RAM on the left, CPU and GPU on the right). Behind the collage is the current photo, blurred
-and darkened.
-
-```ini
-layout = frame
-frame_folder = C:\Users\Me\Pictures\Holidays
-frame_style = mosaic                # mosaic = a tidy collage | polaroid = scattered prints with a white border
-frame_photos = 5                    # pictures on screen at once (1-9)
-frame_interval = 8                  # seconds between changes; each time ONE picture is replaced
-frame_order = shuffle               # shuffle | name
-frame_transition = fade             # fade | slide (a wipe in the mosaic, a print dropping in with polaroid)
-frame_left = clock, ram:ring        # the tiles at the sides: any of the Tiles list, or "none"
-frame_right = cpu:ring, gpu:ring
-```
-
-- **Two styles.** `mosaic` cuts the pictures to fit the places of a tidy collage (rounded corners,
-  a small gap: `frame_gap`, `frame_radius`; the places have different sizes and shapes, and
-  portrait photos are put in the tall ones). `polaroid` lays white-bordered prints with a wider
-  strip at the bottom, each tilted a little, with a soft shadow and a piece of tape on some; a
-  new print lands on top of the others.
-- **One at a time.** Every `frame_interval` seconds one picture is replaced and the rest stands
-  still; with `shuffle` every picture is shown before any comes back, and the new one is chosen
-  to fit the shape of the place it goes to.
-- **Your folder.** JPG, PNG, WebP, BMP and GIF (the first frame) — not HEIC (convert those
-  from your phone). The EXIF rotation of phone photos is respected. `frame_recursive = true`
-  includes the subfolders. The folder is read again every `frame_refresh` seconds (60), so new
-  pictures show up and removed ones go away without restarting. Unreadable files are skipped.
-  A missing or empty folder shows a message instead.
-- **Background.** `frame_bg = blur` (default; `frame_dim` darkens it), `dark`, or `global` — the
-  normal background of the program (an image, or one of the animated effects).
-- **The sides** take their look from the Tiles options (`tiles_theme`, `tiles_font`,
-  `tiles_color`, `tiles_palette` ...), so the frame and the dashboard always match. They are
-  columns on a landscape screen and strips at the top and bottom on a portrait one;
-  `frame_side_width` (% of the long side) sets their size, `frame_left = none` leaves a side
-  to the pictures.
-- **Light on the CPU.** Pictures are decoded and scaled once, on a background thread, straight
-  to the size of their place; the finished collage is kept as it is, so while nothing moves the
-  program idles at 2 frames a second. A change takes about a second and a half at 20 frames a
-  second (about 5-8 ms of drawing per frame), then it goes back to idle.
-
-In the [settings editor](#settings-editor-trofeo_config) the *Digital frame* section has a
-folder picker, the choices above and a **real preview** with your own pictures (the editor adds
-the screen to your list with one click).
-
-### Live reload
-
-`trofeo.conf` is re-read every second; saved changes apply without restarting (a broken file is ignored and the previous settings stay). Only `deepcool`, `fps_monitor`, OpenRGB, `hide_console`, `start_in_tray`, `screenshot_key`, `weather_city`, `ticker_source` and `ticker_refresh_min` need a restart. If a saved file is invalid, the previous settings stay active and the reason is written to `trofeo-errors.txt` next to the executable. The [settings editor](#settings-editor-trofeo_config) relies on this: save in the editor and the LCD updates by itself.
-
-### Per-item control
-
-Every info item (`cpu, gpu, uptime, time, date, mem/ram, net, disk, volume, nowplaying, weather`) can be
-turned on/off with `show`/`hide` and styled on its own with `<item>_size` (1-30), `<item>_position`
-(3x3 grid), `<item>_color` and `<item>_backdrop`. Setting any of them switches the info block to
-per-item mode (items on the same position stack, and the track scrolls without overlapping its
-neighbors). Details inside the CPU/GPU lines can be hidden with
-`hide = cpu_freq, cpu_temp, cpu_power, gpu_temp, gpu_hotspot, gpu_power, gpu_fan, gpu_clock, gpu_fps, cpu_fan, case_fan, pump`.
-`clock_time_size` / `clock_date_size` set the big clock's sizes, and `net_unit` (`kb|mb|auto`) /
-`mem_unit` (`mb|gb`) set the network and RAM units. `percent_decimals = 1` adds a decimal place to
-every CPU/GPU/RAM usage percentage shown anywhere (`37%` → `37.4%`); default `0` keeps the original
-whole-number look.
-
-### New version notice
-
-![The new version banner](img/update-banner.png)
-
-Off by default. With `update_check = true` the program asks GitHub, **once at start-up**, for the latest
-release of the project (a single small HTTPS request; nothing about your computer is sent, and nothing is
-downloaded or installed). If that release is newer than the version you are running, a banner appears at the
-bottom of the screen, on top of whatever is shown, and disappears by itself. When there is no network, or
-GitHub does not answer, nothing happens and nothing is shown.
-
-```ini
-update_check = true              # false (default) = never connect
-update_notice_secs = 8           # how long the banner stays on screen (2-120)
-update_check_hours = 0           # 0 = only at start-up; 24 = check again every day (max 720)
-```
-
-All three are in the settings editor (System section) and need a restart of `trofeo_lcd`. The banner is in the
-language of `language`. To see how it looks without waiting for a release, start the program with
-`--update-demo`: it pretends that version 99.0.0 exists.
-
-### Autostart on Windows
-
-`scripts/install-autostart.ps1` (included in the Windows release zip, in the `scripts` folder next to the exe) adds
-`trofeo_lcd.exe` to Windows startup. By default it registers a **Scheduled
-Task** that runs at logon with elevated ("Run as administrator")
-privileges and no UAC prompt on every login — needed if you use
-`fps_monitor` or PawnIO (AMD sensors). The script finds `trofeo_lcd.exe` by itself (next to the script, or one
-folder up, or in the folder you are in).
-
-The simplest way, step by step:
-
-1. Open PowerShell **as administrator** (right-click Start, *Terminal (Admin)* or *Windows PowerShell (Admin)*).
-2. Run the script through PowerShell with the execution policy bypassed for that one command. **Put the path in
-   quotes**, always when a folder has a space in its name (`Sensor Panel`), or PowerShell stops at the space:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "D:\Sensor Panel\trofeo-lcd-windows\scripts\install-autostart.ps1"
-```
-
-That is all: it prints `Done. Scheduled task 'TrofeoLCD' will start ... at every logon`. You do not need to open
-PowerShell in a particular folder, and you do not need to mark `trofeo_lcd.exe` as *Run as administrator* yourself:
-the task already starts it elevated. If the script cannot find the exe (for example you moved it away from the
-scripts), give its path:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "D:\Sensor Panel\trofeo-lcd-windows\scripts\install-autostart.ps1" -Exe "D:\Sensor Panel\trofeo-lcd-windows\trofeo_lcd.exe"
-```
-
-Other ways, from PowerShell opened in the folder of the exe (add the `powershell.exe -NoProfile -ExecutionPolicy Bypass -File`
-prefix if Windows says that running scripts is disabled):
-
-```powershell
-.\scripts\install-autostart.ps1                              # elevated task, --hide-console
-.\scripts\install-autostart.ps1 -Arguments ""                # elevated task, console visible
-.\scripts\install-autostart.ps1 -Method Shortcut              # simple Startup-folder shortcut, no admin needed, not elevated
-```
-
-Remove it with `.\scripts\uninstall-autostart.ps1` (same quotes and `-ExecutionPolicy Bypass` rules; removing the elevated
-task needs PowerShell as administrator; it removes whichever method was used). See the comments at the top of each
-script (or `Get-Help .\scripts\install-autostart.ps1 -Full`) for every option.
-
-**If you mark `trofeo_lcd.exe` as "Run as administrator" yourself** (Properties, Compatibility) Windows will not let
-a normal program start it. From 2.9.3 the settings editor works around that for the preview, but if it still says
-*"The requested operation requires elevation (os error 740)"* open `trofeo_config.exe` as administrator too.
-Only `trofeo_lcd.exe` is started at logon: the settings editor is opened by hand when you want it.
+The 6.86 and the other screens of its family have a screen test that finds the right orientation,
+and an option for units whose picture blinks. Details: [docs/PANELS.md](./docs/PANELS.md).
+
+## Settings editor (`trofeo_config`)
+
+![The settings editor](img/config-editor.png)
+
+You don't need to edit `trofeo.conf` by hand: start `trofeo_config` (Windows: `trofeo_config.exe`,
+in the same folder as `trofeo_lcd.exe`). It opens the `trofeo.conf` next to it, or the file you pass
+as its first argument, and shows every setting in sections gathered by theme.
+
+![Searching for a setting](img/config-editor-search.png)
+
+- **Search.** Type a word in the box at the top of the list (`12h`, `color`, `fade`, or a key
+  name) and change the matching settings in place.
+- **Live preview, drawn by the real program.** The picture at the top is made by `trofeo_lcd`
+  itself, with sample data, so backgrounds, layouts, fonts and colors look exactly as they will on
+  the LCD. It never touches the USB device, the audio or the sensors.
+- **Only what you change is written.** The small `x` takes a setting out of the file again; `*`
+  marks the ones that need a restart; **Settings I changed** gathers them all.
+- **Your file stays yours.** Comments and lines the editor doesn't touch are kept, and the previous
+  file is copied to `trofeo.conf.bak` the first time you save in each session.
+- **The display follows by itself.** A running `trofeo_lcd` re-reads the file every second, so saved
+  changes appear on the LCD without a restart.
+- The window is in English or Italian: switch at the top right.
+
+More in the [options guide](./OPTIONS_GUIDE.md#settings-editor-trofeo_config).
+
+## The gallery
+
+Show your screen to the other users: in the settings editor, open **Share your design**, take a
+picture of your screen, check it, and the editor copies the settings of the look (never files,
+folders, the weather city or sensors) and opens the gallery form on GitHub, where you drop the picture
+and paste the settings. You post it yourself, with your own GitHub account; the program sends
+nothing. Browse the designs:
+[the gallery](https://github.com/haven80/trofeo-lcd-rs/issues?q=is%3Aissue+label%3Agallery).
+To try someone else's design, paste its settings in **Share your design → Import a design**.
+
+## Configuration
+
+- **[Options guide](./OPTIONS_GUIDE.md)** — every setting, with defaults, valid values and examples.
+- **[trofeo.conf.example](./trofeo.conf.example)** — a commented file to copy and edit.
+- **[Configuration cookbook](./docs/CONFIGURATION.md)** — screens, backgrounds, fonts, tiles, weather,
+  ticker, fans and sensors, one by one.
+- **[Command-line options](./docs/COMMAND_LINE.md)** — the flags that only exist on the command line.
+- **[Performance](./docs/PERFORMANCE.md)** — what each feature costs.
 
 ## Second monitor mode
 
-Run **`trofeo_screen`** (instead of `trofeo_lcd` — they share the LCD, so
-don't run them together):
+Run **`trofeo_screen`** (instead of `trofeo_lcd` — they share the LCD, so don't run them together):
 
 ```bash
 ./target/release/trofeo_screen --list-displays    # list monitors
@@ -1103,63 +179,11 @@ don't run them together):
 Requires a *Virtual Display Driver* (VDD) at 1920×462 — see
 **[GUIDE_SECOND_MONITOR.md](./GUIDE_SECOND_MONITOR.md)**.
 
-## Structure
+## Documentation
 
-- `src/lib.rs` — USB driver: handshake, chunking, JPEG encode, `Framebuffer`.
-- `src/audio.rs` — audio capture (WASAPI / PulseAudio-PipeWire).
-- `src/cpu_sensor.rs`, `src/cpu_freq.rs` — CPU temp/power & frequency.
-- `src/deepcool/` — DeepCool display drivers (HID).
-- `src/dxgi_capture.rs` + `src/bin/screen.rs` — second monitor mode.
-- `src/weather.rs` + `src/weather_icon.rs` — weather (Open-Meteo) and its condition icons.
-- `src/ticker.rs` — news ticker: RSS/Atom feeds, plain-text URLs, or a local file.
-- `src/spectrum.rs` — spectrum styles and color palettes.
-- `src/media.rs` + `src/music_screen.rs` — now-playing info (Windows media controls / `playerctl`) and the Spotify-style music screen.
-- `src/pixel_game.rs` — the self-playing pixel-art platformer under the clock.
-- `src/effect.rs` — the animated backgrounds (plasma, aurora, lava, waves, matrix, rain, aquarium, network, globe and their light variants).
-- `src/frame.rs` — the digital picture frame (folder scan, picture loader thread, mosaic and polaroid collages, transitions).
-- `src/tiles.rs` — the tiles layout; `src/smooth_font.rs` + `assets/` — the anti-aliased text, used by the tiles and (`font = smooth`) by every other text (embedded Poppins font, SIL OFL: see `assets/OFL.txt`).
-- `src/bin/config_editor.rs` — the settings editor window (`trofeo_config`, built with egui).
-- `src/schema.rs` — the list of every setting the editor shows (names, ranges, defaults, texts in English and Italian); tests check it against the real parser, so the editor can only write what the program accepts.
-- `src/conf_edit.rs` — line-by-line editing of `trofeo.conf` that keeps comments and untouched lines.
-- `src/main.rs` — main loop: audio → FFT → EQ bars → send to screen (and `--preview-png`, which draws one frame for the editor's preview).
-
-## Performance
-
-Measured on a Windows PC (12 logical processors), running `trofeo_lcd` at
-default settings (idle FPS 2 / active 15, DeepCool enabled), before the pixel
-game existed:
-
-| Metric | Measured |
-|---|---|
-| RAM | ~13 MB working set (stable, no growth) |
-
-It stays this light thanks to adaptive FPS (JPEG encode + USB transfer only
-happen while there is audio) and the CPU optimizations in `src/main.rs` /
-`src/lib.rs`.
-
-The **pixel game** (on by default) trades some of that for animation: while it
-is on screen the idle screen runs at the active FPS (15) instead of the idle
-one (2). Drawing the game itself costs well under a millisecond per frame; the
-extra load is JPEG-encoding and sending more frames. Set `pixel_game = false`
-to get the minimal-load behavior measured above. These figures have not been
-re-measured with the game on.
-
-An **animated background effect** works the same way: building the picture takes about a
-millisecond (matrix and rain a little less; the aquarium about 5 ms, the network 1-2 ms and the globe about 3 ms), and the cost that matters is
-the extra frames. It uses its own, low `effect_fps` (default 8) while it moves instead of the
-idle 2 fps, so it sits between the idle screen and the game; lower `effect_fps` or set
-`effect_speed = 0` (a still picture, idle FPS unchanged) to make it lighter still. A **solid
-color** background costs nothing extra.
-
-The **digital frame** idles at 2 frames a second (the collage is kept as a finished picture and
-copied to the screen) and asks for 20 only while a picture is changing, for about a second and a
-half every `frame_interval` seconds. Decoding and scaling a photo happens on a background thread,
-once per change. The **tile colors from the presets** need 5 frames a second.
-
-The **settings editor** is not part of this: it is a separate program, and it only needs to be
-open while you change settings. Its preview starts `trofeo_lcd` for a moment to draw each frame
-and exits; it never touches the LCD, the audio or the sensors, so it can be used while the
-display is running.
+Everything that is not here is in [docs/](./docs/README.md): features, sensors, panels, the
+configuration cookbook, command-line options, autostart, performance, troubleshooting, the version
+history and the code structure.
 
 ## Credits
 
