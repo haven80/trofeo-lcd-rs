@@ -838,6 +838,35 @@ alert_delay = 5
 alert_color = 255,160,0
 ```
 
+## Profiles
+
+| Key | CLI | Values | Default |
+|---|---|---|---|
+| `profile` | `--profile` | the name of a profile | none |
+| `profile_key` | `--profile-key` | a hotkey such as `ctrl+alt+p` or `shift+f9` *(restart, Windows)* | none |
+| `profile_rules` | `--profile-rules` | `program=profile, program=profile` *(Windows)* | none |
+
+A profile is a few settings that are laid over your configuration file **while it is in use**, and that you can switch at any moment without touching the file: another layout and brightness for gaming, a quiet theme for work, a dim one for the evening. It is a text file `profiles/<name>.profile` in a `profiles` folder next to the configuration file, with `key = value` lines:
+
+```ini
+# profiles/gaming.profile
+layout = gaming
+brightness = 100
+theme = neon
+```
+
+- **What the profile says wins** over the configuration file (and over the theme's defaults); the command line still wins over everything. What it does not say stays as in the file.
+- Only settings that **apply live** can be in a profile (not the ones marked "needs a restart" in the editor): switching never needs a restart. A file with anything else is refused, with the key named.
+- Names: lowercase letters, digits, `-` and `_` (up to 40); `none` means no profile.
+
+**Which profile is in use**, in this order: (1) the one a **rule** gives to the program in the foreground, (2) the one chosen **by hand**, (3) `profile = name` in the configuration file, (4) none.
+
+- **By hand**: the tray menu (*Profile*, Windows), the settings editor (*Screens → Profiles → Use*) or the hotkey. The choice is saved in `profiles/active`, not in your configuration file, and `trofeo_lcd` follows within a second. *No profile* is also a choice; *Let the file decide* in the editor forgets the choice.
+- **Hotkey** `profile_key = ctrl+alt+p`: every press goes to the next profile (none → first → … → last → none). Modifiers `ctrl`, `alt`, `shift`, `win`; keys `f1`-`f12`, `a`-`z`, `0`-`9`, `printscreen`; a letter or digit needs a modifier. A restart is needed to change it. Windows only.
+- **Rules** `profile_rules = mygame.exe=gaming, code.exe=work`: while that program (the name of its `.exe`, case does not matter) is the one in the foreground, its profile is used. The profile goes back **5 seconds after** leaving the program, so a quick Alt-Tab does not make the screen flip. Windows (on Linux under X11 the program name is found too). Checked every 2 seconds, and only when there are rules.
+
+In the settings editor, *Screens → Profiles* lists the profiles, makes a new one (*Fill with the settings I changed* starts from what your file says; remove the lines you do not want) and edits the existing ones. Nothing runs while there are no profiles and none of the three keys is set.
+
 ## Themes
 
 | Key | CLI | Values | Default |
@@ -855,6 +884,27 @@ It applies live when the file is saved.
 theme = ocean
 clock_color = #FFD000
 ```
+
+### Your own themes — save, export, share, import
+
+In the settings editor, **Share your design** has a block **Your themes**: type a name and press **Save my look as a theme**. The look you have made (a built-in theme and your changes on top of it included) is written to `themes/<name>.theme`, in a `themes` folder next to your configuration file. Then `theme = <name>` brings it back (the *Theme* setting lists your themes after the built-in ones).
+
+A theme file is plain text, `key = value` lines of the look, so you can also write or edit one by hand:
+
+```ini
+# themes/gold.theme
+background_effect = plasma
+effect_palette = sunset
+clock_color = #FFD000
+panel_opacity = 30
+```
+
+- Only the **look** can be in a theme: no files, folders, weather city, sensors or system settings (a file that has them is refused, with the key named). `theme` itself cannot be in a theme.
+- A name is lowercase letters, digits, `-` and `_` (up to 40) and cannot be the name of a built-in theme.
+- As with the built-in themes, what is written in the configuration file wins over the theme.
+- **To give a theme to someone:** press **Copy the text** next to it (a message, a forum post), or send the file. The other person pastes the text in **Import a design**, types a name and presses **Import as a theme**, or presses **Import a theme file...** and picks the file; it is saved in their `themes` folder.
+- **To post it in the gallery:** after taking the picture, **Save my look as a theme file to attach** writes `<name>.theme.txt` next to the picture (GitHub does not accept `.theme` files, hence the `.txt`); drag it into the *Theme file* box of the gallery page. Whoever downloads it imports it with **Import a theme file...** (the name is taken from the file name).
+- In the settings text of a gallery post, a theme of your own is written out as its settings (others do not have your file); a built-in theme stays `theme = name`.
 
 ## DeepCool integration *(restart required)*
 

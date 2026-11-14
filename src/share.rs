@@ -73,15 +73,48 @@ pub fn shareable(f: &Field) -> bool {
     LOOK_SECTIONS.contains(&f.section) || f.key == "orientation"
 }
 
-/// The settings of the look that the user has set, as `key = value` lines.
-pub fn settings_text(doc: &ConfDoc, fields: &[Field]) -> String {
-    let mut out = String::new();
-    for f in fields.iter().filter(|f| shareable(f) && doc.is_set(&f.key)) {
-        if let Some(v) = doc.get(&f.key) {
-            out.push_str(&format!("{} = {}\n", f.key, v));
+/// The settings of the look that the user has set, as `(key, value)`.
+///
+/// A built-in theme is kept as `theme = name` (everyone has it). A theme of your own is
+/// **replaced by its settings** (the others do not have the file), the ones you set yourself
+/// winning; with `expand_all` the built-in theme is replaced too (to save the look as a new
+/// theme) and the `theme` line is left out.
+pub fn look_pairs(doc: &ConfDoc, fields: &[Field], dir: Option<&std::path::Path>, expand_all: bool) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    let mut theme = doc.get("theme").map(|t| t.trim().to_ascii_lowercase()).filter(|t| !t.is_empty() && t != "none");
+    let mut inherited: Vec<(String, String)> = Vec::new();
+    if let Some(name) = theme.clone() {
+        let builtin = crate::themes::find(&name).is_some();
+        if expand_all || !builtin {
+            if let Ok(s) = crate::themes::settings_of(&name, dir) {
+                inherited = s;
+            }
+            theme = None;
+        }
+    }
+    if let Some(t) = theme {
+        out.push(("theme".to_string(), t));
+    }
+    for f in fields.iter().filter(|f| f.key != "theme" && shareable(f)) {
+        if doc.is_set(&f.key) {
+            if let Some(v) = doc.get(&f.key) {
+                out.push((f.key.clone(), v));
+            }
+        } else if let Some((_, v)) = inherited.iter().find(|(k, _)| *k == f.key) {
+            out.push((f.key.clone(), v.clone()));
         }
     }
     out
+}
+
+/// The settings of the look that the user has set, as `key = value` lines (a theme of your own
+/// is written out as its settings, see [`look_pairs`]).
+pub fn settings_text(doc: &ConfDoc, fields: &[Field]) -> String {
+    settings_text_in(doc, fields, crate::themes::user_dir().as_deref())
+}
+
+pub fn settings_text_in(doc: &ConfDoc, fields: &[Field], dir: Option<&std::path::Path>) -> String {
+    look_pairs(doc, fields, dir, false).iter().map(|(k, v)| format!("{k} = {v}\n")).collect()
 }
 
 /// What an imported design would do.
@@ -104,6 +137,9 @@ pub fn parse_import(text: &str, fields: &[Field]) -> Import {
         match fields.iter().find(|f| f.key == key) {
             None => out.skipped.push((key, "not a setting of this version")),
             Some(f) if !shareable(f) => out.skipped.push((key, "not part of the look")),
+            Some(_) if key == "theme" && crate::themes::find(&value).is_none() && value.trim() != "none" => {
+                out.skipped.push((key, "a theme of someone's own: not in this version"))
+            }
             Some(f) if !crate::schema::check_value(f, &value) => out.skipped.push((key, "value not valid")),
             Some(_) => out.apply.push((key, value)),
         }
@@ -223,5 +259,32 @@ mod tests {
         assert_eq!(why("clock_ampm"), Some("value not valid"));
         assert_eq!(why("not_a_key"), Some("not a setting of this version"));
         assert_eq!(parse_import("", &fields()), Import::default());
+    }
+
+    #[test]
+    fn a_theme_of_your_own_is_shared_as_its_settings_and_a_built_in_one_by_name() {
+        let dir = std::env::temp_dir().join(format!("trofeo_share_theme_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        crate::themes::save_user(&dir, "mine", &[("clock_color".to_string(), "#00FF00".to_string()), ("panel_opacity".to_string(), "20".to_string())]).unwrap();
+        let f = fields();
+        // own theme: replaced by its settings, what the user set wins, the theme line is gone
+        let doc = ConfDoc::parse("theme = mine\npanel_opacity = 70\nweather_city = Rome\n");
+        let text = settings_text_in(&doc, &f, Some(&dir));
+        assert!(text.contains("clock_color = #00FF00") && text.contains("panel_opacity = 70"), "{text}");
+        assert!(!text.contains("theme") && !text.contains("Rome") && !text.contains("20"), "{text}");
+        // built-in theme: by name
+        let t = settings_text_in(&ConfDoc::parse("theme = ocean\nclock_color = #FF0000\n"), &f, Some(&dir));
+        assert!(t.contains("theme = ocean") && t.contains("clock_color = #FF0000") && !t.contains("background_effect"), "{t}");
+        // to save as a theme: everything expanded, no theme line
+        let all = look_pairs(&ConfDoc::parse("theme = ocean\nclock_color = #FF0000\n"), &f, Some(&dir), true);
+        assert!(all.iter().all(|(k, _)| k != "theme"));
+        assert!(all.contains(&("clock_color".to_string(), "#FF0000".to_string())));
+        assert!(all.iter().any(|(k, v)| k == "background_effect" && v == "waves"));
+        // importing a design that names a theme of someone else's is left out
+        let imp = parse_import("theme = mine\nclock_color = #FFFFFF\n", &f);
+        assert_eq!(imp.apply, vec![("clock_color".to_string(), "#FFFFFF".to_string())]);
+        assert_eq!(imp.skipped.len(), 1);
+        assert!(parse_import("theme = ocean\n", &f).apply.len() == 1);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

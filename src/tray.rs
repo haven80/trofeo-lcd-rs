@@ -37,6 +37,8 @@ mod imp {
     const ID_TOGGLE: usize = 1;
     const ID_EXIT: usize = 2;
     const ID_EDITOR: usize = 3;
+    /// Profile menu items: ID_PROFILE_BASE is "no profile", the profiles follow.
+    const ID_PROFILE_BASE: usize = 100;
     /// The configuration file to open in the settings editor.
     static CONFIG: OnceLock<Option<PathBuf>> = OnceLock::new();
     /// The number Windows gives to "the taskbar has been created again" (Explorer restarted).
@@ -172,6 +174,23 @@ mod imp {
         let no_editor = if editor().is_some() { MENU_ITEM_FLAGS(0) } else { MF_GRAYED };
         let _ = AppendMenuW(hm, MF_STRING | no_editor, ID_EDITOR, w!("Open settings editor"));
         let _ = AppendMenuW(hm, MF_SEPARATOR, 0, PCWSTR::null());
+        // Profiles (only when there are some): a sub-menu to choose one by hand.
+        let pdir = CONFIG.get().and_then(|c| c.as_ref()).and_then(|c| trofeo_lcd::profiles::folder_of(c));
+        let names = pdir.as_deref().map(trofeo_lcd::profiles::list).unwrap_or_default();
+        let chosen = pdir.as_deref().and_then(trofeo_lcd::profiles::read_active);
+        if !names.is_empty() {
+            if let Ok(sub) = CreatePopupMenu() {
+                let none_flags = if chosen.as_deref().map_or(true, |c| c == "none") { MF_STRING | MF_CHECKED } else { MF_STRING };
+                let _ = AppendMenuW(sub, none_flags, ID_PROFILE_BASE, w!("No profile"));
+                for (i, n) in names.iter().enumerate() {
+                    let label: Vec<u16> = n.encode_utf16().chain(std::iter::once(0)).collect();
+                    let flags = if chosen.as_deref() == Some(n.as_str()) { MF_STRING | MF_CHECKED } else { MF_STRING };
+                    let _ = AppendMenuW(sub, flags, ID_PROFILE_BASE + 1 + i, PCWSTR(label.as_ptr()));
+                }
+                let _ = AppendMenuW(hm, MF_STRING | MF_POPUP, sub.0 as usize, w!("Profile"));
+            }
+            let _ = AppendMenuW(hm, MF_SEPARATOR, 0, PCWSTR::null());
+        }
         let grey = if console().is_some() { MENU_ITEM_FLAGS(0) } else { MF_GRAYED };
         let label: PCWSTR = if visible() { w!("Hide window") } else { w!("Show window") };
         let _ = AppendMenuW(hm, MF_STRING | grey, ID_TOGGLE, label);
@@ -185,6 +204,12 @@ mod imp {
         let _ = PostMessageW(hwnd, WM_NULL, WPARAM(0), LPARAM(0));
         let _ = DestroyMenu(hm);
         match cmd.0 as usize {
+            id if id >= ID_PROFILE_BASE => {
+                if let Some(dir) = pdir.as_deref() {
+                    let pick = if id == ID_PROFILE_BASE { None } else { names.get(id - ID_PROFILE_BASE - 1).map(String::as_str) };
+                    let _ = trofeo_lcd::profiles::write_active(dir, pick);
+                }
+            }
             ID_EDITOR => open_editor(),
             ID_TOGGLE => set_visible(!visible()),
             ID_EXIT => {

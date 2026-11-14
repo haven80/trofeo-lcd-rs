@@ -22,6 +22,10 @@ what this fork adds on top of the original.
 
 ## What's new
 
+**2.21.0 — profiles.** Named sets of settings that are laid over your configuration while they are in use: `profiles/gaming.profile`, switched from the tray menu, a hotkey (`profile_key`), the settings editor or automatically by the program in the foreground (`profile_rules = mygame.exe=gaming`). Nothing changes unless you make one.
+
+**2.20.0 — your own themes.** *Share your design* can save the look you made as a theme (`themes/<name>.theme`, used with `theme = name`), copy it as text, attach it to a gallery post as a file and import the themes of others.
+
 **2.19.0 — themes, night mode and alerts.** `theme = ocean` gives a whole look in one line (eight
 themes, your own settings always win); `night_mode` dims the screen between two times; `alert_cpu_temp`,
 `alert_ram` and friends show a pulsing red border and the value when a reading stays over its limit.

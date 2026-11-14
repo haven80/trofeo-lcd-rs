@@ -126,6 +126,7 @@ pub const SECTIONS: &[(&str, &str, &str)] = &[
     ("music", "Music card", "Scheda musica"),
     ("game", "Pixel game", "Mini gioco"),
     ("online", "Weather and news", "Meteo e notizie"),
+    ("profiles", "Profiles", "Profili"),
     ("system", "System", "Sistema"),
     ("share", "Share your design", "Condividi il tuo design"),
 ];
@@ -407,6 +408,22 @@ pub fn fields() -> Vec<Field> {
     add(Field::new("alert_color", "screen", "Alert color", "Colore dell'avviso", Color)
         .group("alert")
         .help("Default red", "Predefinito rosso"));
+    add(Field::new("profile", "profiles", "Profile in use", "Profilo in uso", Text)
+        .help(
+            "The name of a profile (see below). What the profile says wins over this file. The tray menu, the hotkey and the rules below can change it without touching the file",
+            "Il nome di un profilo (vedi sotto). Quello che dice il profilo prevale su questo file. Il menu della tray, il tasto rapido e le regole qui sotto lo cambiano senza toccare il file",
+        ));
+    add(Field::new("profile_key", "profiles", "Hotkey to go round the profiles", "Tasto rapido per scorrere i profili", Text)
+        .restart()
+        .help(
+            "For example ctrl+alt+p or shift+f9. Empty = none. Needs a restart of trofeo_lcd (Windows)",
+            "Per esempio ctrl+alt+p oppure shift+f9. Vuoto = nessuno. Serve riavviare trofeo_lcd (Windows)",
+        ));
+    add(Field::new("profile_rules", "profiles", "Switch by program", "Cambia in base al programma", Text)
+        .help(
+            "program=profile, comma separated: mygame.exe=gaming, code.exe=work. While that program is in the foreground the profile is used; it goes back 5 seconds after leaving it (Windows)",
+            "programma=profilo, separati da virgola: mygame.exe=gaming, code.exe=work. Finché quel programma è in primo piano si usa il profilo; si torna indietro 5 secondi dopo averlo lasciato (Windows)",
+        ));
     add(Field::new("language", "screen", "Language of the display", "Lingua del display", Choice(LANGUAGES)).def("en"));
     for (k, en, it) in [
         ("margin", "All sides", "Tutti i lati"),
@@ -1018,7 +1035,7 @@ pub fn fields() -> Vec<Field> {
 pub const CATEGORIES: &[(&str, &str, &[&str])] = &[
     ("Screen and sensors", "Schermo e sensori", &["screen", "lhm"]),
     ("Look", "Aspetto", &["background", "effect", "look", "show", "items", "spectrum"]),
-    ("Screens", "Schermate", &["layouts", "tiles", "dash", "frame", "steam"]),
+    ("Screens", "Schermate", &["layouts", "tiles", "dash", "frame", "steam", "profiles"]),
     ("Music and games", "Musica e giochi", &["music", "gaming", "game"]),
     ("Online", "Online", &["online"]),
     ("System", "Sistema", &["system"]),
@@ -1061,6 +1078,10 @@ pub fn search<'a>(fields: &'a [Field], query: &str) -> Vec<&'a Field> {
 /// a choice, a number in its range, colors); the others are taken as they are.
 pub fn check_value(f: &Field, v: &str) -> bool {
     let v = v.trim();
+    if f.key == "theme" {
+        // a built-in theme, `none`, or the name of a theme of your own (the file is checked later)
+        return v == "none" || crate::themes::find(v).is_some() || crate::themes::valid_name(&v.to_ascii_lowercase()).is_ok();
+    }
     match &f.kind {
         Kind::Bool => v.eq_ignore_ascii_case("true") || v.eq_ignore_ascii_case("false"),
         Kind::Choice(opts) => opts.iter().any(|o| o.eq_ignore_ascii_case(v)),

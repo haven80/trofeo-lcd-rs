@@ -276,7 +276,11 @@ milliseconds), and `effect_fps` (default 8) keeps the number of frames low — s
 - Alerts: `alert_cpu_temp = 90`, `alert_gpu_temp`, `alert_cpu_load`, `alert_gpu_load`, `alert_ram = 95`
   (`0` = off, the default), `alert_delay = 3`, `alert_color` — a pulsing border and the value when a
   reading stays over its limit. See [Alerts](../OPTIONS_GUIDE.md#alerts).
-- Themes: `theme = ocean` gives a whole look in one line (your own settings win).
+- Profiles: `profiles/gaming.profile` is laid over this file while in use; switch it from the tray, a hotkey
+  (`profile_key = ctrl+alt+p`) or by the program in the foreground (`profile_rules = mygame.exe=gaming`).
+  See [Profiles](../OPTIONS_GUIDE.md#profiles).
+- Themes: `theme = ocean` gives a whole look in one line (your own settings win). You can save your
+  own look as a theme, copy it, attach it to a gallery post and import other people's.
   See [Themes](../OPTIONS_GUIDE.md#themes).
 - `deepcool = false` (or `--no-deepcool`): never touch the DeepCool display.
 - The **CH170 / CH270 / CH690 DIGITAL** case display can show the CPU frequency, the fan speed in RPM

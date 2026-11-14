@@ -17,27 +17,34 @@ mod imp {
     use windows::Win32::UI::Input::KeyboardAndMouse::RegisterHotKey;
     use windows::Win32::UI::WindowsAndMessaging::{MSG, PM_REMOVE, PeekMessageW, WM_HOTKEY};
 
-    pub fn register(vk: u32) -> anyhow::Result<Hotkey> {
-        const HOTKEY_ID: i32 = 1;
+    pub fn register(mods: u32, vk: u32, id: i32) -> anyhow::Result<Hotkey> {
         // SAFETY: no window handle = global hotkey for this thread; the id
         // is locally unique and won't collide with other hotkeys in this
-        // process.
-        unsafe { RegisterHotKey(None, HOTKEY_ID, HOT_KEY_MODIFIERS(0x4000), vk)? };
-        Ok(Hotkey { id: HOTKEY_ID })
+        // process. 0x4000 = MOD_NOREPEAT.
+        unsafe { RegisterHotKey(None, id, HOT_KEY_MODIFIERS(mods | 0x4000), vk)? };
+        Ok(Hotkey { id })
     }
 
+    /// Presses that were read from the queue for another hotkey, waiting for their turn.
+    static PENDING: std::sync::Mutex<Vec<i32>> = std::sync::Mutex::new(Vec::new());
+
     pub fn triggered(id: i32) -> bool {
+        let mut pending = PENDING.lock().unwrap_or_else(|e| e.into_inner());
         // SAFETY: msg is a valid local; all windows are skipped (None) so
-        // as not to disturb any other window's queue.
+        // as not to disturb any other window's queue. Every hotkey press is
+        // kept (not dropped) when it is for another hotkey.
         unsafe {
             let mut msg = MSG::default();
             while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
-                if msg.message == WM_HOTKEY && msg.wParam.0 == id as usize {
-                    return true;
+                if msg.message == WM_HOTKEY {
+                    pending.push(msg.wParam.0 as i32);
                 }
             }
         }
-        false
+        // one press = one action (the presses for other hotkeys stay for their turn)
+        let had = pending.contains(&id);
+        pending.retain(|p| *p != id);
+        had
     }
 }
 
@@ -45,8 +52,8 @@ mod imp {
 mod imp {
     use super::Hotkey;
 
-    pub fn register(_vk: u32) -> anyhow::Result<Hotkey> {
-        anyhow::bail!("screenshot hotkey is only supported on Windows");
+    pub fn register(_mods: u32, _vk: u32, _id: i32) -> anyhow::Result<Hotkey> {
+        anyhow::bail!("global hotkeys are only supported on Windows");
     }
 
     pub fn triggered(_id: i32) -> bool {
@@ -59,7 +66,55 @@ mod imp {
 /// already in use by another program — the caller may proceed without the
 /// hotkey.
 pub fn register(vk: u32) -> anyhow::Result<Hotkey> {
-    imp::register(vk)
+    imp::register(0, vk, 1)
+}
+
+/// Register a global hotkey with modifier keys (see [`parse_combo`]); `id` must differ from
+/// the other hotkeys of the process (the screenshot one is 1).
+pub fn register_combo(mods: u32, vk: u32, id: i32) -> anyhow::Result<Hotkey> {
+    imp::register(mods, vk, id)
+}
+
+pub const MOD_ALT: u32 = 0x1;
+pub const MOD_CONTROL: u32 = 0x2;
+pub const MOD_SHIFT: u32 = 0x4;
+pub const MOD_WIN: u32 = 0x8;
+
+/// `ctrl+alt+p`, `shift+f9`, `f9`, `win+1`: modifiers (`ctrl`, `alt`, `shift`, `win`) and one
+/// key (`f1`-`f12`, `a`-`z`, `0`-`9`, `printscreen`), joined with `+`. Returns the Windows
+/// modifier flags and virtual-key code. A key alone is allowed only for the function keys.
+pub fn parse_combo(raw: &str) -> anyhow::Result<(u32, u32)> {
+    let s = raw.trim().to_ascii_lowercase();
+    let mut mods = 0u32;
+    let mut key: Option<u32> = None;
+    for part in s.split('+').map(str::trim) {
+        let m = match part {
+            "ctrl" | "control" => MOD_CONTROL,
+            "alt" => MOD_ALT,
+            "shift" => MOD_SHIFT,
+            "win" | "windows" | "super" => MOD_WIN,
+            _ => 0,
+        };
+        if m != 0 {
+            mods |= m;
+            continue;
+        }
+        if key.is_some() {
+            anyhow::bail!("'{raw}': only one key besides ctrl / alt / shift / win");
+        }
+        let one = part.chars().next().filter(|_| part.chars().count() == 1);
+        key = Some(match one {
+            Some(c) if c.is_ascii_lowercase() => c.to_ascii_uppercase() as u32,
+            Some(c) if c.is_ascii_digit() => c as u32,
+            _ => parse_key_name(part).map_err(|_| anyhow::anyhow!("'{raw}': key not recognized (f1-f12, a-z, 0-9, printscreen; with ctrl, alt, shift, win)"))?,
+        });
+    }
+    let vk = key.ok_or_else(|| anyhow::anyhow!("'{raw}': no key"))?;
+    let function_key = (0x70..=0x7B).contains(&vk) || vk == 0x2C;
+    if mods == 0 && !function_key {
+        anyhow::bail!("'{raw}': a letter or digit needs ctrl, alt, shift or win with it (for example ctrl+alt+p)");
+    }
+    Ok((mods, vk))
 }
 
 /// `true` if the hotkey has been pressed since the last poll (Windows).
@@ -83,4 +138,20 @@ pub fn parse_key_name(raw: &str) -> anyhow::Result<u32> {
         }
     }
     anyhow::bail!("--screenshot-key: '{raw}' not recognized (use f1-f12 or printscreen).")
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn combos_are_read_with_their_modifiers() {
+        assert_eq!(parse_combo("ctrl+alt+p").unwrap(), (MOD_CONTROL | MOD_ALT, 'P' as u32));
+        assert_eq!(parse_combo(" Shift + F9 ").unwrap(), (MOD_SHIFT, 0x78));
+        assert_eq!(parse_combo("f9").unwrap(), (0, 0x78));
+        assert_eq!(parse_combo("win+1").unwrap(), (MOD_WIN, '1' as u32));
+        assert_eq!(parse_combo("printscreen").unwrap(), (0, 0x2C));
+        for bad in ["p", "ctrl", "", "ctrl+a+b", "ctrl+f13", "ctrl+??"] {
+            assert!(parse_combo(bad).is_err(), "{bad:?}");
+        }
+    }
 }

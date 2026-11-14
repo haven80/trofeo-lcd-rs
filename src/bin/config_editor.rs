@@ -529,6 +529,10 @@ fn run_as_invoker(cmd: &mut std::process::Command) {
 }
 
 /// Runs the main program once to draw a frame of `text` (the configuration being edited).
+fn dir_of(path: &Path) -> std::path::PathBuf {
+    path.parent().map(Path::to_path_buf).unwrap_or_default()
+}
+
 fn render_preview(exe: &Path, text: &str, workdir: &Path, state: PreviewState, layout: usize, secs: f64, keep: Option<&Path>) -> Result<Rendered, String> {
     let tmp = std::env::temp_dir();
     let id = std::process::id();
@@ -540,6 +544,10 @@ fn render_preview(exe: &Path, text: &str, workdir: &Path, state: PreviewState, l
     let mut cmd = std::process::Command::new(exe);
     if invoker {
         run_as_invoker(&mut cmd);
+    }
+    if !workdir.as_os_str().is_empty() {
+        // the themes of your own are next to the real file, not next to the temporary one
+        cmd.env(trofeo_lcd::themes::ENV_DIR, workdir.join(trofeo_lcd::themes::FOLDER));
     }
     cmd.arg("--config")
         .arg(&conf)
@@ -1101,6 +1109,18 @@ fn field_widget(ui: &mut egui::Ui, ed: &mut Ed, f: &Field, l: Lang) {
                         ed.set(&f.key, o);
                     }
                 }
+                if f.key == "theme" {
+                    // the themes of your own, from the themes folder next to the file
+                    let own = trofeo_lcd::themes::user_dir().map(|d| trofeo_lcd::themes::list_user(&d)).unwrap_or_default();
+                    if !own.is_empty() {
+                        ui.separator();
+                    }
+                    for o in own {
+                        if ui.selectable_label(eff == o, &o).clicked() {
+                            ed.set(&f.key, &o);
+                        }
+                    }
+                }
             });
         }
         Kind::Int { min, max } => {
@@ -1224,6 +1244,13 @@ struct App {
     /// "Import a design": the pasted text and what happened.
     import_text: String,
     import_msg: Option<(String, bool)>,
+    /// "Your themes": the name being typed, and what happened.
+    theme_name: String,
+    theme_msg: Option<(String, bool)>,
+    /// "Profiles": the name and text being edited, and what happened.
+    prof_name: String,
+    prof_text: String,
+    prof_msg: Option<(String, bool)>,
 }
 
 /// The "Share your design" section: the picture taken and what is going on.
@@ -1282,6 +1309,11 @@ impl App {
             restart_notice: None,
             import_text: String::new(),
             import_msg: None,
+            theme_name: String::new(),
+            theme_msg: None,
+            prof_name: String::new(),
+            prof_text: String::new(),
+            prof_msg: None,
         };
         app.load(&path);
         app
@@ -1807,6 +1839,24 @@ impl App {
                         ui.ctx().copy_text(text.clone());
                         self.share.message = Some((tr(l, "Copied. Paste them (Ctrl+V) in the page.", "Copiate. Incollale (Ctrl+V) nella pagina.").to_string(), false));
                     }
+                    if ui
+                        .button(tr(l, "Save my look as a theme file to attach", "Salva il mio aspetto come file di tema da allegare"))
+                        .on_hover_text(tr(l, "Writes name.theme.txt next to the picture; drag it into the page too (name taken from the box in Your themes, below)", "Scrive nome.theme.txt accanto all'immagine; trascinalo anche nella pagina (il nome è quello della casella in I tuoi temi, qui sotto)"))
+                        .clicked()
+                    {
+                        let name = if self.theme_name.trim().is_empty() { "my-look".to_string() } else { self.theme_name.trim().to_string() };
+                        let pairs = share::look_pairs(&self.ed.doc, &self.fields, Some(&dir.join(trofeo_lcd::themes::FOLDER)), true);
+                        let out_dir = png.parent().map(Path::to_path_buf).unwrap_or_else(|| dir.clone());
+                        let file = out_dir.join(trofeo_lcd::themes::export_file_name(&name));
+                        let r = trofeo_lcd::themes::valid_name(&name)
+                            .map_err(|e| format!("'{name}': {e}"))
+                            .and_then(|()| if pairs.is_empty() { Err("there is nothing to save: every setting of the look is at its default".to_string()) } else { Ok(()) })
+                            .and_then(|()| std::fs::write(&file, trofeo_lcd::themes::render(&name, &pairs)).map_err(|e| format!("cannot write {}: {e}", file.display())));
+                        self.share.message = Some(match r {
+                            Ok(()) => (format!("{} {}", tr(l, "Theme file saved:", "File di tema salvato:"), file.display()), false),
+                            Err(e) => (e, true),
+                        });
+                    }
                     if ui.button(tr(l, "Open the folder with the picture", "Apri la cartella con l'immagine")).clicked() {
                         if let Some(d) = png.parent() {
                             share::open(&d.to_string_lossy());
@@ -1819,14 +1869,17 @@ impl App {
                 ui.add_space(4.0);
                 ui.label(RichText::new(tr(
                     l,
-                    "In the page: drag the picture file into the box for the picture, paste the settings in the box for the settings, then send.",
-                    "Nella pagina: trascina il file dell'immagine nella casella dell'immagine, incolla le impostazioni nella casella delle impostazioni, poi invia.",
+                    "In the page: drag the picture file into the box for the picture, paste the settings in the box for the settings (or drag the theme file into the box for it), then send.",
+                    "Nella pagina: trascina il file dell'immagine nella casella dell'immagine, incolla le impostazioni nella casella delle impostazioni (o trascina il file di tema nella sua casella), poi invia.",
                 )).weak());
             }
             ui.add_space(10.0);
             if ui.link(tr(l, "See the gallery of the other users", "Guarda la galleria degli altri utenti")).clicked() {
                 share::open(share::GALLERY_LIST);
             }
+            // ---- your own themes
+            ui.add_space(14.0);
+            self.themes_block(ui, &dir);
             // ---- import a design from the gallery
             ui.add_space(14.0);
             ui.label(RichText::new(tr(l, "Import a design", "Importa un design")).strong().color(Color32::from_rgb(140, 190, 255)));
@@ -1843,7 +1896,7 @@ impl App {
                     .desired_width(f32::INFINITY)
                     .desired_rows(5),
             );
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if ui.add_enabled(!self.import_text.trim().is_empty(), egui::Button::new(tr(l, "Import", "Importa"))).clicked() {
                     let imp = share::parse_import(&self.import_text, &self.fields);
                     for (k, v) in &imp.apply {
@@ -1864,11 +1917,209 @@ impl App {
                     self.import_text.clear();
                     self.import_msg = None;
                 }
+                if ui.button(tr(l, "Import a theme file...", "Importa un file di tema...")).clicked() {
+                    if let Some(file) = pick_file(tr(l, "Theme file", "File di tema"), None) {
+                        let name = file.file_name().and_then(|n| n.to_str()).and_then(trofeo_lcd::themes::name_from_file);
+                        self.import_msg = Some(match (std::fs::read_to_string(&file), name) {
+                            (Ok(text), Some(name)) => {
+                                let imp = share::parse_import(&text, &self.fields);
+                                match trofeo_lcd::themes::save_user(&dir_of(&self.path).join(trofeo_lcd::themes::FOLDER), &name, &imp.apply) {
+                                    Ok(_) => (format!("{} {name}  ({} {})", tr(l, "Theme saved:", "Tema salvato:"), imp.apply.len(), tr(l, "settings; use it with  theme = name", "impostazioni; usalo con  theme = nome")), false),
+                                    Err(e) => (e, true),
+                                }
+                            }
+                            (Err(e), _) => (format!("{}: {e}", file.display()), true),
+                            (_, None) => (tr(l, "The file name cannot be a theme name: rename the file, or paste its text and give a name.", "Il nome del file non può essere un nome di tema: rinomina il file, oppure incolla il testo e dagli un nome.").to_string(), true),
+                        });
+                    }
+                }
+                ui.separator();
+                ui.label(tr(l, "or save it as a theme named", "oppure salvalo come tema chiamato"));
+                ui.add(egui::TextEdit::singleline(&mut self.theme_name).desired_width(120.0).hint_text("my-theme"));
+                let can = !self.import_text.trim().is_empty() && !self.theme_name.trim().is_empty();
+                if ui.add_enabled(can, egui::Button::new(tr(l, "Import as a theme", "Importa come tema"))).clicked() {
+                    let imp = share::parse_import(&self.import_text, &self.fields);
+                    let r = trofeo_lcd::themes::save_user(&dir_of(&self.path).join(trofeo_lcd::themes::FOLDER), self.theme_name.trim(), &imp.apply);
+                    self.import_msg = Some(match r {
+                        Ok(p) => {
+                            let name = self.theme_name.trim().to_string();
+                            self.theme_name.clear();
+                            self.import_text.clear();
+                            (format!("{} {} ({}). {}", tr(l, "Theme saved:", "Tema salvato:"), name, p.display(), tr(l, "Use it with  theme = name  (Theme setting, Colors and text).", "Usalo con  theme = nome  (impostazione Tema, Colori e testo).")), false)
+                        }
+                        Err(e) => (e, true),
+                    });
+                }
             });
             if let Some((m, err)) = &self.import_msg {
                 ui.colored_label(if *err { Color32::from_rgb(255, 190, 90) } else { Color32::from_rgb(120, 220, 140) }, m);
             }
         });
+    }
+
+    /// "Profiles": the ones there are (use, edit, open) and a box to make or change one.
+    fn profiles_block(&mut self, ui: &mut egui::Ui) {
+        use trofeo_lcd::profiles as pf;
+        let l = self.lang;
+        let folder = dir_of(&self.path).join(pf::FOLDER);
+        ui.label(RichText::new(tr(l, "Your profiles", "I tuoi profili")).strong().color(Color32::from_rgb(140, 190, 255)));
+        ui.separator();
+        ui.label(RichText::new(tr(
+            l,
+            "A profile is a few settings that are laid over this file while it is in use, for example another layout and brightness for gaming. It is a text file in the profiles folder next to this file. Only settings that apply live can be in it. Choosing one here is saved in the profiles folder, not in this file, and trofeo_lcd follows within a second.",
+            "Un profilo è qualche impostazione che si sovrappone a questo file finché è in uso, per esempio un altro layout e un'altra luminosità per i giochi. È un file di testo nella cartella profiles accanto a questo file. Possono esserci solo impostazioni che valgono subito. La scelta fatta qui viene salvata nella cartella profiles, non in questo file, e trofeo_lcd la segue entro un secondo.",
+        )).weak().small());
+        let chosen = pf::read_active(&folder);
+        ui.horizontal_wrapped(|ui| {
+            ui.label(format!(
+                "{} {}",
+                tr(l, "Chosen by hand:", "Scelto a mano:"),
+                chosen.clone().unwrap_or_else(|| tr(l, "(nothing: the file decides)", "(niente: decide il file)").to_string())
+            ));
+            if ui.small_button(tr(l, "No profile", "Nessun profilo")).clicked() {
+                self.prof_msg = Some(match pf::write_active(&folder, None) {
+                    Ok(()) => (tr(l, "No profile.", "Nessun profilo.").to_string(), false),
+                    Err(e) => (e.to_string(), true),
+                });
+            }
+            if chosen.is_some() && ui.small_button(tr(l, "Let the file decide", "Lascia decidere il file")).clicked() {
+                let _ = std::fs::remove_file(folder.join(pf::ACTIVE_FILE));
+            }
+        });
+        let mut message: Option<(String, bool)> = None;
+        let mut edit: Option<String> = None;
+        for name in pf::list(&folder) {
+            ui.horizontal_wrapped(|ui| {
+                let on = chosen.as_deref() == Some(name.as_str());
+                ui.label(RichText::new(format!("{}{name}", if on { "\u{25B6} " } else { "" })).monospace());
+                if ui.small_button(tr(l, "Use", "Usa")).clicked() {
+                    message = Some(match pf::write_active(&folder, Some(&name)) {
+                        Ok(()) => (format!("{} {name}", tr(l, "In use:", "In uso:")), false),
+                        Err(e) => (e.to_string(), true),
+                    });
+                }
+                if ui.small_button(tr(l, "Edit", "Modifica")).clicked() {
+                    edit = Some(name.clone());
+                }
+                if ui.small_button(tr(l, "Open the file", "Apri il file")).clicked() {
+                    share::open(&pf::path_of(&folder, &name).to_string_lossy());
+                }
+            });
+        }
+        if let Some(n) = edit {
+            match std::fs::read_to_string(pf::path_of(&folder, &n)) {
+                Ok(t) => {
+                    self.prof_name = n;
+                    self.prof_text = t;
+                }
+                Err(e) => message = Some((e.to_string(), true)),
+            }
+        }
+        if message.is_some() {
+            self.prof_msg = message;
+        }
+        ui.add_space(6.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.label(tr(l, "Name", "Nome"));
+            ui.add(egui::TextEdit::singleline(&mut self.prof_name).desired_width(140.0).hint_text("gaming"));
+            if ui.button(tr(l, "Fill with the settings I changed", "Riempi con le impostazioni che ho cambiato")).clicked() {
+                // the settings written in the file now, that a profile may carry
+                let all = &self.fields;
+                let text: String = all
+                    .iter()
+                    .filter(|f| !f.restart && !f.key.starts_with("profile") && self.ed.doc.is_set(&f.key) && schema::check_value(f, &self.ed.doc.get(&f.key).unwrap_or_default()) && f.section != "share")
+                    .filter_map(|f| self.ed.doc.get(&f.key).map(|v| format!("{} = {}\n", f.key, v)))
+                    .collect();
+                self.prof_text = text;
+            }
+        });
+        ui.add(
+            egui::TextEdit::multiline(&mut self.prof_text)
+                .font(egui::TextStyle::Monospace)
+                .hint_text("layout = gaming\nbrightness = 100")
+                .desired_width(f32::INFINITY)
+                .desired_rows(6),
+        );
+        ui.horizontal(|ui| {
+            let can = !self.prof_name.trim().is_empty() && !self.prof_text.trim().is_empty();
+            if ui.add_enabled(can, egui::Button::new(tr(l, "Save the profile", "Salva il profilo"))).clicked() {
+                self.prof_msg = Some(match pf::save_text(&folder, self.prof_name.trim(), &self.prof_text) {
+                    Ok(p) => (format!("{} {}", tr(l, "Saved:", "Salvato:"), p.display()), false),
+                    Err(e) => (e, true),
+                });
+            }
+            if folder.is_dir() && ui.button(tr(l, "Open the profiles folder", "Apri la cartella dei profili")).clicked() {
+                share::open(&folder.to_string_lossy());
+            }
+        });
+        if let Some((m, err)) = &self.prof_msg {
+            ui.colored_label(if *err { Color32::from_rgb(255, 190, 90) } else { Color32::from_rgb(120, 220, 140) }, m);
+        }
+    }
+
+    /// "Your themes": save the look as a theme, export it, use or open the ones saved.
+    fn themes_block(&mut self, ui: &mut egui::Ui, dir: &Path) {
+        use trofeo_lcd::themes as th;
+        let l = self.lang;
+        let folder = dir.join(th::FOLDER);
+        ui.label(RichText::new(tr(l, "Your themes", "I tuoi temi")).strong().color(Color32::from_rgb(140, 190, 255)));
+        ui.separator();
+        ui.label(RichText::new(tr(
+            l,
+            "Save the look you have made as a theme: a small text file in the themes folder next to your configuration file. Then `theme = name` brings it back, and the file (or its text) can be given to anyone, who saves it in the same folder. Only the look is in it: no files, folders, city, sensors or system settings.",
+            "Salva l'aspetto che hai creato come tema: un piccolo file di testo nella cartella themes accanto al tuo file di configurazione. Poi `theme = nome` lo richiama, e il file (o il suo testo) si può dare a chiunque, che lo salva nella stessa cartella. C'è solo l'aspetto: niente file, cartelle, città, sensori o impostazioni di sistema.",
+        )).weak().small());
+        ui.horizontal_wrapped(|ui| {
+            ui.label(tr(l, "Name", "Nome"));
+            ui.add(egui::TextEdit::singleline(&mut self.theme_name).desired_width(140.0).hint_text("my-theme"));
+            if ui.add_enabled(!self.theme_name.trim().is_empty(), egui::Button::new(tr(l, "Save my look as a theme", "Salva il mio aspetto come tema"))).clicked() {
+                let pairs = share::look_pairs(&self.ed.doc, &self.fields, Some(&folder), true);
+                self.theme_msg = Some(match th::save_user(&folder, self.theme_name.trim(), &pairs) {
+                    Ok(p) => {
+                        let name = self.theme_name.trim().to_string();
+                        self.theme_name.clear();
+                        (format!("{} {name} ({}).", tr(l, "Saved:", "Salvato:"), p.display()), false)
+                    }
+                    Err(e) => (e, true),
+                });
+            }
+        });
+        if let Some((m, err)) = &self.theme_msg {
+            ui.colored_label(if *err { Color32::from_rgb(255, 190, 90) } else { Color32::from_rgb(120, 220, 140) }, m);
+        }
+        let own = th::list_user(&folder);
+        if own.is_empty() {
+            ui.label(RichText::new(tr(l, "(no theme of your own yet)", "(ancora nessun tuo tema)")).weak());
+        }
+        let mut message: Option<(String, bool)> = None;
+        for name in own {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new(&name).monospace());
+                if ui.small_button(tr(l, "Use", "Usa")).on_hover_text("theme = name").clicked() {
+                    self.ed.bufs.remove("theme");
+                    self.ed.set("theme", &name);
+                    message = Some((format!("theme = {name}"), false));
+                }
+                if ui.small_button(tr(l, "Copy the text", "Copia il testo")).clicked() {
+                    match th::load_user(&folder, &name) {
+                        Ok(s) => {
+                            ui.ctx().copy_text(th::render(&name, &s));
+                            message = Some((tr(l, "Copied. Paste it in a message; the other person pastes it in Import a design, with a name.", "Copiato. Incollalo in un messaggio; l'altra persona lo incolla in Importa un design, con un nome.").to_string(), false));
+                        }
+                        Err(e) => message = Some((e, true)),
+                    }
+                }
+                if ui.small_button(tr(l, "Open the file", "Apri il file")).clicked() {
+                    share::open(&th::path_of(&folder, &name).to_string_lossy());
+                }
+            });
+        }
+        if message.is_some() {
+            self.theme_msg = message;
+        }
+        if folder.is_dir() && ui.small_button(tr(l, "Open the themes folder", "Apri la cartella dei temi")).clicked() {
+            share::open(&folder.to_string_lossy());
+        }
     }
 
     fn form(&mut self, ui: &mut egui::Ui) {
@@ -1967,6 +2218,10 @@ impl App {
                     ui.add_space(8.0);
                 }
             }
+            if self.section == "profiles" {
+                ui.add_space(14.0);
+                self.profiles_block(ui);
+            }
         });
     }
 
@@ -2018,6 +2273,7 @@ impl App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.frames += 1;
+        trofeo_lcd::themes::set_user_dir(trofeo_lcd::themes::folder_of(&self.path));
         self.refresh_dirty();
         if ctx.input(|i| i.viewport().close_requested()) && self.dirty && !self.allow_close {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);

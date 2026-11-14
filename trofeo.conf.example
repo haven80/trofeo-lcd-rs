@@ -151,6 +151,15 @@ language = en
 # night_end = 07:00
 # night_brightness = 20      # 0-100; never brighter than "brightness"
 
+# Profiles: named sets of settings laid over this file while they are in use (for example another
+# layout and brightness for gaming). Each one is a text file profiles/<name>.profile next to this
+# file, with `key = value` lines; what it says wins over this file. Only settings that apply live.
+# The tray menu, the settings editor and the hotkey choose one by hand (saved in profiles/active).
+# profile = work              # the profile in use when none was chosen by hand
+# profile_key = ctrl+alt+p    # goes round the profiles (Windows; needs a restart)
+# profile_rules = mygame.exe=gaming, code.exe=work   # by the program in the foreground (Windows);
+#                                                    # goes back 5 seconds after leaving it
+
 # Alerts: a pulsing border and a bar with the value when a reading stays over its limit.
 # Every limit is 0 = off by default.
 # alert_cpu_temp = 90        # degrees C
@@ -554,6 +563,8 @@ language = en
 # Theme: a whole look in one line (background, colours, panel opacity). It only gives defaults:
 # anything you set yourself in this file wins over the theme.
 #   none | midnight | ocean | sunset | forest | ember | neon | matrix | mono
+#   or the name of a theme of your own: the file themes/<name>.theme next to this file (the settings
+#   editor, Share your design, saves your look as one and imports other people's)
 # theme = none
 # clock_format = 24h
 # clock_ampm = true           # 12h only: the AM / PM after the time

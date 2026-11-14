@@ -198,6 +198,12 @@ struct Config {
     /// — (virtual-key code, raw label from the argument). `None` = DISABLED
     /// (default); enabled only if `--screenshot-key` is given.
     screenshot_key: Option<(u32, String)>,
+    /// Hotkey that goes round the profiles: (modifiers, virtual-key code, label). `None` = off.
+    profile_key: Option<(u32, u32, String)>,
+    /// `profile_rules`: program -> profile (empty = none).
+    profile_rules: Vec<(String, String)>,
+    /// The profile that was laid over the configuration file (None = none).
+    active_profile: Option<String>,
     /// `landscape` (default) or `portrait` (screen mounted upright) —
     /// from `--orientation` or `orientation = ...` in trofeo.conf.
     orientation: Orientation,
@@ -754,6 +760,14 @@ fn parse_args() -> anyhow::Result<Config> {
         anyhow::bail!("brightness must be between 0 and 100");
     }
     let night = parse_night(&file)?;
+    let profile_key = match file.get("profile_key").map(str::trim).filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case("none")) {
+        None => None,
+        Some(raw) => {
+            let (mods, vk) = hotkey::parse_combo(raw).map_err(|e| anyhow::anyhow!("profile_key: {e}"))?;
+            Some((mods, vk, raw.to_ascii_lowercase()))
+        }
+    };
+    let profile_rules = trofeo_lcd::profiles::parse_rules(file.get("profile_rules").unwrap_or("")).map_err(|e| anyhow::anyhow!(e))?;
     // Peak amplitude (0.0-1.0) below which audio is considered "silent" (EQ
     // bars stay down, FPS drops to idle). Loopback capture reflects the
     // system/app volume, so a quiet listening level can dip under the
@@ -898,6 +912,9 @@ fn parse_args() -> anyhow::Result<Config> {
         deepcool_enabled,
         deepcool_update_ms,
         screenshot_key,
+        profile_key,
+        profile_rules,
+        active_profile: file.profile.clone(),
         orientation,
         panel,
         panel_auto,
@@ -1031,7 +1048,7 @@ fn item_key(key: &str) -> Option<(usize, &str)> {
 }
 
 fn is_override_key(key: &str) -> bool {
-    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "fps_item" || key == "clock_backdrop" || key == "clock_format" || key == "clock_ampm" || key == "theme" || key.starts_with("night_") || key.starts_with("alert_") || key == "screen_fade_ms" || key == "screen_fade_style" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key == "console" || key.starts_with("console_") || key.starts_with("gaming_") || key.starts_with("steam_") || key.starts_with("hid_") || key == "deepcool_source" || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
+    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "fps_item" || key == "clock_backdrop" || key == "clock_format" || key == "clock_ampm" || key == "theme" || key.starts_with("night_") || key.starts_with("alert_") || key.starts_with("profile") || key == "screen_fade_ms" || key == "screen_fade_style" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key == "console" || key.starts_with("console_") || key.starts_with("gaming_") || key.starts_with("steam_") || key.starts_with("hid_") || key == "deepcool_source" || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
 }
 
 /// Style for a single item of the info block.
@@ -1842,10 +1859,13 @@ fn report_config_error(msg: &str) {
 }
 
 /// Config file signature, used to detect changes.
-fn config_stamp(explicit: Option<&std::path::Path>) -> Option<(std::path::PathBuf, std::time::SystemTime, u64)> {
+/// The configuration file's path, time and size, and which profile is selected (a change of
+/// either reloads the settings).
+fn config_stamp(explicit: Option<&std::path::Path>) -> Option<(std::path::PathBuf, std::time::SystemTime, u64, String)> {
     let p = ConfigFile::find_path(explicit)?;
     let m = std::fs::metadata(&p).ok()?;
-    Some((p, m.modified().ok()?, m.len()))
+    let pdir = trofeo_lcd::profiles::folder_of(&p);
+    Some((p, m.modified().ok()?, m.len(), trofeo_lcd::profiles::signature(pdir.as_deref())))
 }
 
 fn hex_head(b: &[u8], n: usize) -> String {
@@ -2240,6 +2260,26 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
+    // Profiles: a hotkey that goes round them (off unless `profile_key` is set), and the rules
+    // that pick one by the program in the foreground (off unless `profile_rules` is set).
+    let profiles_dir: Option<std::path::PathBuf> =
+        ConfigFile::find_path(config.config_explicit.as_deref()).and_then(|p| trofeo_lcd::profiles::folder_of(&p));
+    let mut profile_hotkey: Option<hotkey::Hotkey> = None;
+    if let Some((mods, vk, label)) = config.profile_key.clone() {
+        match hotkey::register_combo(mods, vk, 2) {
+            Ok(h) => {
+                println!("Profile hotkey: {} (global) — goes round the profiles", label.to_uppercase());
+                profile_hotkey = Some(h);
+            }
+            Err(e) => eprintln!("WARNING: profile hotkey not active: {e}"),
+        }
+    }
+    let mut rule_state = trofeo_lcd::profiles::RuleState::default();
+    let mut last_rule_check = Instant::now() - Duration::from_secs(10);
+    if let Some(p) = &config.active_profile {
+        println!("Profile: {p}");
+    }
+
     // AMD GPU sensor (Edge temperature, ASIC power, fan RPM) via ADL PMLog.
     // Graceful: if the driver isn't present / the GPU isn't AMD, a warning is printed and execution continues (N/A).
     let gpu_amd = gpu_amd::GpuAmdSensor::new();
@@ -2402,6 +2442,7 @@ fn main() -> anyhow::Result<()> {
                             || new_cfg.hide_console != config.hide_console
                             || new_cfg.start_in_tray != config.start_in_tray
                             || new_cfg.screenshot_key != config.screenshot_key
+                            || new_cfg.profile_key != config.profile_key
                             || new_cfg.weather_city != config.weather_city
                             || new_cfg.ticker_source != config.ticker_source
                             || new_cfg.ticker_refresh_min != config.ticker_refresh_min
@@ -2431,7 +2472,7 @@ fn main() -> anyhow::Result<()> {
                                         hs.big_endian = new_cfg.hid_big_endian.unwrap_or(hid_default_big_endian);
                                     }
                                 }
-                                println!("Configuration reloaded.");
+                                println!("Configuration reloaded.{}", new_cfg.active_profile.as_ref().map(|p| format!(" Profile: {p}.")).unwrap_or_default());
                                 report_config_error("");
                                 if restart_needed {
                                     println!("(deepcool, fps_monitor, openrgb, hide_console, start_in_tray, screenshot_key, weather_city, ticker_source, ticker_refresh_min and the update_* keys require a restart)");
@@ -2444,6 +2485,29 @@ fn main() -> anyhow::Result<()> {
                     Err(e) => report_config_error(&format!("Configuration not applied (keeping the previous one): {e}")),
                 }
             }
+        }
+
+        // Profiles: the hotkey goes round them; the rules follow the program in the foreground.
+        // (With neither set, nothing here runs.)
+        if let (Some(h), Some(dir)) = (&profile_hotkey, &profiles_dir) {
+            if hotkey::triggered(h.id) {
+                let current = trofeo_lcd::profiles::selected(Some(dir), config.active_profile.as_deref());
+                let next = trofeo_lcd::profiles::next(dir, current.as_deref());
+                match trofeo_lcd::profiles::write_active(dir, next.as_deref()) {
+                    Ok(()) => println!("Profile: {}", next.as_deref().unwrap_or("none")),
+                    Err(e) => eprintln!("Profile not changed: {e}"),
+                }
+            }
+        }
+        if !config.profile_rules.is_empty() && last_rule_check.elapsed() >= Duration::from_secs(2) {
+            last_rule_check = Instant::now();
+            let matched = foreground::foreground_exe_name().and_then(|e| trofeo_lcd::profiles::rule_match(&config.profile_rules, &e));
+            let want = rule_state.update(matched, Instant::now());
+            if want != trofeo_lcd::profiles::auto() {
+                trofeo_lcd::profiles::set_auto(want);
+            }
+        } else if config.profile_rules.is_empty() && trofeo_lcd::profiles::auto().is_some() {
+            trofeo_lcd::profiles::set_auto(None); // the rules were taken away
         }
 
         // Screenshot hotkey (global — active even when the window doesn't have focus).

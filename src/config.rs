@@ -26,6 +26,8 @@ pub struct ConfigFile {
     values: HashMap<String, String>,
     /// The file that was read (None = no file, using defaults).
     pub path: Option<PathBuf>,
+    /// The profile that was laid over the file (see `profiles`), if any.
+    pub profile: Option<String>,
 }
 
 /// Strip an end-of-line `# comment` from a value, but keep `#RRGGBB` colors:
@@ -59,6 +61,19 @@ fn strip_value_comment(v: &str) -> String {
 
 impl ConfigFile {
     pub fn parse(text: &str) -> Result<Self, String> {
+        let mut file = Self::parse_raw(text)?;
+        file.apply_theme()?;
+        Ok(file)
+    }
+
+    /// For the tests of the profiles (the file as it is, no profile, no theme).
+    #[doc(hidden)]
+    pub fn parse_raw_for_tests(text: &str) -> Self {
+        Self::parse_raw(text).expect("valid text")
+    }
+
+    /// The lines of the file as they are: no profile, no theme.
+    fn parse_raw(text: &str) -> Result<Self, String> {
         let mut values = HashMap::new();
         // Windows Notepad can save with a UTF-8 BOM at the start.
         let text = text.trim_start_matches('\u{feff}');
@@ -74,22 +89,43 @@ impl ConfigFile {
             let v = v.trim_matches(|c| c == '"' || c == '\'');
             values.insert(k.trim().to_ascii_lowercase(), v.to_string());
         }
-        let mut file = Self { values, path: None };
-        file.apply_theme()?;
-        Ok(file)
+        Ok(Self { values, path: None, profile: None })
+    }
+
+    /// Lay the active profile (see `profiles`) over the file: what the profile says wins.
+    /// `dir` is the `profiles` folder. A profile named by `profile = ...` of the file that does
+    /// not exist is an error; one chosen by hand or by a rule that is gone is ignored.
+    pub fn apply_profile_in(&mut self, dir: Option<&Path>) -> Result<(), String> {
+        let from_file = self.values.get("profile").cloned();
+        let Some(name) = crate::profiles::selected(dir, from_file.as_deref()) else { return Ok(()) };
+        let Some(d) = dir else { return Ok(()) };
+        let exists = crate::profiles::path_of(d, &name).is_file();
+        if !exists {
+            let own = from_file.as_deref().map(|f| f.trim().to_ascii_lowercase()) == Some(name.clone());
+            return if own { Err(format!("profile: '{name}' not found (the file {} does not exist)", crate::profiles::path_of(d, &name).display())) } else { Ok(()) };
+        }
+        for (k, v) in crate::profiles::load(d, &name)? {
+            self.values.insert(k, v);
+        }
+        self.profile = Some(name);
+        Ok(())
     }
 
     /// `theme = name`: the settings of the theme fill in what the file does not say itself.
     /// (`none` or no `theme` = nothing.) Called again after the command-line overrides.
     pub fn apply_theme(&mut self) -> Result<(), String> {
+        self.apply_theme_in(crate::themes::user_dir().as_deref())
+    }
+
+    /// Same, with the folder of the themes of your own given (for the tests).
+    pub fn apply_theme_in(&mut self, dir: Option<&Path>) -> Result<(), String> {
         let Some(name) = self.values.get("theme").cloned() else { return Ok(()) };
         let name = name.trim().to_ascii_lowercase();
         if name.is_empty() || name == "none" {
             return Ok(());
         }
-        let theme = crate::themes::find(&name).ok_or_else(|| format!("theme: '{name}' not valid (none | {})", crate::themes::names().join(" | ")))?;
-        for (k, v) in theme.settings {
-            self.values.entry(k.to_string()).or_insert_with(|| v.to_string());
+        for (k, v) in crate::themes::settings_of(&name, dir)? {
+            self.values.entry(k).or_insert(v);
         }
         Ok(())
     }
@@ -117,7 +153,13 @@ impl ConfigFile {
         for path in candidates {
             match std::fs::read_to_string(&path) {
                 Ok(text) => {
-                    let mut cfg = Self::parse(&text)
+                    // the themes of your own are in `themes/` next to the file
+                    crate::themes::set_user_dir(crate::themes::folder_of(&path));
+                    let mut cfg = Self::parse_raw(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+                    // profiles first (they win over the file), then the theme fills in the rest
+                    let pdir = crate::profiles::folder_of(&path);
+                    cfg.apply_profile_in(pdir.as_deref())
+                        .and_then(|()| cfg.apply_theme())
                         .map_err(|e| format!("{}: {e}", path.display()))?;
                     cfg.path = Some(path);
                     return Ok(cfg);
