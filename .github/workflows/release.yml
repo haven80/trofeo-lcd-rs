@@ -56,6 +56,7 @@ jobs:
           cp README.md NOTICE.md LICENSE OPTIONS_GUIDE.md trofeo.conf.example "$out/"
           [ -f GUIDE_SECOND_MONITOR.md ] && cp GUIDE_SECOND_MONITOR.md "$out/"
           [ -d scripts ] && cp -r scripts "$out/"
+          [ -d docs ] && cp -r docs "$out/"
           7z a "${out}.zip" "./${out}/*"
           echo "ASSET_PATH=${out}.zip" >> "$GITHUB_ENV"
 
