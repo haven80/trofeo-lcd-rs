@@ -1222,6 +1222,38 @@ text_backdrop = true
 background = C:\Pictures\bg.jpg
 ```
 
+## Free layouts — design your own screen
+
+A free layout is a screen you design yourself, from elements placed anywhere: texts with live values, bars, rings, rectangles and pictures. Use it by its name in the list of screens, like any other:
+
+```ini
+layout = default, my-screen:20
+```
+
+It is a text file `layouts/<name>.layout` in a `layouts` folder next to the configuration file. The **settings editor has a visual builder** for it (*Screens → Layout builder*), that reads and writes the same file; or write it by hand. One element per line, `kind key=value ...`, texts in quotes, `#` starts a comment line:
+
+```ini
+# layouts/my-screen.layout
+rect  x=0 y=0 w=100 h=100 color=#101820
+text  x=50 y=14 anchor=c size=16 color=#00C8FF text="{time}"
+text  x=4  y=52 size=4 text="CPU {cpu}  {cpu_temp}"
+bar   x=4  y=68 w=44 h=8 value=cpu_temp hot=80
+ring  x=80 y=62 w=30 h=70 anchor=c value=gpu text="{gpu}"
+```
+
+- **Positions and sizes are percentages of the screen** (`x`, `y`, `w`, `h`), so the same file fits a landscape and a portrait panel. `x`, `y` is where the `anchor` point of the element goes: `tl` (top left, the default), `t`, `tr`, `l`, `c` (centre), `r`, `bl`, `b`, `br`.
+- **Elements are drawn in the order of the file** (the last one is on top), over the background of the configuration.
+- `text`: `text="..."`, `size` (the scale of the font, 1-80), `color`; `w` is an optional limit of the width (a longer text is made smaller). Inside the text `{name}` is replaced with a live value: `{cpu}` `{gpu}` `{ram}` `{cpu_temp}` `{gpu_temp}` `{gpu_hotspot}` `{cpu_power}` `{gpu_power}` `{cpu_mhz}` `{cpu_freq}` `{fps}` `{ram_used}` `{ram_total}` `{net_down}` `{net_up}` `{disk_read}` `{disk_write}` `{song}` `{time}` `{time_short}` `{date}` `{weather_temp}` `{weather_city}`. A value that is not available on your PC shows `--`.
+- `bar`: `w`, `h`, `value=` one of `cpu gpu ram cpu_temp gpu_temp gpu_hotspot cpu_power gpu_power cpu_mhz fps`, `min` (0) and `max` (the usual maximum of the value), `color` (default: by level), `back` (the track), `hot=` and `hot_color=` (from that value up the bar takes that color).
+- `ring`: like `bar` (`w`, `h` give the size, the ring is a circle in it), plus `thick` (% of the radius) and `text` (shown in the middle, sized to fit).
+- `rect`: `w`, `h`, `color`, `opacity` (0-100).
+- `image`: `file="C:\Pictures\logo.png"` (a path, or relative to the folder of the configuration file), `w`, `h` (the picture is fitted in), `opacity`. PNG, JPEG, GIF (first frame), BMP, WebP.
+- A mistake is written on the screen with its line number (and in the console), and the rest of your settings keep working. The file is looked at again once a second, so what you save appears at once without a restart.
+
+**The builder**: drag a box to move it, drag the corner to resize it (everything but a text; a text is sized with its *Text size*), click an element (or its entry in the list) to edit it on the right. Arrows nudge by half a percent, Delete removes, Ctrl+D copies, Ctrl+Z / Ctrl+Y undo and redo, and Alt while dragging turns the snapping off (positions snap to half a percent and to the edges and middle). *Lock* stops the mouse from moving an element (for a background rectangle). Every change is saved at once; *Add it to the screens* puts the layout in your `layout` list, and then the screen follows your work as you make it. To share a layout, give the `.layout` file to someone; they put it in their `layouts` folder.
+
+The free layout is a screen like *tiles* or *frame*: it is shown when idle, and the gaming and music screens still take over when they start.
+
 ## Preset layouts
 
 | Key | CLI | Values | Default |

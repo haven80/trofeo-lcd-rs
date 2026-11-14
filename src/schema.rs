@@ -127,6 +127,7 @@ pub const SECTIONS: &[(&str, &str, &str)] = &[
     ("game", "Pixel game", "Mini gioco"),
     ("online", "Weather and news", "Meteo e notizie"),
     ("profiles", "Profiles", "Profili"),
+    ("builder", "Layout builder", "Costruttore di layout"),
     ("system", "System", "Sistema"),
     ("share", "Share your design", "Condividi il tuo design"),
 ];
@@ -1035,7 +1036,7 @@ pub fn fields() -> Vec<Field> {
 pub const CATEGORIES: &[(&str, &str, &[&str])] = &[
     ("Screen and sensors", "Schermo e sensori", &["screen", "lhm"]),
     ("Look", "Aspetto", &["background", "effect", "look", "show", "items", "spectrum"]),
-    ("Screens", "Schermate", &["layouts", "tiles", "dash", "frame", "steam", "profiles"]),
+    ("Screens", "Schermate", &["layouts", "tiles", "dash", "frame", "steam", "profiles", "builder"]),
     ("Music and games", "Musica e giochi", &["music", "gaming", "game"]),
     ("Online", "Online", &["online"]),
     ("System", "Sistema", &["system"]),
@@ -1144,8 +1145,8 @@ mod tests {
             assert!(!x.en.is_empty() && !x.it.is_empty(), "{}: a label is missing", x.key);
         }
         for (id, _, _) in SECTIONS {
-            // "share" is a page of buttons of the editor, not a list of settings
-            assert!(*id == "share" || f.iter().any(|x| x.section == *id), "section {id} is empty");
+            // "share" and "builder" are pages of buttons of the editor, not a list of settings
+            assert!(*id == "share" || *id == "builder" || f.iter().any(|x| x.section == *id), "section {id} is empty");
         }
     }
 

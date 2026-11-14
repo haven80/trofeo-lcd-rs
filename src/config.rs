@@ -155,6 +155,7 @@ impl ConfigFile {
                 Ok(text) => {
                     // the themes of your own are in `themes/` next to the file
                     crate::themes::set_user_dir(crate::themes::folder_of(&path));
+                    crate::free::set_dir(crate::free::folder_of(&path));
                     let mut cfg = Self::parse_raw(&text).map_err(|e| format!("{}: {e}", path.display()))?;
                     // profiles first (they win over the file), then the theme fills in the rest
                     let pdir = crate::profiles::folder_of(&path);

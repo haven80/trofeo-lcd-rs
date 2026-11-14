@@ -22,6 +22,8 @@ what this fork adds on top of the original.
 
 ## What's new
 
+**2.22.0 — free layouts.** Design your own screen: texts with live values (`{cpu}`, `{time}`, `{song}`...), bars, rings, rectangles and pictures, placed anywhere, in a text file `layouts/<name>.layout` or with the **visual builder** in the settings editor (drag, resize, edit, undo). Use it with `layout = my-screen`.
+
 **2.21.0 — profiles.** Named sets of settings that are laid over your configuration while they are in use: `profiles/gaming.profile`, switched from the tray menu, a hotkey (`profile_key`), the settings editor or automatically by the program in the foreground (`profile_rules = mygame.exe=gaming`). Nothing changes unless you make one.
 
 **2.20.0 — your own themes.** *Share your design* can save the look you made as a theme (`themes/<name>.theme`, used with `theme = name`), copy it as text, attach it to a gallery post as a file and import the themes of others.

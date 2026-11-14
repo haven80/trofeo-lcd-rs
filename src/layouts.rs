@@ -192,6 +192,41 @@ pub fn find(name: &str) -> Option<&'static LayoutDef> {
     LAYOUTS.iter().find(|l| l.name == n)
 }
 
+/// The screens of the free layouts that are in use: `free:<name>`, made once per name.
+static FREE_DEFS: std::sync::Mutex<Vec<&'static LayoutDef>> = std::sync::Mutex::new(Vec::new());
+
+/// Prefix of the name of a free layout's screen.
+pub const FREE_PREFIX: &str = "free:";
+
+/// A free layout (`layouts/<name>.layout`, see `free.rs`) as a screen, when the file exists.
+pub fn find_free(name: &str) -> Option<&'static LayoutDef> {
+    let n = name.trim().to_ascii_lowercase();
+    trofeo_lcd::free::valid_name(&n).ok()?;
+    let dir = trofeo_lcd::free::dir()?;
+    if !trofeo_lcd::free::path_of(&dir, &n).is_file() {
+        return None;
+    }
+    let mut all = FREE_DEFS.lock().unwrap_or_else(|e| e.into_inner());
+    let full = format!("{FREE_PREFIX}{n}");
+    if let Some(d) = all.iter().find(|d| d.name == full) {
+        return Some(d);
+    }
+    let def: &'static LayoutDef = Box::leak(Box::new(LayoutDef {
+        name: Box::leak(full.into_boxed_str()),
+        description: "A screen you designed (layouts folder)",
+        standard: false,
+        cols: 1,
+        rows: &[],
+    }));
+    all.push(def);
+    Some(def)
+}
+
+/// A preset screen, or a free layout of yours.
+pub fn find_any(name: &str) -> Option<&'static LayoutDef> {
+    find(name).or_else(|| find_free(name))
+}
+
 pub fn names() -> String {
     LAYOUTS.iter().map(|l| l.name).collect::<Vec<_>>().join(", ")
 }

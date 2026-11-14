@@ -16,6 +16,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
+#[path = "config_editor/builder.rs"]
+mod builder;
+
 use trofeo_lcd::share;
 use trofeo_lcd::conf_edit::ConfDoc;
 use trofeo_lcd::schema::{self, Field, Kind};
@@ -548,6 +551,7 @@ fn render_preview(exe: &Path, text: &str, workdir: &Path, state: PreviewState, l
     if !workdir.as_os_str().is_empty() {
         // the themes of your own are next to the real file, not next to the temporary one
         cmd.env(trofeo_lcd::themes::ENV_DIR, workdir.join(trofeo_lcd::themes::FOLDER));
+        cmd.env(trofeo_lcd::free::ENV_DIR, workdir.join(trofeo_lcd::free::FOLDER));
     }
     cmd.arg("--config")
         .arg(&conf)
@@ -754,6 +758,17 @@ fn layout_widget(ui: &mut egui::Ui, ed: &mut Ed, key: &str, l: Lang) {
                 for (name, en, it) in schema::LAYOUT_NAMES {
                     if ui.selectable_label(e.name == *name, format!("{name}  -  {}", tr(l, en, it))).clicked() {
                         e.name = name.to_string();
+                        changed = true;
+                    }
+                }
+                // the screens you designed (Layout builder)
+                let own = trofeo_lcd::free::dir().map(|d| trofeo_lcd::free::list(&d)).unwrap_or_default();
+                if !own.is_empty() {
+                    ui.separator();
+                }
+                for name in own {
+                    if ui.selectable_label(e.name == name, format!("{name}  -  {}", tr(l, "your own", "tuo"))).clicked() {
+                        e.name = name;
                         changed = true;
                     }
                 }
@@ -1251,6 +1266,8 @@ struct App {
     prof_name: String,
     prof_text: String,
     prof_msg: Option<(String, bool)>,
+    /// The visual builder of free layouts.
+    builder: builder::Builder,
 }
 
 /// The "Share your design" section: the picture taken and what is going on.
@@ -1314,6 +1331,7 @@ impl App {
             prof_name: String::new(),
             prof_text: String::new(),
             prof_msg: None,
+            builder: builder::Builder::new(),
         };
         app.load(&path);
         app
@@ -2136,6 +2154,22 @@ impl App {
             self.share_form(ui);
             return;
         }
+        if self.section == "builder" {
+            let names = self.layout_names();
+            let cx = builder::Ctx {
+                lang: l,
+                config_dir: dir_of(&self.path),
+                exe: self.preview.exe.clone(),
+                doc_text: self.ed.doc.to_text(),
+                in_screens: names.iter().any(|n| n == self.builder.current()),
+            };
+            if let builder::Out::AddToScreens(name) = self.builder.ui(ui, &cx) {
+                let mut entries = parse_layouts(&self.ed.get("layout").unwrap_or_default());
+                entries.push(LayoutEntry { name: name.clone(), secs: None });
+                self.ed.set("layout", &layouts_to_string(&entries));
+            }
+            return;
+        }
         if self.section == "raw" {
             let text = self.raw_text.get_or_insert_with(|| self.ed.doc.to_text());
             ui.label(RichText::new(tr(l, "The file as text. Edit freely; the changes apply as you type.", "Il file come testo. Modificalo liberamente; le modifiche valgono man mano che scrivi.")).weak());
@@ -2274,6 +2308,7 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.frames += 1;
         trofeo_lcd::themes::set_user_dir(trofeo_lcd::themes::folder_of(&self.path));
+        trofeo_lcd::free::set_dir(trofeo_lcd::free::folder_of(&self.path));
         self.refresh_dirty();
         if ctx.input(|i| i.viewport().close_requested()) && self.dirty && !self.allow_close {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
@@ -2317,7 +2352,10 @@ impl eframe::App for App {
             });
         }
         let portrait = self.preview.tex.as_ref().is_some_and(|t| t.size_vec2().y > t.size_vec2().x);
-        if portrait {
+        // (the builder page has the screen in it: the preview of the whole file is not wanted there)
+        if self.section == "builder" && self.query.trim().is_empty() && !self.only_changed {
+            // nothing
+        } else if portrait {
             egui::SidePanel::right("preview").resizable(true).default_width(300.0).show(ctx, |ui| self.preview_panel(ui, true));
         } else {
             egui::TopBottomPanel::top("preview").show(ctx, |ui| self.preview_panel(ui, false));

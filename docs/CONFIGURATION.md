@@ -276,6 +276,9 @@ milliseconds), and `effect_fps` (default 8) keeps the number of frames low — s
 - Alerts: `alert_cpu_temp = 90`, `alert_gpu_temp`, `alert_cpu_load`, `alert_gpu_load`, `alert_ram = 95`
   (`0` = off, the default), `alert_delay = 3`, `alert_color` — a pulsing border and the value when a
   reading stays over its limit. See [Alerts](../OPTIONS_GUIDE.md#alerts).
+- Free layouts: design your own screen (texts with live values, bars, rings, rectangles, pictures) in
+  `layouts/my-screen.layout` or with the settings editor's Layout builder; use it with `layout = my-screen`.
+  See [Free layouts](../OPTIONS_GUIDE.md#free-layouts--design-your-own-screen).
 - Profiles: `profiles/gaming.profile` is laid over this file while in use; switch it from the tray, a hotkey
   (`profile_key = ctrl+alt+p`) or by the program in the foreground (`profile_rules = mygame.exe=gaming`).
   See [Profiles](../OPTIONS_GUIDE.md#profiles).

@@ -38,6 +38,7 @@ mod pixel_game;
 mod spectrum;
 mod steam;
 mod frame;
+mod free_draw;
 mod tiles;
 mod ticker;
 mod tray;
@@ -1141,8 +1142,10 @@ fn parse_ui_options(file: &ConfigFile) -> anyhow::Result<UiOptions> {
                 Some((n, s)) => (n.trim(), Some(s.trim())),
                 None => (entry, None),
             };
-            let def = layouts::find(name).ok_or_else(|| {
-                anyhow::anyhow!("layout: '{name}' unknown (valid: {})", layouts::names())
+            let def = layouts::find_any(name).ok_or_else(|| {
+                let own = trofeo_lcd::free::dir().map(|d| trofeo_lcd::free::list(&d)).unwrap_or_default();
+                let own = if own.is_empty() { String::new() } else { format!("; your own: {}", own.join(", ")) };
+                anyhow::anyhow!("layout: '{name}' unknown (valid: {}{own})", layouts::names())
             })?;
             let secs = match secs {
                 Some(s) => {
@@ -2379,6 +2382,7 @@ fn main() -> anyhow::Result<()> {
     let mut layout_marquee = Marquee::new();
     let mut tiles_screen = tiles::TilesScreen::new();
     let mut frame_screen = frame::FrameScreen::new();
+    let mut free_screen = free_draw::FreeScreen::new();
     let mut dash_screen = tiles::dash::DashScreen::new();
     let mut game_screen = tiles::game::GameScreen::new();
     let mut game_tracker = game_info::Tracker::default();
@@ -2935,6 +2939,18 @@ fn main() -> anyhow::Result<()> {
             let env = tiles::Env { fps: config.active_fps, ffmpeg: config.ffmpeg.as_deref(), effect: &config.ui.effect, secs: None };
             frame_screen.draw(&mut fb, area, wd, color_mode, &opts().frame, &opts().tiles, &env);
         }
+        // A screen you designed (`layouts/<name>.layout`): painted on `fb` like the tiles.
+        if let (Some(name), Some(wd)) = (
+            active_def.filter(|_| is_idle && !(gaming_now && ui_show.dashboard)).and_then(|d| d.name.strip_prefix(layouts::FREE_PREFIX)),
+            widget_data.as_ref(),
+        ) {
+            let area = if composite {
+                (config.margins.left, config.margins.top, ui.width(), ui.height())
+            } else {
+                (0, 0, fb.width(), fb.height())
+            };
+            free_screen.draw(&mut fb, area, name, wd, color_mode);
+        }
         let target: &mut Framebuffer = if composite { &mut ui } else { &mut fb };
         if game_style.is_some() {
             // painted above, on `fb`, with its own background
@@ -3289,6 +3305,14 @@ fn render_preview(config: &Config, req: &PreviewReq) -> anyhow::Result<Framebuff
         let mut screen = frame::FrameScreen::with_seed(7);
         screen.still = true;
         screen.draw_settled(&mut fb, area, &wd, color_mode, &o.frame, &o.tiles, &env);
+    }
+    if let Some(name) = active_def.filter(|_| is_idle).and_then(|d| d.name.strip_prefix(layouts::FREE_PREFIX)) {
+        let area = if composite {
+            (config.margins.left, config.margins.top, ui.width(), ui.height())
+        } else {
+            (0, 0, fb.width(), fb.height())
+        };
+        free_draw::FreeScreen::new().draw(&mut fb, area, name, &wd, color_mode);
     }
     let target: &mut Framebuffer = if composite { &mut ui } else { &mut fb };
 
