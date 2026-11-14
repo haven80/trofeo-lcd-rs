@@ -83,6 +83,33 @@ pub fn settings_text(doc: &ConfDoc, fields: &[Field]) -> String {
     out
 }
 
+/// What an imported design would do.
+#[derive(Debug, Default, PartialEq)]
+pub struct Import {
+    /// `(key, value)` to set.
+    pub apply: Vec<(String, String)>,
+    /// `(key, why)` left out.
+    pub skipped: Vec<(String, &'static str)>,
+}
+
+/// Reads a design pasted as `key = value` lines (as "Copy the settings" writes them, also with
+/// the lines of a code block around them) and sorts it: what is part of the look and has a
+/// valid value is applied; the rest is left out with the reason.
+pub fn parse_import(text: &str, fields: &[Field]) -> Import {
+    let doc = ConfDoc::parse(text);
+    let mut out = Import::default();
+    for key in doc.keys() {
+        let Some(value) = doc.get(&key) else { continue };
+        match fields.iter().find(|f| f.key == key) {
+            None => out.skipped.push((key, "not a setting of this version")),
+            Some(f) if !shareable(f) => out.skipped.push((key, "not part of the look")),
+            Some(f) if !crate::schema::check_value(f, &value) => out.skipped.push((key, "value not valid")),
+            Some(_) => out.apply.push((key, value)),
+        }
+    }
+    out
+}
+
 /// The prefilled page for a new gallery entry.
 pub fn issue_url(version: &str) -> String {
     format!("{GALLERY_NEW}&title=%5BGallery%5D%20&version={version}")
@@ -181,5 +208,19 @@ mod tests {
         assert!(u.starts_with("https://github.com/haven80/trofeo-lcd-rs/issues/new?template=gallery.yml"));
         assert!(u.contains("version=2.17.0"));
         assert!(!u.contains(' '));
+    }
+
+    #[test]
+    fn a_pasted_design_is_sorted_into_what_applies_and_what_does_not() {
+        let text = "```ini\nclock_format = 12h\nlayout = deck, cards\nweather_city = Rome\nbackground = C:\\a.jpg\nclock_ampm = maybe\nnot_a_key = 1\n```\n";
+        let imp = parse_import(text, &fields());
+        let keys: Vec<&str> = imp.apply.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(keys, ["clock_format", "layout"], "{imp:?}");
+        let why = |k: &str| imp.skipped.iter().find(|(s, _)| s == k).map(|(_, w)| *w);
+        assert_eq!(why("weather_city"), Some("not part of the look"));
+        assert_eq!(why("background"), Some("not part of the look"));
+        assert_eq!(why("clock_ampm"), Some("value not valid"));
+        assert_eq!(why("not_a_key"), Some("not a setting of this version"));
+        assert_eq!(parse_import("", &fields()), Import::default());
     }
 }

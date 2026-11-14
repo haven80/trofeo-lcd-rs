@@ -972,6 +972,68 @@ pub fn fields() -> Vec<Field> {
 }
 
 /// The sub-heading of a group in both languages.
+/// The sections gathered by theme, as the side list of the editor shows them:
+/// (English, Italian, ids of the sections).
+pub const CATEGORIES: &[(&str, &str, &[&str])] = &[
+    ("Screen and sensors", "Schermo e sensori", &["screen", "lhm"]),
+    ("Look", "Aspetto", &["background", "effect", "look", "show", "items", "spectrum"]),
+    ("Screens", "Schermate", &["layouts", "tiles", "dash", "frame", "steam"]),
+    ("Music and games", "Musica e giochi", &["music", "gaming", "game"]),
+    ("Online", "Online", &["online"]),
+    ("System", "Sistema", &["system"]),
+    ("Share", "Condividi", &["share"]),
+];
+
+/// The index in [`CATEGORIES`] of the one that holds a section.
+pub fn category_of(section: &str) -> Option<usize> {
+    CATEGORIES.iter().position(|(_, _, ids)| ids.contains(&section))
+}
+
+/// The settings that match a search: every word of `query` must be in the label (English or
+/// Italian), the key or the hint. Matches in the label or the key come first.
+pub fn search<'a>(fields: &'a [Field], query: &str) -> Vec<&'a Field> {
+    let words: Vec<String> = query.split_whitespace().map(|w| w.to_lowercase()).collect();
+    if words.is_empty() {
+        return Vec::new();
+    }
+    let mut hits: Vec<(u8, &Field)> = Vec::new();
+    for f in fields {
+        let head = format!("{} {} {}", f.en, f.it, f.key).to_lowercase();
+        let all = format!("{head} {} {}", f.help_en, f.help_it).to_lowercase();
+        if !words.iter().all(|w| all.contains(w.as_str())) {
+            continue;
+        }
+        let rank = if words.iter().all(|w| f.key.to_lowercase().contains(w.as_str())) {
+            0
+        } else if words.iter().all(|w| head.contains(w.as_str())) {
+            1
+        } else {
+            2
+        };
+        hits.push((rank, f));
+    }
+    hits.sort_by_key(|(r, _)| *r);
+    hits.into_iter().map(|(_, f)| f).collect()
+}
+
+/// Is `v` a value the setting accepts? Only the kinds with a clear rule are checked (a switch,
+/// a choice, a number in its range, colors); the others are taken as they are.
+pub fn check_value(f: &Field, v: &str) -> bool {
+    let v = v.trim();
+    match &f.kind {
+        Kind::Bool => v.eq_ignore_ascii_case("true") || v.eq_ignore_ascii_case("false"),
+        Kind::Choice(opts) => opts.iter().any(|o| o.eq_ignore_ascii_case(v)),
+        Kind::Int { min, max } => v.parse::<i64>().is_ok_and(|n| (*min..=*max).contains(&n)),
+        Kind::Float { min, max } => v.parse::<f32>().is_ok_and(|n| n >= *min && n <= *max),
+        Kind::Color => parse_color(v).is_some(),
+        Kind::ColorList => {
+            let items = split_list(v);
+            !items.is_empty() && items.iter().all(|c| parse_color(c).is_some())
+        }
+        _ => !v.is_empty(),
+    }
+}
+
 pub fn group_title(group: &str) -> (&str, &str) {
     match group {
         "margins" => ("Margins (pixels)", "Margini (pixel)"),
@@ -1063,5 +1125,41 @@ mod tests {
         for (n, c) in COLOR_NAMES {
             assert_eq!(parse_color(n), Some(*c));
         }
+    }
+
+    #[test]
+    fn every_section_is_in_exactly_one_category() {
+        for (id, _, _) in SECTIONS {
+            let n = CATEGORIES.iter().filter(|(_, _, ids)| ids.contains(id)).count();
+            assert_eq!(n, 1, "section {id} is in {n} categories");
+        }
+        for (_, _, ids) in CATEGORIES {
+            for id in *ids {
+                assert!(SECTIONS.iter().any(|(s, _, _)| s == id), "unknown section {id}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_search_finds_settings_by_label_key_and_hint_in_both_languages() {
+        let f = fields();
+        let keys = |q: &str| search(&f, q).iter().map(|x| x.key.clone()).collect::<Vec<_>>();
+        assert!(keys("12h").contains(&"clock_format".to_string()));
+        assert!(keys("formato dell'ora").contains(&"clock_format".to_string()));
+        assert!(keys("Time format").contains(&"clock_format".to_string()));
+        assert!(keys("fade").contains(&"screen_fade_ms".to_string()));
+        assert_eq!(keys("clock_format").first().map(String::as_str), Some("clock_format"), "an exact key comes first");
+        assert!(keys("   ").is_empty());
+        assert!(keys("zzzzqqq").is_empty());
+    }
+
+    #[test]
+    fn values_are_checked_by_their_kind() {
+        let f = fields();
+        let get = |k: &str| f.iter().find(|x| x.key == k).unwrap().clone();
+        assert!(check_value(&get("clock_ampm"), "false") && !check_value(&get("clock_ampm"), "maybe"));
+        assert!(check_value(&get("clock_format"), "12h") && !check_value(&get("clock_format"), "13h"));
+        assert!(check_value(&get("screen_fade_ms"), "600") && !check_value(&get("screen_fade_ms"), "9000"));
+        assert!(check_value(&get("clock_color"), "#FF8800") && !check_value(&get("clock_color"), "nope"));
     }
 }

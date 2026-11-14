@@ -20,7 +20,9 @@ whose driver was rewritten byte-for-byte from
 See **[NOTICE.md](./NOTICE.md)** for the full provenance and a summary of
 what this fork adds on top of the original.
 
-**New in 2.17.0 — share your design in the gallery.** The settings editor has a new page, *Share your design* (last in the list): it asks the running program for a picture of what is on the screen, shows it so you can check it, copies the settings that make up the look (no files, folders, city, sensors or system settings) and opens the project's gallery form on GitHub, where you drop the picture and paste the settings. The gallery is the list of issues with the label `gallery`: [see it here](https://github.com/haven80/trofeo-lcd-rs/issues?q=is%3Aissue+label%3Agallery). Nothing is sent by the program: you post it yourself, with your own GitHub account. See [the options guide](./OPTIONS_GUIDE.md#share-your-design).
+**New in 2.18.0 — a clearer settings editor.** A **search box** at the top of the list finds any setting by its name, its key (`clock_format`) or its hint, in English or Italian, and lets you change it right there; the sections are **grouped by theme** (Screen and sensors, Look, Screens, Music and games, Online, System, Share); **Settings I changed** shows only what is written in your file, each with its `x` to go back to the default; after saving, a notice says which of the changed settings **need a restart** of `trofeo_lcd`; and on *Share your design* you can **import** a design pasted from the gallery. See [the options guide](./OPTIONS_GUIDE.md#settings-editor-trofeo_config).
+
+**2.17.0 — share your design in the gallery.** The settings editor has a new page, *Share your design* (last in the list): it asks the running program for a picture of what is on the screen, shows it so you can check it, copies the settings that make up the look (no files, folders, city, sensors or system settings) and opens the project's gallery form on GitHub, where you drop the picture and paste the settings. The gallery is the list of issues with the label `gallery`: [see it here](https://github.com/haven80/trofeo-lcd-rs/issues?q=is%3Aissue+label%3Agallery). Nothing is sent by the program: you post it yourself, with your own GitHub account. See [the options guide](./OPTIONS_GUIDE.md#share-your-design).
 
 **2.16.2 — `hid_resend_ms` for 6.86 screens that blink or go blank.** If the whole screen dims, blinks or disappears between pictures, `hid_resend_ms = 1` (settings editor, *Screen*) keeps sending the last picture from a thread of its own, also while the next one is being drawn. Off by default; it helped on the one screen it was tried on. See [the options guide](./OPTIONS_GUIDE.md#trofeo-vision-686-and-the-04165302-family).
 
@@ -233,9 +235,10 @@ plus the fans, motherboard and disk temperature and the GPU hot spot.
 Don't want to edit `trofeo.conf` by hand? Start `trofeo_config` (Windows: `trofeo_config.exe`,
 in the same folder as `trofeo_lcd.exe`). It opens the `trofeo.conf` next to it — or the file you
 pass as its first argument (`trofeo_config my.conf`), or any file with *Open...* — and shows
-every setting, in sections: screen, background, animated background, screens (layouts), tiles,
-digital frame, what to show, colors and text, spectrum, single items, music card, pixel game, weather and news,
-system, plus a *Raw file* view for anything else.
+every setting, in sections gathered by theme (screen and sensors; look; screens; music and games; online; system; share), plus a *Raw file* view for anything else.
+Can't find a setting? Type a word in the **search box** at the top of the list (`12h`, `color`, `fade`, or the name of a key): the matching settings of every section appear and can be changed in place.
+
+![Searching for a setting](img/config-editor-search.png)
 
 - **Live preview, drawn by the real program.** The picture at the top is made by
   `trofeo_lcd` itself (the editor runs it with `--preview-png` and shows the frame), with
@@ -246,7 +249,8 @@ system, plus a *Raw file* view for anything else.
   wrong, the real program's own error message is shown instead.
 - **Only what you change is written.** Settings left at their default stay out of the file;
   the small `x` next to a setting takes it out again; `*` marks the ones that need a restart
-  of `trofeo_lcd`, and a number shows how many settings of a section you changed.
+  of `trofeo_lcd` (after saving, a notice lists the ones you just changed), and a number shows
+  how many settings of a section you changed. **Settings I changed** gathers all of them in one list.
 - **Your file stays yours.** Comments and lines the editor doesn't touch are kept exactly as
   they are, new settings are added under an "Added by the settings editor" comment, and the
   previous file is copied to `trofeo.conf.bak` the first time you save in each session.

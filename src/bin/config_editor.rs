@@ -1213,6 +1213,17 @@ struct App {
     shot_requested: bool,
     lcd_test: LcdTest,
     share: ShareState,
+    /// The search box of the side list.
+    query: String,
+    /// Show only the settings that are set in the file.
+    only_changed: bool,
+    /// A category of the side list to open on the next frame (after a jump from a search).
+    open_cat: Option<usize>,
+    /// After saving: the settings that changed and need a restart of `trofeo_lcd`.
+    restart_notice: Option<Vec<String>>,
+    /// "Import a design": the pasted text and what happened.
+    import_text: String,
+    import_msg: Option<(String, bool)>,
 }
 
 /// The "Share your design" section: the picture taken and what is going on.
@@ -1265,6 +1276,12 @@ impl App {
             shot_requested: false,
             lcd_test: LcdTest::new(),
             share: ShareState::default(),
+            query: String::new(),
+            only_changed: false,
+            open_cat: None,
+            restart_notice: None,
+            import_text: String::new(),
+            import_msg: None,
         };
         app.load(&path);
         app
@@ -1324,6 +1341,15 @@ impl App {
         let res = std::fs::write(&tmp, &text).and_then(|_| std::fs::rename(&tmp, path));
         match res {
             Ok(()) => {
+                // settings that changed and only apply after a restart of the program
+                let old = ConfDoc::parse(&self.saved_text);
+                let need: Vec<String> = self
+                    .fields
+                    .iter()
+                    .filter(|f| f.restart && old.get(&f.key) != self.ed.doc.get(&f.key))
+                    .map(|f| label(f, l).to_string())
+                    .collect();
+                self.restart_notice = (!need.is_empty()).then_some(need);
                 self.saved_text = text;
                 self.path = path.to_path_buf();
                 self.path_text = path.display().to_string();
@@ -1532,21 +1558,139 @@ impl App {
     fn sections_panel(&mut self, ui: &mut egui::Ui) {
         let l = self.lang;
         ui.add_space(4.0);
-        for (id, en, it) in schema::SECTIONS {
-            let n_set = self.fields.iter().filter(|f| f.section == *id && self.ed.doc.is_set(&f.key)).count();
-            let text = if n_set > 0 { format!("{}  ({n_set})", tr(l, en, it)) } else { tr(l, en, it).to_string() };
-            if ui.selectable_label(self.section == *id, text).clicked() {
-                self.section = id.to_string();
+        ui.horizontal(|ui| {
+            ui.add(egui::TextEdit::singleline(&mut self.query).hint_text(tr(l, "Search settings...", "Cerca impostazioni...")).desired_width(150.0));
+            if !self.query.is_empty() && ui.small_button("x").on_hover_text(tr(l, "Clear the search", "Cancella la ricerca")).clicked() {
+                self.query.clear();
             }
+        });
+        let n_changed = self.fields.iter().filter(|f| self.ed.doc.is_set(&f.key)).count();
+        let searching = !self.query.trim().is_empty();
+        if ui
+            .selectable_label(self.only_changed && !searching, format!("{}  ({n_changed})", tr(l, "Settings I changed", "Impostazioni che ho cambiato")))
+            .on_hover_text(tr(l, "Only the settings that are written in the file", "Solo le impostazioni scritte nel file"))
+            .clicked()
+        {
+            self.only_changed = !self.only_changed;
+            self.query.clear();
         }
         ui.separator();
-        if ui.selectable_label(self.section == "raw", tr(l, "Raw file", "File grezzo")).clicked() {
+        let force = self.open_cat.take();
+        let browsing = !searching && !self.only_changed;
+        let mut picked: Option<String> = None;
+        for (ci, (cen, cit, ids)) in schema::CATEGORIES.iter().enumerate() {
+            let section_text = |id: &str, ed: &Ed, fields: &[Field]| {
+                let (en, it) = schema::SECTIONS.iter().find(|(s, _, _)| *s == id).map(|(_, en, it)| (*en, *it)).unwrap_or((id, id));
+                let n_set = fields.iter().filter(|f| f.section == id && ed.doc.is_set(&f.key)).count();
+                if n_set > 0 { format!("{}  ({n_set})", tr(l, en, it)) } else { tr(l, en, it).to_string() }
+            };
+            if ids.len() == 1 {
+                let id = ids[0];
+                if ui.selectable_label(browsing && self.section == id, section_text(id, &self.ed, &self.fields)).clicked() {
+                    picked = Some(id.to_string());
+                }
+                continue;
+            }
+            let current = ids.contains(&self.section.as_str());
+            let mut header = egui::CollapsingHeader::new(RichText::new(tr(l, cen, cit)).strong()).id_salt(("category", ci)).default_open(current);
+            if force == Some(ci) {
+                header = header.open(Some(true));
+            }
+            header.show(ui, |ui| {
+                for id in ids.iter() {
+                    if ui.selectable_label(browsing && self.section == *id, section_text(id, &self.ed, &self.fields)).clicked() {
+                        picked = Some(id.to_string());
+                    }
+                }
+            });
+        }
+        if let Some(id) = picked {
+            self.section = id;
+            self.query.clear();
+            self.only_changed = false;
+        }
+        ui.separator();
+        if ui.selectable_label(self.section == "raw" && browsing, tr(l, "Raw file", "File grezzo")).clicked() {
             self.section = "raw".to_string();
+            self.query.clear();
+            self.only_changed = false;
             self.raw_text = None;
         }
         ui.add_space(8.0);
         ui.label(RichText::new(tr(l, "* needs a restart of trofeo_lcd", "* serve riavviare trofeo_lcd")).weak().small());
         ui.label(RichText::new(tr(l, "(n) = settings you changed", "(n) = impostazioni che hai cambiato")).weak().small());
+    }
+
+    /// A list of settings from different sections (the search, the changed ones), each editable
+    /// in place, under the name of its section.
+    fn fields_list(&mut self, ui: &mut egui::Ui, heading: String, hint: String, list: Vec<Field>) {
+        let l = self.lang;
+        ui.heading(heading);
+        if !hint.is_empty() {
+            ui.label(RichText::new(hint).weak());
+        }
+        ui.add_space(4.0);
+        let mut jump: Option<String> = None;
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+            let mut last = "";
+            for f in &list {
+                if f.section != last {
+                    last = f.section;
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        let name = schema::SECTIONS.iter().find(|(id, _, _)| *id == f.section).map(|(_, en, it)| tr(l, en, it)).unwrap_or("");
+                        ui.label(RichText::new(name).strong().color(Color32::from_rgb(140, 190, 255)));
+                        if ui.small_button(tr(l, "go to the section", "vai alla sezione")).clicked() {
+                            jump = Some(f.section.to_string());
+                        }
+                    });
+                    ui.separator();
+                }
+                if let Some((k, vals)) = f.when {
+                    let cur = self.ed.value_of(k, &self.fields);
+                    if !vals.iter().any(|v| cur.eq_ignore_ascii_case(v)) {
+                        ui.label(RichText::new(format!("{} {k} = {}", tr(l, "Used only when", "Vale solo se"), vals.join(" / "))).weak().small());
+                    }
+                }
+                field_row(ui, &mut self.ed, f, l);
+            }
+        });
+        if let Some(id) = jump {
+            self.open_cat = schema::category_of(&id);
+            self.section = id;
+            self.query.clear();
+            self.only_changed = false;
+        }
+    }
+
+    fn search_form(&mut self, ui: &mut egui::Ui) {
+        let l = self.lang;
+        let mut hits: Vec<Field> = schema::search(&self.fields, &self.query).into_iter().cloned().collect();
+        let n = hits.len();
+        hits.truncate(60);
+        // keep the order of the sections of the editor, within them the best matches first
+        let order = |s: &str| schema::SECTIONS.iter().position(|(id, _, _)| *id == s).unwrap_or(usize::MAX);
+        hits.sort_by_key(|f| order(f.section));
+        let heading = format!("{}: \"{}\"", tr(l, "Search", "Ricerca"), self.query.trim());
+        let hint = if n == 0 {
+            tr(l, "Nothing found. Try another word (for example a color, a size, or the name of a screen).", "Nessun risultato. Prova un'altra parola (per esempio un colore, una dimensione o il nome di una schermata).").to_string()
+        } else if n > 60 {
+            format!("{n} {}", tr(l, "settings found, the first 60 are shown: add a word to narrow it down.", "impostazioni trovate, ne mostro 60: aggiungi una parola per restringere."))
+        } else {
+            format!("{n} {}", tr(l, "settings found. You can change them here.", "impostazioni trovate. Le puoi modificare qui."))
+        };
+        self.fields_list(ui, heading, hint, hits);
+    }
+
+    fn changed_form(&mut self, ui: &mut egui::Ui) {
+        let l = self.lang;
+        let list: Vec<Field> = self.fields.iter().filter(|f| self.ed.doc.is_set(&f.key)).cloned().collect();
+        let hint = if list.is_empty() {
+            tr(l, "Nothing is set yet: everything is at its default.", "Non hai ancora cambiato niente: tutto è ai valori predefiniti.").to_string()
+        } else {
+            tr(l, "The settings written in your file. The x puts one back to its default.", "Le impostazioni scritte nel tuo file. La x ne riporta una al valore predefinito.").to_string()
+        };
+        self.fields_list(ui, tr(l, "Settings I changed", "Impostazioni che ho cambiato").to_string(), hint, list);
     }
 
     /// "Share your design": a picture of the screen, the settings of the look, and the GitHub page.
@@ -1683,11 +1827,60 @@ impl App {
             if ui.link(tr(l, "See the gallery of the other users", "Guarda la galleria degli altri utenti")).clicked() {
                 share::open(share::GALLERY_LIST);
             }
+            // ---- import a design from the gallery
+            ui.add_space(14.0);
+            ui.label(RichText::new(tr(l, "Import a design", "Importa un design")).strong().color(Color32::from_rgb(140, 190, 255)));
+            ui.separator();
+            ui.label(RichText::new(tr(
+                l,
+                "Paste the settings of a design from the gallery. Only the look is taken: files, folders, the weather city, the sensors and the system settings are never imported, and your own are left as they are. Nothing is saved until you press Save (Reload drops the changes).",
+                "Incolla le impostazioni di un design della galleria. Si prende solo l'aspetto: file, cartelle, città del meteo, sensori e impostazioni di sistema non vengono mai importati, e le tue restano come sono. Non viene salvato niente finché non premi Salva (Ricarica scarta le modifiche).",
+            )).weak().small());
+            ui.add(
+                egui::TextEdit::multiline(&mut self.import_text)
+                    .font(egui::TextStyle::Monospace)
+                    .hint_text("clock_format = 12h\nlayout = deck, cards")
+                    .desired_width(f32::INFINITY)
+                    .desired_rows(5),
+            );
+            ui.horizontal(|ui| {
+                if ui.add_enabled(!self.import_text.trim().is_empty(), egui::Button::new(tr(l, "Import", "Importa"))).clicked() {
+                    let imp = share::parse_import(&self.import_text, &self.fields);
+                    for (k, v) in &imp.apply {
+                        self.ed.bufs.remove(k);
+                        self.ed.set(k, v);
+                    }
+                    let mut msg = format!("{} {}.", imp.apply.len(), tr(l, "settings imported", "impostazioni importate"));
+                    if !imp.skipped.is_empty() {
+                        let list: Vec<String> = imp.skipped.iter().map(|(k, why)| format!("{k} ({why})")).collect();
+                        msg.push_str(&format!(" {}: {}.", tr(l, "Left out", "Non importate"), list.join(", ")));
+                    }
+                    self.import_msg = Some((msg, imp.apply.is_empty()));
+                    if !imp.apply.is_empty() {
+                        self.import_text.clear();
+                    }
+                }
+                if ui.button(tr(l, "Clear", "Svuota")).clicked() {
+                    self.import_text.clear();
+                    self.import_msg = None;
+                }
+            });
+            if let Some((m, err)) = &self.import_msg {
+                ui.colored_label(if *err { Color32::from_rgb(255, 190, 90) } else { Color32::from_rgb(120, 220, 140) }, m);
+            }
         });
     }
 
     fn form(&mut self, ui: &mut egui::Ui) {
         let l = self.lang;
+        if !self.query.trim().is_empty() {
+            self.search_form(ui);
+            return;
+        }
+        if self.only_changed {
+            self.changed_form(ui);
+            return;
+        }
         if self.section == "share" {
             self.share_form(ui);
             return;
@@ -1850,6 +2043,23 @@ impl eframe::App for App {
                 }
             });
         });
+        if let Some(list) = self.restart_notice.clone() {
+            egui::TopBottomPanel::bottom("restart").show(ctx, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.colored_label(
+                        Color32::from_rgb(255, 190, 90),
+                        format!(
+                            "{} {}",
+                            tr(self.lang, "Saved. These settings apply only after trofeo_lcd is restarted:", "Salvato. Queste impostazioni valgono solo dopo il riavvio di trofeo_lcd:"),
+                            list.join(", ")
+                        ),
+                    );
+                    if ui.small_button("OK").clicked() {
+                        self.restart_notice = None;
+                    }
+                });
+            });
+        }
         let portrait = self.preview.tex.as_ref().is_some_and(|t| t.size_vec2().y > t.size_vec2().x);
         if portrait {
             egui::SidePanel::right("preview").resizable(true).default_width(300.0).show(ctx, |ui| self.preview_panel(ui, true));
@@ -1892,11 +2102,14 @@ fn main() -> eframe::Result<()> {
     let mut path: Option<PathBuf> = None;
     let (mut lang, mut section, mut shot): (Option<Lang>, _, _) = (None, None, None);
     let mut size = [1280.0f32, 860.0];
+    let (mut query, mut changed): (Option<String>, bool) = (None, false);
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--lang" => lang = Some(if it.next().is_some_and(|v| v.starts_with("en")) { Lang::En } else { Lang::It }),
             "--section" => section = it.next().cloned(),
+            "--query" => query = it.next().cloned(),
+            "--changed" => changed = true,
             "--screenshot" => shot = it.next().map(PathBuf::from),
             "--size" => {
                 if let Some((w, h)) = it.next().and_then(|v| v.split_once('x')) {
@@ -1926,7 +2139,11 @@ fn main() -> eframe::Result<()> {
             style.spacing.item_spacing = egui::vec2(8.0, 5.0);
             style.spacing.slider_width = 200.0;
             cc.egui_ctx.set_style(style);
-            Ok(Box::new(App::new(path.clone(), lang, section.clone(), shot.clone())))
+            let mut app = App::new(path.clone(), lang, section.clone(), shot.clone());
+            // developer options, for screenshots of the window
+            app.query = query.clone().unwrap_or_default();
+            app.only_changed = changed;
+            Ok(Box::new(app))
         }),
     )
 }

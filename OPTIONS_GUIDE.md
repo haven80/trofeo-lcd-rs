@@ -18,6 +18,11 @@ the same file for you.
   display. Choose *Nothing playing* / *Music playing (spectrum)* / *Music card* to see the other
   states, *Animate* to see the movement, and the layout selector to see each screen
   of a rotation.
+- **Search.** The box at the top of the list finds a setting by its label (English or Italian), its key (`clock_format`) or its hint: every word you type must match. The results come from all the sections, grouped under the name of their section, and can be changed right there; *go to the section* opens the section they belong to. The X next to the box clears the search.
+- **Settings I changed** (under the search box) lists only the settings that are written in the file, from all sections, each with its `x` to put it back to the default.
+- **Categories.** The sections are gathered by theme: *Screen and sensors*, *Look*, *Screens*, *Music and games*, *Online*, *System* and *Share*. The group that holds the section you are in is open; the others are closed until you click them.
+- **Restart notice.** After saving, if one of the settings you changed needs a restart of `trofeo_lcd`, a notice at the bottom lists them; press OK to dismiss it. The others apply by themselves within a second.
+- **Import a design.** On the *Share your design* page, paste the settings of a design from the gallery and press *Import*: only the look is taken (see [Share your design](#share-your-design)), the values that are not valid and the settings that are not part of the look are listed and left out, and nothing is saved until you press Save.
 - **Sections** on the left cover everything in this guide. An asterisk marks the settings
   that need a restart of `trofeo_lcd`; a number shows how many settings of that section
   you changed. A setting you leave at its default is not written to the file; the small
@@ -1489,6 +1494,8 @@ The settings editor has a page of its own, **Share your design** (last in the li
 2. **Look at the picture.** It is public once posted: the title of the song playing, the name of a game, the city of the weather or other names may be on it.
 3. **Copy the settings** copies the settings of the look that you set (screens, colors, fonts, tiles, music design...). Files, folders, the weather city, the sensors and the system settings are never included.
 4. **Open the GitHub page**: the gallery form of the project. Drag the picture file into the box for it, paste the settings, and send. You need a GitHub account; the program does not send anything by itself and keeps no token.
+
+**Import a design** goes the other way: paste the settings of a gallery post and press *Import*; the settings of the look are applied to your file (not saved until you press Save), the others are listed and left out.
 
 The gallery is the list of issues with the label `gallery`: <https://github.com/haven80/trofeo-lcd-rs/issues?q=is%3Aissue+label%3Agallery>. Behind the button, the editor writes a small file `trofeo_share.request` next to the configuration file and the program, which looks for it twice a second, saves the picture and removes it.
 
