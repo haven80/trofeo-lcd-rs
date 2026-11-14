@@ -22,6 +22,11 @@ what this fork adds on top of the original.
 
 ## What's new
 
+**2.19.0 — themes, night mode and alerts.** `theme = ocean` gives a whole look in one line (eight
+themes, your own settings always win); `night_mode` dims the screen between two times; `alert_cpu_temp`,
+`alert_ram` and friends show a pulsing red border and the value when a reading stays over its limit.
+All three are **off by default** and cost nothing while off.
+
 **2.18.1 — the documentation is reorganised.** This README is now a short introduction; the rest is in the [docs](./docs/README.md) folder.
 
 **2.18.0 — a clearer settings editor.** A search box finds any setting by its name, its key or

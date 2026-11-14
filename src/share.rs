@@ -66,7 +66,8 @@ pub fn shareable(f: &Field) -> bool {
     if matches!(f.kind, Kind::Path | Kind::Folder) {
         return false;
     }
-    if f.key.contains("path") || f.key.contains("folder") || f.key.contains("city") || f.key.contains("url") {
+    // ("opacity" contains "city": the weather city is the private one.)
+    if f.key.contains("path") || f.key.contains("folder") || f.key.contains("url") || f.key.ends_with("_city") || f.key.contains("_city_") {
         return false;
     }
     LOOK_SECTIONS.contains(&f.section) || f.key == "orientation"

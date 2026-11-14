@@ -32,6 +32,8 @@ On Linux it needs `pkg-config` and the PulseAudio headers. Windows builds are ma
 - `src/conf_edit.rs` — line-by-line editing of `trofeo.conf` that keeps comments and untouched lines.
 - `src/hid2.rs` — the HID family (Trofeo Vision 6.86): handshake and frames.
 - `src/fade.rs` — the fade between screens.
+- `src/themes.rs` — the themes (defaults for the look, applied when the file is read).
+- `src/alerts.rs` — threshold alerts: the rules, the delay and hysteresis, the border and bar.
 - `src/share.rs` — "Share your design": the request file, the settings of the look, the gallery page.
 - `src/tray.rs` — the tray icon (Windows).
 - `src/layouts.rs`, `src/tiles/` — the screens (tiles, deck/cards/orbit/console, gaming, music, Steam).

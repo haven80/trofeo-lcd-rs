@@ -787,6 +787,75 @@ status_position = bottom-left
 Software dimming — the LY protocol has no brightness command, so the image is
 darkened before being sent.
 
+### Night mode
+
+| Key | CLI | Values | Default |
+|---|---|---|---|
+| `night_mode` | `--night-mode` | `true` / `false` | `false` |
+| `night_start` | `--night-start` | `HH:MM` | `23:00` |
+| `night_end` | `--night-end` | `HH:MM` | `07:00` |
+| `night_brightness` | `--night-brightness` | `0`-`100` | `20` |
+
+Between `night_start` and `night_end` the picture is dimmed to `night_brightness` instead of
+`brightness` (never brighter than `brightness`). The night may cross midnight (`23:00` to `07:00`),
+or be inside a day (`09:00` to `17:00`); equal times mean "never". The time is the PC's local time.
+Off by default, and when it is off nothing is checked. It applies live when the file is saved.
+
+```ini
+night_mode = true
+night_start = 23:00
+night_end = 07:00
+night_brightness = 15
+```
+
+## Alerts
+
+| Key | CLI | Values | Default |
+|---|---|---|---|
+| `alert_cpu_temp` | `--alert-cpu-temp` | `0`-`150` (°C, `0` = off) | `0` |
+| `alert_gpu_temp` | `--alert-gpu-temp` | `0`-`150` (°C, `0` = off) | `0` |
+| `alert_cpu_load` | `--alert-cpu-load` | `0`-`100` (%, `0` = off) | `0` |
+| `alert_gpu_load` | `--alert-gpu-load` | `0`-`100` (%, `0` = off) | `0` |
+| `alert_ram` | `--alert-ram` | `0`-`100` (% of memory used, `0` = off) | `0` |
+| `alert_delay` | `--alert-delay` | `0`-`600` (seconds) | `3` |
+| `alert_color` | `--alert-color` | a color | red |
+
+When a reading stays **above its limit for `alert_delay` seconds**, the whole screen gets a pulsing
+border and a bar at the top with the reading (`CPU TEMP 91C`), drawn on top of every screen. A short
+spike never triggers it. The alert clears when the reading falls 2 degrees (or percent) below the
+limit, so it does not flicker around the limit. A reading that is not available on your PC (for example
+a temperature the sensor cannot read) never raises an alert. If several limits are exceeded, the first
+one in the table above is shown.
+
+Every limit is `0` (off) by default, and with all limits off nothing is read or drawn. Games use the
+GPU fully, so `alert_gpu_load` is better left off unless you use the PC for something else. It applies
+live when the file is saved.
+
+```ini
+alert_cpu_temp = 90
+alert_ram = 95
+alert_delay = 5
+alert_color = 255,160,0
+```
+
+## Themes
+
+| Key | CLI | Values | Default |
+|---|---|---|---|
+| `theme` | `--theme` | `none`, `midnight`, `ocean`, `sunset`, `forest`, `ember`, `neon`, `matrix`, `mono` | `none` |
+
+A theme gives a whole look in one line: an animated background, the text, clock and spectrum colors,
+the dashboard colors and the panel opacity. A theme only supplies **defaults**: every setting you write
+in the file (or on the command line) wins over it, so a theme is a starting point to adjust — for
+example `theme = ocean` and `clock_color = #FFD000` keeps everything from *ocean* except the clock.
+A theme never touches files, folders or online settings. `none` (the default) changes nothing.
+It applies live when the file is saved.
+
+```ini
+theme = ocean
+clock_color = #FFD000
+```
+
 ## DeepCool integration *(restart required)*
 
 | Key | CLI | Values | Default | In `trofeo.conf`? |

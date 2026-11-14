@@ -145,6 +145,21 @@ language = en
 # 0-100 (100 = unchanged). The panel has no known brightness command:
 # the image is darkened in software before being sent.
 # brightness = 100
+# Night mode: dimmer between two times (the night may cross midnight). Off by default.
+# night_mode = false
+# night_start = 23:00
+# night_end = 07:00
+# night_brightness = 20      # 0-100; never brighter than "brightness"
+
+# Alerts: a pulsing border and a bar with the value when a reading stays over its limit.
+# Every limit is 0 = off by default.
+# alert_cpu_temp = 90        # degrees C
+# alert_gpu_temp = 85
+# alert_cpu_load = 0         # percent
+# alert_gpu_load = 0         # games use the GPU fully: better left off
+# alert_ram = 95             # percent of memory used
+# alert_delay = 3            # seconds over the limit before it shows (a short spike is ignored)
+# alert_color = 255,40,40
 
 # --- DeepCool ----------------------------------------------------------------
 # false = the program does NOT touch the case's DeepCool display (stays off).
@@ -536,6 +551,10 @@ language = en
 # mem_unit = gb
 # Time format of every clock (big clock, status line, layouts, tiles, deck, gaming, music...):
 #   24h = 14:05 (default)    12h = 2:05 PM
+# Theme: a whole look in one line (background, colours, panel opacity). It only gives defaults:
+# anything you set yourself in this file wins over the theme.
+#   none | midnight | ocean | sunset | forest | ember | neon | matrix | mono
+# theme = none
 # clock_format = 24h
 # clock_ampm = true           # 12h only: the AM / PM after the time
 # Fade between screens: when the screen changes (the layout rotation moves on, the music

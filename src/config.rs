@@ -74,7 +74,24 @@ impl ConfigFile {
             let v = v.trim_matches(|c| c == '"' || c == '\'');
             values.insert(k.trim().to_ascii_lowercase(), v.to_string());
         }
-        Ok(Self { values, path: None })
+        let mut file = Self { values, path: None };
+        file.apply_theme()?;
+        Ok(file)
+    }
+
+    /// `theme = name`: the settings of the theme fill in what the file does not say itself.
+    /// (`none` or no `theme` = nothing.) Called again after the command-line overrides.
+    pub fn apply_theme(&mut self) -> Result<(), String> {
+        let Some(name) = self.values.get("theme").cloned() else { return Ok(()) };
+        let name = name.trim().to_ascii_lowercase();
+        if name.is_empty() || name == "none" {
+            return Ok(());
+        }
+        let theme = crate::themes::find(&name).ok_or_else(|| format!("theme: '{name}' not valid (none | {})", crate::themes::names().join(" | ")))?;
+        for (k, v) in theme.settings {
+            self.values.entry(k.to_string()).or_insert_with(|| v.to_string());
+        }
+        Ok(())
     }
 
     /// Read from `explicit` (error if missing) or search the standard

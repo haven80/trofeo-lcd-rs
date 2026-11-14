@@ -270,6 +270,14 @@ milliseconds), and `effect_fps` (default 8) keeps the number of frames low — s
 ### Brightness, DeepCool, FPS
 
 - `brightness = 0-100`: software dimming (no LY brightness command is known).
+- Night mode: `night_mode = true`, `night_start = 23:00`, `night_end = 07:00`, `night_brightness = 20`
+  dim the picture between two times (the night may cross midnight). Off by default.
+  See [Night mode](../OPTIONS_GUIDE.md#night-mode).
+- Alerts: `alert_cpu_temp = 90`, `alert_gpu_temp`, `alert_cpu_load`, `alert_gpu_load`, `alert_ram = 95`
+  (`0` = off, the default), `alert_delay = 3`, `alert_color` — a pulsing border and the value when a
+  reading stays over its limit. See [Alerts](../OPTIONS_GUIDE.md#alerts).
+- Themes: `theme = ocean` gives a whole look in one line (your own settings win).
+  See [Themes](../OPTIONS_GUIDE.md#themes).
 - `deepcool = false` (or `--no-deepcool`): never touch the DeepCool display.
 - The **CH170 / CH270 / CH690 DIGITAL** case display can show the CPU frequency, the fan speed in RPM
   (from [LibreHardwareMonitor](#fans-and-sensors-librehardwaremonitor)) or both in turn:

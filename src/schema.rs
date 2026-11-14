@@ -130,6 +130,7 @@ pub const SECTIONS: &[(&str, &str, &str)] = &[
     ("share", "Share your design", "Condividi il tuo design"),
 ];
 
+pub const THEME_NAMES: &[&str] = &["none", "midnight", "ocean", "sunset", "forest", "ember", "neon", "matrix", "mono"];
 pub const POSITIONS: &[&str] =
     &["top-left", "top", "top-right", "center-left", "center", "center-right", "bottom-left", "bottom", "bottom-right"];
 pub const LANGUAGES: &[&str] = &["en", "it", "de", "es", "fr", "pt"];
@@ -372,6 +373,40 @@ pub fn fields() -> Vec<Field> {
             "Solo gli schermi piccoli 320x240 della famiglia 0416:5302 (immagini RGB565; non verificati su hardware): l'ordine dei byte dei pixel. Usa il test dello schermo per trovarlo",
         ));
     add(Field::new("brightness", "screen", "Brightness", "Luminosità", int(0, 100)).def("100"));
+    add(Field::new("night_mode", "screen", "Dim the screen at night", "Abbassa la luminosità di notte", Bool)
+        .def("false")
+        .group("night")
+        .help("Between the two times below the picture is dimmed to the night brightness", "Tra i due orari qui sotto l'immagine viene abbassata alla luminosità notturna"));
+    add(Field::new("night_start", "screen", "Night starts at (HH:MM)", "La notte inizia alle (HH:MM)", Text)
+        .def("23:00")
+        .group("night")
+        .when("night_mode", &["true"]));
+    add(Field::new("night_end", "screen", "Night ends at (HH:MM)", "La notte finisce alle (HH:MM)", Text)
+        .def("07:00")
+        .group("night")
+        .when("night_mode", &["true"])
+        .help("The night may cross midnight (23:00 to 07:00)", "La notte può passare la mezzanotte (dalle 23:00 alle 07:00)"));
+    add(Field::new("night_brightness", "screen", "Night brightness", "Luminosità notturna", int(0, 100))
+        .def("20")
+        .group("night")
+        .when("night_mode", &["true"])
+        .help("Never brighter than the normal brightness", "Mai più alta della luminosità normale"));
+    for (k, en, it, max, hen, hit) in [
+        ("alert_cpu_temp", "Alert: CPU temperature above (°C)", "Avviso: temperatura CPU sopra (°C)", 150, "0 = off", "0 = spento"),
+        ("alert_gpu_temp", "Alert: GPU temperature above (°C)", "Avviso: temperatura GPU sopra (°C)", 150, "0 = off", "0 = spento"),
+        ("alert_cpu_load", "Alert: CPU load above (%)", "Avviso: carico CPU sopra (%)", 100, "0 = off", "0 = spento"),
+        ("alert_gpu_load", "Alert: GPU load above (%)", "Avviso: carico GPU sopra (%)", 100, "0 = off. Games use the GPU fully, so this suits other uses", "0 = spento. I giochi usano la GPU al massimo, quindi serve per altri usi"),
+        ("alert_ram", "Alert: memory used above (%)", "Avviso: memoria usata sopra (%)", 100, "0 = off", "0 = spento"),
+    ] {
+        add(Field::new(k, "screen", en, it, int(0, max)).def("0").group("alert").help(hen, hit));
+    }
+    add(Field::new("alert_delay", "screen", "Alert: seconds above the limit before it shows", "Avviso: secondi sopra il limite prima di mostrarlo", int(0, 600))
+        .def("3")
+        .group("alert")
+        .help("A short spike does not trigger it", "Un picco breve non lo fa scattare"));
+    add(Field::new("alert_color", "screen", "Alert color", "Colore dell'avviso", Color)
+        .group("alert")
+        .help("Default red", "Predefinito rosso"));
     add(Field::new("language", "screen", "Language of the display", "Lingua del display", Choice(LANGUAGES)).def("en"));
     for (k, en, it) in [
         ("margin", "All sides", "Tutti i lati"),
@@ -789,6 +824,12 @@ pub fn fields() -> Vec<Field> {
         .def("auto")
         .when("font", &["smooth"])
         .help("auto = bolder for small text, lighter for big text", "auto = più marcato per il testo piccolo, più leggero per quello grande"));
+    add(Field::new("theme", "look", "Theme", "Tema", Choice(THEME_NAMES))
+        .def("none")
+        .help(
+            "A whole look in one line (background, colors, panel opacity). It only gives defaults: whatever you set yourself wins over the theme",
+            "Un aspetto completo in una riga (sfondo, colori, opacità dei pannelli). Dà solo valori predefiniti: quello che imposti tu ha la precedenza sul tema",
+        ));
     add(Field::new("text_color", "look", "Info text", "Testo informativo", Color));
     add(Field::new("clock_color", "look", "Big clock", "Orologio grande", Color));
     add(Field::new("text_backdrop", "look", "Panel behind the text", "Pannello dietro il testo", Bool).def("false"));
@@ -1044,6 +1085,8 @@ pub fn group_title(group: &str) -> (&str, &str) {
         "palette" => ("Colors from the presets", "Colori dai preset"),
         "look" => ("Look", "Aspetto"),
         "update" => ("New version notice", "Avviso di nuova versione"),
+        "night" => ("Night mode", "Modalità notte"),
+        "alert" => ("Alerts", "Avvisi"),
         "gaming" => ("Gaming screen", "Schermata gaming"),
         "switch" => ("When to switch", "Quando passare"),
         "design" => ("Design and readings", "Grafica e letture"),

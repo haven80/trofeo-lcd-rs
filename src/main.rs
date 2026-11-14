@@ -230,6 +230,8 @@ struct Config {
     ffmpeg: Option<String>,
     /// Brightness 0-100.
     brightness: u8,
+    /// Night mode: a lower brightness between `night_start` and `night_end`.
+    night: Night,
     /// FPS via ETW (admin), for any GPU.
     fps_monitor: bool,
     /// Explicit config file (`--config`), for hot reloading.
@@ -741,6 +743,7 @@ fn parse_args() -> anyhow::Result<Config> {
     for (k, v) in &overrides {
         file.set(k, v);
     }
+    file.apply_theme().map_err(|e| anyhow::anyhow!(e))?;
     if !color_set {
         if let Some(v) = file.get("color") {
             color_mode = parse_color(v)?;
@@ -750,6 +753,7 @@ fn parse_args() -> anyhow::Result<Config> {
     if brightness > 100 {
         anyhow::bail!("brightness must be between 0 and 100");
     }
+    let night = parse_night(&file)?;
     // Peak amplitude (0.0-1.0) below which audio is considered "silent" (EQ
     // bars stay down, FPS drops to idle). Loopback capture reflects the
     // system/app volume, so a quiet listening level can dip under the
@@ -909,6 +913,7 @@ fn parse_args() -> anyhow::Result<Config> {
         background_color,
         ffmpeg,
         brightness: brightness as u8,
+        night,
         fps_monitor,
         bg_layout,
         ui,
@@ -1026,7 +1031,7 @@ fn item_key(key: &str) -> Option<(usize, &str)> {
 }
 
 fn is_override_key(key: &str) -> bool {
-    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "fps_item" || key == "clock_backdrop" || key == "clock_format" || key == "clock_ampm" || key == "screen_fade_ms" || key == "screen_fade_style" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key == "console" || key.starts_with("console_") || key.starts_with("gaming_") || key.starts_with("steam_") || key.starts_with("hid_") || key == "deepcool_source" || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
+    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "fps_item" || key == "clock_backdrop" || key == "clock_format" || key == "clock_ampm" || key == "theme" || key.starts_with("night_") || key.starts_with("alert_") || key == "screen_fade_ms" || key == "screen_fade_style" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key == "console" || key.starts_with("console_") || key.starts_with("gaming_") || key.starts_with("steam_") || key.starts_with("hid_") || key == "deepcool_source" || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
 }
 
 /// Style for a single item of the info block.
@@ -1254,6 +1259,7 @@ fn parse_ui_options(file: &ConfigFile) -> anyhow::Result<UiOptions> {
             None => fade::Style::Cross,
             Some(v) => fade::Style::parse(v).ok_or_else(|| anyhow::anyhow!("screen_fade_style: '{}' not valid (cross | black)", v.trim()))?,
         },
+        alerts: parse_alerts(file)?,
         clock_time_size: parse_size_opt(file, "clock_time_size", 20)?,
         clock_date_size: parse_size_opt(file, "clock_date_size", 6)?,
         show,
@@ -2325,6 +2331,8 @@ fn main() -> anyhow::Result<()> {
     let mut layouts_started = Instant::now();
     let mut layout_index = usize::MAX;
     let mut screen_fade = fade::Fade::new();
+    let mut alert_state = trofeo_lcd::alerts::State::new();
+    let alert_epoch = Instant::now();
     let share_dir: Option<std::path::PathBuf> =
         ConfigFile::find_path(config.config_explicit.as_deref()).and_then(|p| p.parent().map(std::path::Path::to_path_buf));
     let mut last_share_check = Instant::now();
@@ -2374,6 +2382,11 @@ fn main() -> anyhow::Result<()> {
 
     loop {
         let frame_start = Instant::now();
+        // Night mode (off by default): dimmer between night_start and night_end.
+        if config.night.on {
+            let now = Local::now();
+            hs.brightness = config.night.brightness_at(now.hour() * 60 + now.minute(), config.brightness);
+        }
 
         // Hot reload: if trofeo.conf changes, reapply the settings without restarting.
         if last_config_check.elapsed() >= Duration::from_secs(1) {
@@ -2949,6 +2962,27 @@ fn main() -> anyhow::Result<()> {
         // Fade between screens: blends this picture with the previous one (not the banner).
         screen_fade.finish(fb.as_bytes_mut(), fade_ms, Instant::now());
 
+        // Threshold alerts (every limit is 0 = off by default: then nothing runs).
+        {
+            let rules = opts().alerts;
+            if rules.any() {
+                let used = sys.used_memory() as f32;
+                let total = sys.total_memory().max(1) as f32;
+                let reading = trofeo_lcd::alerts::Reading {
+                    cpu_temp: latest_cpu_temp,
+                    gpu_temp: latest_gpu_data.temp_edge_c.map(|t| t as f32),
+                    cpu_load: Some(sys.global_cpu_info().cpu_usage()),
+                    gpu_load: latest_gpu_percent,
+                    ram: Some(used * 100.0 / total),
+                };
+                if let Some(a) = alert_state.update(&rules, Instant::now(), &reading) {
+                    trofeo_lcd::alerts::draw(&mut fb, &a, rules.color, alert_epoch.elapsed().as_millis());
+                }
+            } else {
+                alert_state.update(&rules, Instant::now(), &Default::default());
+            }
+        }
+
         // The "new version available" banner, on top of everything, for a few seconds.
         if let Some(v) = update_monitor.take_new() {
             update_notice = Some((v, Instant::now()));
@@ -3417,6 +3451,8 @@ struct UiOptions {
     /// Maximum width (% of the canvas) of the track line in items mode.
     nowplaying_width: u32,
     net_unit: NetUnit,
+    /// Threshold alerts (all off by default).
+    alerts: trofeo_lcd::alerts::Rules,
     mem_gb: bool,
     /// Show the "NOW PLAYING:" label before the title (items mode).
     nowplaying_label: bool,
@@ -3525,6 +3561,7 @@ impl Default for UiOptions {
             clock_ampm: true,
             screen_fade_ms: 0,
             screen_fade_style: fade::Style::Cross,
+            alerts: Default::default(),
             clock_time_size: 20,
             clock_date_size: 6,
             weather_fahrenheit: false,
@@ -3626,6 +3663,94 @@ fn default_areas(fb: &Framebuffer) -> ((u32, u32, u32, u32), Option<(u32, u32, u
     let main = (c.0, c.1, c.2, c.3 - gh - GAP);
     let game = (c.0 + INSET, c.1 + c.3 - gh, c.2.saturating_sub(2 * INSET), gh);
     (main, Some(game))
+}
+
+/// Night mode: from `start` to `end` (minutes since midnight; the window may cross midnight)
+/// the picture is dimmed to `brightness` percent.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Night {
+    on: bool,
+    start: u32,
+    end: u32,
+    brightness: u8,
+}
+
+impl Default for Night {
+    fn default() -> Night {
+        Night { on: false, start: 23 * 60, end: 7 * 60, brightness: 20 }
+    }
+}
+
+impl Night {
+    /// Is `minute` (since midnight) inside the night window? Equal start and end = never.
+    fn active_at(&self, minute: u32) -> bool {
+        if !self.on || self.start == self.end {
+            return false;
+        }
+        if self.start < self.end {
+            (self.start..self.end).contains(&minute)
+        } else {
+            minute >= self.start || minute < self.end
+        }
+    }
+
+    /// The brightness to use at `minute`, given the normal one.
+    fn brightness_at(&self, minute: u32, normal: u8) -> u8 {
+        if self.active_at(minute) { self.brightness.min(normal) } else { normal }
+    }
+}
+
+/// `HH:MM` (also `H:MM`) as minutes since midnight.
+fn parse_hhmm(s: &str) -> Option<u32> {
+    let (h, m) = s.trim().split_once(':')?;
+    let (h, m): (u32, u32) = (h.trim().parse().ok()?, m.trim().parse().ok()?);
+    (h < 24 && m < 60).then_some(h * 60 + m)
+}
+
+fn parse_alerts(file: &ConfigFile) -> anyhow::Result<trofeo_lcd::alerts::Rules> {
+    let mut r = trofeo_lcd::alerts::Rules::default();
+    let mut limit = |key: &str, max: u32| -> anyhow::Result<u32> {
+        match file.get_u32(key).map_err(|e| anyhow::anyhow!(e))? {
+            None => Ok(0),
+            Some(v) if v <= max => Ok(v),
+            Some(v) => anyhow::bail!("{key}: must be 0..{max} (got {v}); 0 = off"),
+        }
+    };
+    r.cpu_temp = limit("alert_cpu_temp", 150)?;
+    r.gpu_temp = limit("alert_gpu_temp", 150)?;
+    r.cpu_load = limit("alert_cpu_load", 100)?;
+    r.gpu_load = limit("alert_gpu_load", 100)?;
+    r.ram = limit("alert_ram", 100)?;
+    if let Some(d) = file.get_u32("alert_delay").map_err(|e| anyhow::anyhow!(e))? {
+        if d > trofeo_lcd::alerts::MAX_DELAY_SECS {
+            anyhow::bail!("alert_delay: must be 0..{} seconds (got {d})", trofeo_lcd::alerts::MAX_DELAY_SECS);
+        }
+        r.delay_secs = d;
+    }
+    if let Some(c) = parse_color_opt(file, "alert_color")? {
+        r.color = c;
+    }
+    Ok(r)
+}
+
+fn parse_night(file: &ConfigFile) -> anyhow::Result<Night> {
+    let d = Night::default();
+    let time = |key: &str, def: u32| -> anyhow::Result<u32> {
+        match file.get(key) {
+            None => Ok(def),
+            Some(v) => parse_hhmm(v).ok_or_else(|| anyhow::anyhow!("{key}: '{v}' not valid (HH:MM, for example 23:00)")),
+        }
+    };
+    let brightness = file.get_u32("night_brightness").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(d.brightness as u32);
+    if brightness > 100 {
+        anyhow::bail!("night_brightness must be between 0 and 100");
+    }
+    Ok(Night {
+        on: file.get_bool("night_mode").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(false),
+        start: time("night_start", d.start)?,
+        end: time("night_end", d.end)?,
+        brightness: brightness as u8,
+    })
 }
 
 fn opts() -> UiOptions {
@@ -5012,6 +5137,38 @@ mod layout_tests {
         assert!(!d.clock_12h && d.clock_ampm);
         assert!(parse_ui_options(&ConfigFile::parse("clock_format = 13h\n").unwrap()).is_err());
         assert!(is_override_key("clock_format") && is_override_key("clock_ampm"));
+    }
+
+    #[test]
+    fn alert_options_are_parsed_checked_and_off_by_default() {
+        let a = |t: &str| parse_alerts(&ConfigFile::parse(t).unwrap());
+        assert!(!a("").unwrap().any());
+        let r = a("alert_cpu_temp = 90\nalert_ram = 95\nalert_delay = 5\nalert_color = 255,160,0\n").unwrap();
+        assert_eq!((r.cpu_temp, r.ram, r.delay_secs, r.color), (90, 95, 5, (255, 160, 0)));
+        for bad in ["alert_cpu_temp = 151\n", "alert_ram = 101\n", "alert_delay = 601\n", "alert_gpu_load = x\n", "alert_color = nope\n"] {
+            assert!(a(bad).is_err(), "{bad}");
+        }
+        assert!(is_override_key("alert_cpu_temp") && is_override_key("alert_delay"));
+    }
+
+    #[test]
+    fn night_mode_dims_between_two_times_also_across_midnight() {
+        let f = |t: &str| parse_night(&ConfigFile::parse(t).unwrap()).unwrap();
+        assert!(!f("").on, "off by default");
+        let n = f("night_mode = true\nnight_start = 22:30\nnight_end = 06:00\nnight_brightness = 15\n");
+        assert!(n.active_at(23 * 60) && n.active_at(0) && n.active_at(5 * 60 + 59));
+        assert!(!n.active_at(6 * 60) && !n.active_at(12 * 60) && !n.active_at(22 * 60 + 29));
+        assert_eq!(n.brightness_at(23 * 60, 100), 15);
+        assert_eq!(n.brightness_at(12 * 60, 100), 100);
+        assert_eq!(n.brightness_at(23 * 60, 10), 10, "never brighter than the normal one");
+        let day = f("night_mode = true\nnight_start = 09:00\nnight_end = 17:00\n");
+        assert!(day.active_at(12 * 60) && !day.active_at(8 * 60) && !day.active_at(17 * 60));
+        assert!(!f("night_mode = true\nnight_start = 08:00\nnight_end = 08:00\n").active_at(8 * 60), "equal times = never");
+        assert!(!f("night_start = 23:00\n").active_at(23 * 60 + 30), "needs night_mode");
+        for bad in ["night_start = 25:00\n", "night_end = 7\n", "night_start = ab:cd\n", "night_brightness = 101\n"] {
+            assert!(parse_night(&ConfigFile::parse(bad).unwrap()).is_err(), "{bad}");
+        }
+        assert_eq!(parse_hhmm(" 7:05 "), Some(7 * 60 + 5));
     }
 
     #[test]

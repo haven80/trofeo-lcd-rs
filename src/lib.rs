@@ -56,6 +56,8 @@ pub mod hotkey;
 pub mod hid2;
 pub mod png_save;
 pub mod share;
+pub mod themes;
+pub mod alerts;
 
 pub const VENDOR_ID: u16 = 0x0416;
 /// Trofeo Vision 9.16 LCD.

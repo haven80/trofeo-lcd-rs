@@ -2833,7 +2833,7 @@ dependencies = [
 
 [[package]]
 name = "trofeo_lcd"
-version = "2.18.1"
+version = "2.19.0"
 dependencies = [
  "anyhow",
  "chrono",
