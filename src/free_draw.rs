@@ -34,8 +34,20 @@ impl FreeScreen {
     }
 
     /// The layout `name`, read again when its file changed (looked at once a second).
-    fn layout(&mut self, name: &str) -> Result<Arc<Free>, String> {
-        let dir = free::dir().ok_or_else(|| "no layouts folder (no configuration file)".to_string())?;
+    fn layout(&mut self, name: &str, portrait: bool) -> Result<Arc<Free>, String> {
+        let dir = free::dir();
+        let file = dir.as_ref().map(|d| free::path_of(d, name));
+        // a built-in design, unless a file of yours has its name
+        if free::builtin(name).is_some() && !file.as_ref().is_some_and(|p| p.is_file()) {
+            let key = format!("\0{name}\0{portrait}");
+            if let Some(c) = self.files.get(&key) {
+                return c.layout.clone();
+            }
+            let layout = free::load_builtin_for(name, portrait).map(Arc::new);
+            self.files.insert(key, Cached { stamp: None, checked: Instant::now(), layout: layout.clone() });
+            return layout;
+        }
+        let dir = dir.ok_or_else(|| "no layouts folder (no configuration file)".to_string())?;
         let path = free::path_of(&dir, name);
         if let Some(c) = self.files.get(name) {
             if c.checked.elapsed() < Duration::from_secs(1) {
@@ -81,7 +93,7 @@ impl FreeScreen {
 
     /// Draw the layout `name` (the part of the screen `area`).
     pub fn draw(&mut self, fb: &mut Framebuffer, area: (u32, u32, u32, u32), name: &str, wd: &layouts::WidgetData, color_mode: ColorMode) {
-        let layout = match self.layout(name) {
+        let layout = match self.layout(name, area.3 > area.2) {
             Ok(l) => l,
             Err(e) => {
                 let scale = fit_scale(&e, 3, area.2.saturating_sub(20));

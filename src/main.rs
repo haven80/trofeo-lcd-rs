@@ -5538,8 +5538,11 @@ mod layout_tests {
     fn schema_names_match_the_program() {
         use trofeo_lcd::schema::*;
         // layouts
-        let names: Vec<&str> = layouts::LAYOUTS.iter().map(|l| l.name).collect();
+        let names: Vec<&str> = layouts::LAYOUTS.iter().map(|l| l.name).chain(trofeo_lcd::free::BUILTIN.iter().map(|b| b.0)).collect();
         assert_eq!(LAYOUT_NAMES.iter().map(|(n, _, _)| *n).collect::<Vec<_>>(), names);
+        for (n, en, it, _) in trofeo_lcd::free::BUILTIN {
+            assert!(LAYOUT_NAMES.iter().any(|l| l.0 == *n && l.1 == *en && l.2 == *it), "{n}");
+        }
         // tiles
         assert_eq!(TILE_KINDS.iter().map(|(n, _, _)| *n).collect::<Vec<_>>(), tiles::Kind::ALL.iter().map(|k| k.key()).collect::<Vec<_>>());
         // colors

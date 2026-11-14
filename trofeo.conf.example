@@ -271,6 +271,9 @@ language = en
 # A screen you designed yourself (the settings editor's Layout builder, or a text file
 # layouts/<name>.layout next to this file) is used by its name, like the others:
 # layout = default, my-screen
+# Five designs come with the program (no file needed; the layout builder can copy one to change):
+#   halo | gauges | terminal | horizon | ribbon
+# layout = halo
 # Rotation: several layouts separated by commas, changing every layout_interval seconds.
 # layout = cpu-gpu, temps, music
 # Each entry can set its OWN duration with "name:seconds", instead of sharing

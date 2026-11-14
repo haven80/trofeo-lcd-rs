@@ -208,6 +208,11 @@ pub const LAYOUT_NAMES: &[(&str, &str, &str)] = &[
     ("frame", "Digital picture frame (the folder is set in the Digital frame section)", "Cornice digitale (la cartella si sceglie nella sezione Cornice digitale)"),
     ("weather", "Weather, big", "Meteo, grande"),
     ("news", "News headlines, scrolling", "Notizie scorrevoli"),
+    ("halo", "Halo: two big rings (CPU, GPU), the clock in the middle, memory below", "Halo: due grandi anelli (CPU, GPU), orologio al centro, memoria sotto"),
+    ("gauges", "Gauges: four dials, load and temperature of CPU and GPU", "Quadranti: quattro indicatori, carico e temperatura di CPU e GPU"),
+    ("terminal", "Terminal: green-on-black readout, one line per device", "Terminale: lettura verde su nero, una riga per dispositivo"),
+    ("horizon", "Horizon: a huge clock and three thin lines of load", "Orizzonte: un orologio enorme e tre sottili linee di carico"),
+    ("ribbon", "Ribbon: clock, song and weather above a ribbon of readings", "Nastro: orologio, brano e meteo sopra un nastro di valori"),
 ];
 
 /// The tiles of `tiles = ...`: (name, English, Italian).

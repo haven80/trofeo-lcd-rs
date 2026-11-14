@@ -1,0 +1,15 @@
+# ribbon — the clock on the left, the song in the middle, the weather on the right, and a ribbon of readings.
+rect  x=1 y=4 w=98 h=62 color=#000000 opacity=34
+text  x=3 y=10 size=13 text="{time_short}"
+text  x=3 y=44 size=3 color=#9AA8B8 text="{date}"
+text  x=51 y=14 anchor=t size=3 color=#FFC845 text="NOW PLAYING"
+text  x=51 y=32 anchor=t w=40 size=8 text="{song}"
+text  x=97 y=10 anchor=tr size=13 text="{weather_temp}"
+text  x=97 y=44 anchor=tr size=3 color=#9AA8B8 text="{weather_city}"
+rect  x=1 y=70 w=98 h=26 color=#000000 opacity=55
+text  x=4 y=77 size=4 color=#00D4FF text="CPU {cpu}"
+text  x=21 y=77 size=4 color=#FF6BD6 text="GPU {gpu}"
+text  x=38 y=77 size=4 color=#FFC845 text="RAM {ram}"
+text  x=55 y=77 size=4 color=#B6FFA8 text="DN {net_down}"
+text  x=96 y=77 anchor=tr size=4 color=#E8EEF4 text="{cpu_temp} / {gpu_temp}"
+bar   x=4 y=90 w=92 h=3 value=cpu color=#00D4FF back=#22222C

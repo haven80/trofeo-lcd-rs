@@ -448,6 +448,45 @@ pub fn render(name: &str, f: &Free) -> String {
     s
 }
 
+/// The designs that come with the program (2.23.0): `(name, English, Italian, file text)`.
+/// `layout = halo` shows one without any file; a file of yours with the same name in the
+/// layouts folder takes its place, and the builder can copy one to start from.
+pub const BUILTIN: &[(&str, &str, &str, &str)] = &[
+    ("halo", "Halo: two big rings (CPU, GPU), the clock in the middle, memory below", "Halo: due grandi anelli (CPU, GPU), orologio al centro, memoria sotto", include_str!("free_builtin/halo.layout")),
+    ("gauges", "Gauges: four dials, load and temperature of CPU and GPU", "Quadranti: quattro indicatori, carico e temperatura di CPU e GPU", include_str!("free_builtin/gauges.layout")),
+    ("terminal", "Terminal: green-on-black readout, one line per device", "Terminale: lettura verde su nero, una riga per dispositivo", include_str!("free_builtin/terminal.layout")),
+    ("horizon", "Horizon: a huge clock and three thin lines of load", "Orizzonte: un orologio enorme e tre sottili linee di carico", include_str!("free_builtin/horizon.layout")),
+    ("ribbon", "Ribbon: clock, song and weather above a ribbon of readings", "Nastro: orologio, brano e meteo sopra un nastro di valori", include_str!("free_builtin/ribbon.layout")),
+];
+
+/// The same designs for a tall, narrow panel (a portrait screen), `(name, file text)`.
+pub const BUILTIN_PORTRAIT: &[(&str, &str)] = &[
+    ("halo", include_str!("free_builtin/halo.portrait.layout")),
+    ("gauges", include_str!("free_builtin/gauges.portrait.layout")),
+    ("terminal", include_str!("free_builtin/terminal.portrait.layout")),
+    ("horizon", include_str!("free_builtin/horizon.portrait.layout")),
+    ("ribbon", include_str!("free_builtin/ribbon.portrait.layout")),
+];
+
+/// The text of a built-in design.
+pub fn builtin(name: &str) -> Option<&'static str> {
+    let n = name.trim().to_ascii_lowercase();
+    BUILTIN.iter().find(|b| b.0 == n).map(|b| b.3)
+}
+
+/// A built-in design, read.
+pub fn load_builtin(name: &str) -> Result<Free, String> {
+    load_builtin_for(name, false)
+}
+
+/// A built-in design, read: the one for a portrait panel when `portrait`.
+pub fn load_builtin_for(name: &str, portrait: bool) -> Result<Free, String> {
+    let n = name.trim().to_ascii_lowercase();
+    let text = if portrait { BUILTIN_PORTRAIT.iter().find(|b| b.0 == n).map(|b| b.1) } else { None };
+    let text = text.or_else(|| builtin(&n)).ok_or_else(|| format!("'{name}' is not a built-in layout"))?;
+    parse(text).map_err(|e| format!("built-in layout '{name}': {e}"))
+}
+
 pub fn valid_name(name: &str) -> Result<(), &'static str> {
     let n = name.trim();
     if n.is_empty() || n.len() > 40 || !n.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_') {
@@ -596,5 +635,25 @@ mod tests {
         std::fs::write(path_of(&dir, "broken"), "text x=\n").unwrap();
         assert!(load(&dir, "broken").unwrap_err().contains("line 1"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn every_built_in_design_is_read_and_has_something_to_show() {
+        for (name, en, it, _) in BUILTIN {
+            valid_name(name).unwrap();
+            assert!(!en.is_empty() && !it.is_empty());
+            let f = load_builtin(name).unwrap_or_else(|e| panic!("{e}"));
+            assert!(f.elements.len() >= 8, "{name}");
+            // what is written out is read back the same
+            assert_eq!(parse(&render(name, &f)).unwrap(), f, "{name}");
+        }
+        for (name, _, _, _) in BUILTIN {
+            let f = load_builtin_for(name, true).unwrap_or_else(|e| panic!("{e}"));
+            assert!(f.elements.len() >= 8, "{name} (portrait)");
+            assert_ne!(f, load_builtin(name).unwrap(), "{name}");
+        }
+        assert_eq!(BUILTIN_PORTRAIT.len(), BUILTIN.len());
+        assert!(builtin("HALO").is_some());
+        assert!(builtin("nothing").is_none());
     }
 }

@@ -1,0 +1,18 @@
+# terminal (portrait) — green-on-black readout, a block per device.
+rect  x=2 y=1 w=96 h=98 color=#000000 opacity=62
+text  x=5 y=3 size=4 color=#39FF14 text="TROFEO> {time}"
+text  x=5 y=10 size=6 color=#39FF14 text="CPU"
+text  x=95 y=11 anchor=tr size=3 color=#B6FFA8 text="{cpu}  {cpu_temp}  {cpu_freq}"
+bar   x=5 y=15 w=90 h=2.5 value=cpu color=#39FF14 back=#0F2A10 hot=90 hot_color=#FF4D4D
+text  x=5 y=26 size=6 color=#39FF14 text="GPU"
+text  x=95 y=27 anchor=tr size=3 color=#B6FFA8 text="{gpu}  {gpu_temp}  {gpu_power}"
+bar   x=5 y=31 w=90 h=2.5 value=gpu color=#39FF14 back=#0F2A10 hot=95 hot_color=#FF4D4D
+text  x=5 y=42 size=6 color=#39FF14 text="RAM"
+text  x=95 y=43 anchor=tr size=3 color=#B6FFA8 text="{ram}  {ram_used}"
+bar   x=5 y=47 w=90 h=2.5 value=ram color=#39FF14 back=#0F2A10 hot=90 hot_color=#FF4D4D
+text  x=5 y=58 size=6 color=#39FF14 text="NET"
+text  x=5 y=63 size=4 color=#B6FFA8 text="DN {net_down}"
+text  x=5 y=66.5 size=4 color=#B6FFA8 text="UP {net_up}"
+text  x=5 y=76 size=6 color=#39FF14 text="DSK"
+text  x=5 y=81 size=4 color=#B6FFA8 text="RD {disk_read}"
+text  x=5 y=84.5 size=4 color=#B6FFA8 text="WR {disk_write}"

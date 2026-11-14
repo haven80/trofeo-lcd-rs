@@ -140,6 +140,46 @@ impl Builder {
         }
     }
 
+    /// A copy of a built-in design, to start from. Named `name`, or `<design>-mine` when empty.
+    fn copy_builtin(&mut self, cx: &Ctx, design: &str, name: &str) {
+        let f = match free::load_builtin(design) {
+            Ok(f) => f,
+            Err(e) => {
+                self.msg = Some((e, true));
+                return;
+            }
+        };
+        let wanted = name.trim();
+        let dir = Self::dir(cx);
+        let name = if wanted.is_empty() {
+            let mut n = format!("{design}-mine");
+            let mut i = 2;
+            while free::path_of(&dir, &n).exists() {
+                n = format!("{design}-mine{i}");
+                i += 1;
+            }
+            n
+        } else {
+            if let Err(e) = free::valid_name(wanted) {
+                self.msg = Some((format!("'{wanted}': {e}"), true));
+                return;
+            }
+            if free::path_of(&dir, wanted).exists() {
+                self.msg = Some((tr(cx.lang, "A layout with that name exists already.", "Esiste già un layout con quel nome.").to_string(), true));
+                return;
+            }
+            wanted.to_string()
+        };
+        match free::save(&dir, &name, &f) {
+            Ok(_) => {
+                self.names_at = None;
+                self.open(cx, &name);
+                self.new_name.clear();
+            }
+            Err(e) => self.msg = Some((e, true)),
+        }
+    }
+
     fn touch(&mut self) {
         self.rev += 1;
         self.redo.clear();
@@ -243,6 +283,19 @@ impl Builder {
             if ui.add_enabled(!self.new_name.trim().is_empty(), egui::Button::new(tr(l, "New layout", "Nuovo layout"))).clicked() {
                 let n = self.new_name.trim().to_string();
                 self.create(cx, &n);
+            }
+            ui.separator();
+            let mut copy: Option<&'static str> = None;
+            egui::ComboBox::from_id_salt("builder_builtin").selected_text(tr(l, "Copy a built-in design", "Copia un design integrato")).width(190.0).show_ui(ui, |ui| {
+                for (n, en, it, _) in free::BUILTIN {
+                    if ui.selectable_label(false, format!("{n}  -  {}", tr(l, en, it))).clicked() {
+                        copy = Some(n);
+                    }
+                }
+            });
+            if let Some(d) = copy {
+                let n = self.new_name.clone();
+                self.copy_builtin(cx, d, &n);
             }
             if !self.name.is_empty() {
                 ui.separator();
@@ -833,6 +886,26 @@ mod tests {
         assert!(b2.msg.as_ref().is_some_and(|m| m.1));
         b2.create(&cx, "Bad Name");
         assert!(b2.msg.as_ref().is_some_and(|m| m.1));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_built_in_design_can_be_copied_to_start_from() {
+        let dir = std::env::temp_dir().join(format!("trofeo_builder_copy_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let cx = Ctx { lang: Lang::En, config_dir: dir.clone(), exe: None, doc_text: String::new(), in_screens: false };
+        let mut b = Builder::new();
+        b.copy_builtin(&cx, "halo", "");
+        assert_eq!(b.current(), "halo-mine");
+        assert_eq!(b.free, free::load_builtin("halo").unwrap());
+        b.copy_builtin(&cx, "halo", "");
+        assert_eq!(b.current(), "halo-mine2");
+        b.copy_builtin(&cx, "gauges", "my-gauges");
+        assert_eq!(b.current(), "my-gauges");
+        b.copy_builtin(&cx, "gauges", "my-gauges"); // exists
+        assert!(b.msg.as_ref().is_some_and(|m| m.1));
+        b.copy_builtin(&cx, "gauges", "Bad Name");
+        assert!(b.msg.as_ref().is_some_and(|m| m.1));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

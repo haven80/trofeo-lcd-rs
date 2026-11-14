@@ -1,0 +1,10 @@
+# halo (portrait) — the clock on top, the two rings one above the other, memory at the bottom.
+rect  x=2 y=2 w=96 h=96 color=#000000 opacity=38
+text  x=50 y=8 anchor=c size=7 text="{time}"
+text  x=50 y=13 anchor=c size=3 color=#B8C4D0 text="{date}"
+ring  x=50 y=29 w=70 h=17 anchor=c value=cpu text="{cpu}" color=#00D4FF hot=90 hot_color=#FF4D4D thick=16
+text  x=50 y=41 anchor=c size=4 color=#8FB8C8 text="CPU {cpu_temp}  {cpu_freq}"
+ring  x=50 y=58 w=70 h=17 anchor=c value=gpu text="{gpu}" color=#FF4FD8 hot=90 hot_color=#FF4D4D thick=16
+text  x=50 y=70 anchor=c size=4 color=#C88FB8 text="GPU {gpu_temp}  {gpu_power}"
+bar   x=50 y=82 anchor=c w=80 h=2.5 value=ram color=#FFC845 back=#2A2A36
+text  x=50 y=87 anchor=c size=3 color=#D8C890 text="RAM {ram_used} / {ram_total}"

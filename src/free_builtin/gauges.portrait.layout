@@ -1,0 +1,12 @@
+# gauges (portrait) — four dials in a column.
+rect  x=2 y=1 w=96 h=98 color=#000000 opacity=36
+text  x=50 y=3 anchor=t size=6 color=#E8EEF4 text="{time}"
+text  x=50 y=7 anchor=t size=3 color=#9AA8B8 text="{date}"
+ring  x=50 y=22 w=60 h=14.4 anchor=c value=cpu text="{cpu}" color=#3DDC84 hot=90 hot_color=#FF4D4D thick=15
+text  x=50 y=32 anchor=c size=4 color=#9AA8B8 text="CPU LOAD"
+ring  x=50 y=44 w=60 h=14.4 anchor=c value=cpu_temp max=100 text="{cpu_temp}" color=#FFB02E hot=80 hot_color=#FF4D4D thick=15
+text  x=50 y=54 anchor=c size=4 color=#9AA8B8 text="CPU TEMP"
+ring  x=50 y=66 w=60 h=14.4 anchor=c value=gpu text="{gpu}" color=#4DA3FF hot=95 hot_color=#FF4D4D thick=15
+text  x=50 y=76 anchor=c size=4 color=#9AA8B8 text="GPU LOAD"
+ring  x=50 y=88 w=60 h=14.4 anchor=c value=gpu_temp max=100 text="{gpu_temp}" color=#FF6BD6 hot=80 hot_color=#FF4D4D thick=15
+text  x=50 y=98 anchor=b size=4 color=#9AA8B8 text="GPU TEMP"

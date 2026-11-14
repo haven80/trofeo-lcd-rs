@@ -762,7 +762,7 @@ fn layout_widget(ui: &mut egui::Ui, ed: &mut Ed, key: &str, l: Lang) {
                     }
                 }
                 // the screens you designed (Layout builder)
-                let own = trofeo_lcd::free::dir().map(|d| trofeo_lcd::free::list(&d)).unwrap_or_default();
+                let own: Vec<String> = trofeo_lcd::free::dir().map(|d| trofeo_lcd::free::list(&d)).unwrap_or_default().into_iter().filter(|n| trofeo_lcd::free::builtin(n).is_none()).collect();
                 if !own.is_empty() {
                     ui.separator();
                 }

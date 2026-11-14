@@ -1254,6 +1254,27 @@ ring  x=80 y=62 w=30 h=70 anchor=c value=gpu text="{gpu}"
 
 The free layout is a screen like *tiles* or *frame*: it is shown when idle, and the gaming and music screens still take over when they start.
 
+### Built-in designs
+
+Five free layouts come with the program, so `layout = halo` works with no file:
+
+| Name | What it shows |
+|---|---|
+| `halo` | two big rings (CPU, GPU), the clock in the middle, memory below |
+| `gauges` | four dials: load and temperature of CPU and GPU |
+| `terminal` | green-on-black readout, one line per device (CPU, GPU, RAM, network, disk) |
+| `horizon` | a huge clock and three thin lines of load (CPU, GPU, RAM) |
+| `ribbon` | clock, song and weather above a ribbon of readings |
+
+![halo](img/layout-halo.png)
+![gauges](img/layout-gauges.png)
+![terminal](img/layout-terminal.png)
+![horizon](img/layout-horizon.png)
+![ribbon](img/layout-ribbon.png)
+
+On a portrait panel the program uses the version drawn for it. To change one, open the layout builder and pick **Copy a built-in design** (the copy is named as you typed in the name box, or `<design>-mine`); or save a file `layouts/halo.layout` yourself: a file with the same name takes the place of the built-in one. The five are in the screens list of the settings editor, among the other layouts.
+
+
 ## Preset layouts
 
 | Key | CLI | Values | Default |

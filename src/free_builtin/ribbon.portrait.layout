@@ -1,0 +1,15 @@
+# ribbon (portrait) — clock, song and weather stacked above a ribbon of readings.
+rect  x=2 y=1 w=96 h=57 color=#000000 opacity=34
+text  x=50 y=4 anchor=t size=12 text="{time_short}"
+text  x=50 y=10 anchor=t size=3 color=#9AA8B8 text="{date}"
+text  x=50 y=22 anchor=t size=3 color=#FFC845 text="NOW PLAYING"
+text  x=50 y=26 anchor=t w=90 size=6 text="{song}"
+text  x=50 y=40 anchor=t size=12 text="{weather_temp}"
+text  x=50 y=47 anchor=t size=3 color=#9AA8B8 text="{weather_city}"
+rect  x=2 y=61 w=96 h=38 color=#000000 opacity=55
+text  x=8 y=64 size=5 color=#00D4FF text="CPU {cpu}"
+text  x=8 y=69 size=5 color=#FF6BD6 text="GPU {gpu}"
+text  x=8 y=74 size=5 color=#FFC845 text="RAM {ram}"
+text  x=8 y=79 size=5 color=#B6FFA8 text="DN {net_down}"
+text  x=8 y=84 size=5 color=#E8EEF4 text="{cpu_temp} / {gpu_temp}"
+bar   x=8 y=92 w=84 h=1.5 value=cpu color=#00D4FF back=#22222C

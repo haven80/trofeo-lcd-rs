@@ -1,0 +1,9 @@
+# horizon (portrait) — a big clock in the middle, three lines of load below.
+text  x=50 y=34 anchor=c size=7 text="{time}"
+text  x=50 y=40 anchor=c size=3 color=#B8C4D0 text="{date}"
+text  x=6 y=62 size=4 color=#9AA8B8 text="CPU {cpu}"
+bar   x=6 y=66 w=88 h=1.2 value=cpu color=#00D4FF back=#22222C
+text  x=6 y=72 size=4 color=#9AA8B8 text="GPU {gpu}"
+bar   x=6 y=76 w=88 h=1.2 value=gpu color=#FF4FD8 back=#22222C
+text  x=6 y=82 size=4 color=#9AA8B8 text="RAM {ram}"
+bar   x=6 y=86 w=88 h=1.2 value=ram color=#FFC845 back=#22222C

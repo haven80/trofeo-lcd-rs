@@ -1,0 +1,12 @@
+# gauges — four dials: CPU load, CPU temperature, GPU load, GPU temperature.
+rect  x=1 y=4 w=98 h=92 color=#000000 opacity=36
+text  x=3 y=8 size=5 color=#E8EEF4 text="{time}"
+text  x=97 y=8 anchor=tr size=4 color=#9AA8B8 text="{date}"
+ring  x=14 y=54 w=17 h=62 anchor=c value=cpu text="{cpu}" color=#3DDC84 hot=90 hot_color=#FF4D4D thick=15
+text  x=14 y=90 anchor=c size=4 color=#9AA8B8 text="CPU LOAD"
+ring  x=38 y=54 w=17 h=62 anchor=c value=cpu_temp max=100 text="{cpu_temp}" color=#FFB02E hot=80 hot_color=#FF4D4D thick=15
+text  x=38 y=90 anchor=c size=4 color=#9AA8B8 text="CPU TEMP"
+ring  x=62 y=54 w=17 h=62 anchor=c value=gpu text="{gpu}" color=#4DA3FF hot=95 hot_color=#FF4D4D thick=15
+text  x=62 y=90 anchor=c size=4 color=#9AA8B8 text="GPU LOAD"
+ring  x=86 y=54 w=17 h=62 anchor=c value=gpu_temp max=100 text="{gpu_temp}" color=#FF6BD6 hot=80 hot_color=#FF4D4D thick=15
+text  x=86 y=90 anchor=c size=4 color=#9AA8B8 text="GPU TEMP"

@@ -1,6 +1,7 @@
 # trofeo_lcd
 
 ![overview](img/overview.png)
+
 ![overview2](img/overview2.jpeg)
 ![overview3](img/overview3.jpeg)
 ![overview4](img/overview4.jpeg)
@@ -20,7 +21,56 @@ whose driver was rewritten byte-for-byte from
 See **[NOTICE.md](./NOTICE.md)** for the full provenance and a summary of
 what this fork adds on top of the original.
 
+## Highlights
+
+### Design your own look: the editor with the layout builder and the themes
+
+The settings editor (`trofeo_config`) is where you make the screen yours, without touching a text file.
+
+**Layout builder** — drag texts with live values, bars, rings, rectangles and pictures anywhere on the screen and see
+them drawn by the real program, as you move them. Every change is saved at once, undo and redo work, and *Copy a
+built-in design* starts you from one of the screens below.
+
+![The layout builder, with a copy of the Halo design](img/editor-builder.png)
+
+**Themes** — one line (`theme = ocean`) gives a whole look: eight themes come with the program, and *Share your design →
+Your themes* saves the look you made as a theme of your own, copies it as text, attaches it to a gallery post as a file,
+and imports the themes of other people.
+
+![Your themes, in Share your design](img/editor-themes.png)
+
+### Five new screens
+
+Ready to use with `layout = halo` (or `gauges`, `terminal`, `horizon`, `ribbon`), no file needed; each one has a version
+for portrait panels, chosen by itself.
+
+**Halo** — two big rings for CPU and GPU, the clock in the middle, memory below.
+
+![Halo](img/layout-halo.png)
+
+**Gauges** — four dials: load and temperature of CPU and GPU.
+
+![Gauges](img/layout-gauges.png)
+
+**Ribbon** — clock, song and weather above a ribbon of readings.
+
+![Ribbon](img/layout-ribbon.png)
+
+**Terminal** — green-on-black readout, one line per device. **Horizon** — a huge clock and three thin lines of load.
+
+![Terminal](img/layout-terminal.png)
+![Horizon](img/layout-horizon.png)
+
+On a portrait panel:
+
+<img src="img/layout-halo-portrait.png" height="420"> <img src="img/layout-gauges-portrait.png" height="420"> <img src="img/layout-terminal-portrait.png" height="420"> <img src="img/layout-ribbon-portrait.png" height="420">
+
+More designs, in the same spirit: [Deck, Cards, Orbit and Console](docs/CONFIGURATION.md#deck-cards-orbit-and-console),
+[the music screens](OPTIONS_GUIDE.md#music-screen-now-playing-card) and [the gaming screens](docs/CONFIGURATION.md#gaming-screens).
+
 ## What's new
+
+**2.23.0 — five new built-in screens.** `layout = halo | gauges | terminal | horizon | ribbon`: **halo** (two big rings for CPU and GPU, the clock in the middle, memory below), **gauges** (four dials: load and temperature of CPU and GPU), **terminal** (green-on-black readout, one line per device), **horizon** (a huge clock and three thin lines of load) and **ribbon** (clock, song and weather above a ribbon of readings). Each has a version for portrait panels, chosen by itself. They are free layouts that come with the program, so no file is needed; in the settings editor *Screens → Layout builder → Copy a built-in design* makes a file of yours to change, and a file of yours with the same name takes the place of the built-in one.
 
 **2.22.0 — free layouts.** Design your own screen: texts with live values (`{cpu}`, `{time}`, `{song}`...), bars, rings, rectangles and pictures, placed anywhere, in a text file `layouts/<name>.layout` or with the **visual builder** in the settings editor (drag, resize, edit, undo). Use it with `layout = my-screen`.
 

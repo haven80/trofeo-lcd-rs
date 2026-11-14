@@ -34,6 +34,7 @@ On Linux it needs `pkg-config` and the PulseAudio headers. Windows builds are ma
 - `src/fade.rs` — the fade between screens.
 - `src/themes.rs` — the themes: the built-in ones, and the ones of your own (`themes/<name>.theme`: save, list, load, export, checks).
 - `src/free.rs` — free layouts: the file format (read, write, check), the placeholders and metrics.
+- `src/free_builtin/` — the text of the five built-in free layouts (landscape and `.portrait` versions), used through `free::BUILTIN`.
 - `src/free_draw.rs` — draws a free layout (text, bar, ring, rect, image) with live values.
 - `src/bin/config_editor/builder.rs` — the visual builder of free layouts in the settings editor.
 - `src/profiles.rs` — profiles: the files, the choice (rule, hand, file), the rules and the hold, the hotkey order.

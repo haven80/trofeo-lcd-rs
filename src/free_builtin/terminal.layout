@@ -1,0 +1,16 @@
+# terminal — green-on-black readout, one line per device.
+rect  x=1 y=4 w=98 h=92 color=#000000 opacity=62
+text  x=3 y=7 size=4 color=#39FF14 text="TROFEO> STATUS  {time}"
+text  x=3 y=22 size=5 color=#39FF14 text="CPU"
+bar   x=15 y=23 w=46 h=6 value=cpu color=#39FF14 back=#0F2A10 hot=90 hot_color=#FF4D4D
+text  x=97 y=22 anchor=tr size=5 color=#B6FFA8 text="{cpu}  {cpu_temp}  {cpu_freq}"
+text  x=3 y=38 size=5 color=#39FF14 text="GPU"
+bar   x=15 y=39 w=46 h=6 value=gpu color=#39FF14 back=#0F2A10 hot=95 hot_color=#FF4D4D
+text  x=97 y=38 anchor=tr size=5 color=#B6FFA8 text="{gpu}  {gpu_temp}  {gpu_power}"
+text  x=3 y=54 size=5 color=#39FF14 text="RAM"
+bar   x=15 y=55 w=46 h=6 value=ram color=#39FF14 back=#0F2A10 hot=90 hot_color=#FF4D4D
+text  x=97 y=54 anchor=tr size=5 color=#B6FFA8 text="{ram}  {ram_used} / {ram_total}"
+text  x=3 y=70 size=5 color=#39FF14 text="NET"
+text  x=15 y=70 size=5 color=#B6FFA8 text="DN {net_down}   UP {net_up}"
+text  x=3 y=84 size=5 color=#39FF14 text="DSK"
+text  x=15 y=84 size=5 color=#B6FFA8 text="RD {disk_read}   WR {disk_write}"
