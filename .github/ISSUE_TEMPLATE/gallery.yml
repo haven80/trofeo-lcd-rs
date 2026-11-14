@@ -34,6 +34,11 @@ body:
       description: Paste what the editor copied for you (the "Copy the settings" button), so others can try your design.
       render: ini
   - type: textarea
+    id: theme_file
+    attributes:
+      label: Theme file (optional)
+      description: Drag here the file "your-name.theme.txt" that the editor saved next to the picture ("Save my look as a theme file to attach"). Others can import it in the editor with "Import a theme file".
+  - type: textarea
     id: notes
     attributes:
       label: Notes
