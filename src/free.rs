@@ -153,7 +153,7 @@ pub const METRICS: &[(&str, &str, f32)] = &[
 /// What `{...}` in a text can be: every metric (written with its unit) and these.
 pub const PLACEHOLDERS: &[&str] = &[
     "cpu", "gpu", "ram", "cpu_temp", "gpu_temp", "gpu_hotspot", "cpu_power", "gpu_power", "cpu_mhz", "fps", "cpu_freq",
-    "ram_used", "ram_total", "net_down", "net_up", "disk_read", "disk_write", "song", "time", "time_short", "date",
+    "ram_used", "ram_free", "ram_total", "net_down", "net_up", "disk_read", "disk_write", "song", "time", "time_short", "date",
     "weather_temp", "weather_city",
 ];
 
@@ -195,6 +195,14 @@ pub struct Element {
     pub thick: f32,
     /// Image file.
     pub file: String,
+    /// The font of a text (and of the text in a ring); None = the font of the configuration.
+    pub font: Option<crate::TextFont>,
+    /// The weight of the smooth font; None = the configuration's (or by size).
+    pub weight: Option<crate::smooth_font::Weight>,
+    /// Bar and ring: a second colour; the filled part then runs from `color` to `color2`.
+    pub color2: Option<Rgb>,
+    /// Bar and ring: seconds a loop of the moving gradient takes (0 = still).
+    pub flow: f32,
 }
 
 impl Element {
@@ -225,6 +233,10 @@ impl Element {
             back: (0x30, 0x30, 0x3C),
             thick: 20.0,
             file: String::new(),
+            font: None,
+            weight: None,
+            color2: None,
+            flow: 0.0,
         }
     }
 }
@@ -232,6 +244,13 @@ impl Element {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Free {
     pub elements: Vec<Element>,
+}
+
+impl Free {
+    /// Does something in it move (a bar or ring with a flowing gradient)?
+    pub fn animated(&self) -> bool {
+        self.elements.iter().any(|e| matches!(e.kind, Kind::Bar | Kind::Ring) && e.flow > 0.0)
+    }
 }
 
 /// Names the `{...}` of a text refers to, or the first one that is not known.
@@ -351,6 +370,23 @@ fn parse_line(line: &str) -> Result<Element, String> {
             "back" => e.back = color(&k, v)?,
             "thick" => e.thick = number(&k, v, 2.0, 100.0)?,
             "file" => e.file = v.to_string(),
+            "color2" => e.color2 = Some(color(&k, v)?),
+            "flow" => e.flow = number(&k, v, 0.0, 600.0)?,
+            "font" => {
+                e.font = Some(match v.to_ascii_lowercase().as_str() {
+                    "pixel" => crate::TextFont::Pixel,
+                    "smooth" => crate::TextFont::Smooth,
+                    _ => return Err(format!("font: '{v}' is not pixel or smooth")),
+                })
+            }
+            "weight" => {
+                e.weight = Some(match v.to_ascii_lowercase().as_str() {
+                    "light" => crate::smooth_font::Weight::Light,
+                    "regular" => crate::smooth_font::Weight::Regular,
+                    "medium" => crate::smooth_font::Weight::Medium,
+                    _ => return Err(format!("weight: '{v}' is not light, regular or medium")),
+                })
+            }
             other => return Err(format!("'{other}' is not a property")),
         }
     }
@@ -423,11 +459,32 @@ pub fn render_element(e: &Element) -> String {
             s.push_str(&format!(" back={}", fmt_color(e.back)));
         }
     }
+    if matches!(e.kind, Kind::Bar | Kind::Ring) {
+        if let Some(c) = e.color2 {
+            s.push_str(&format!(" color2={}", fmt_color(c)));
+        }
+        if e.flow > 0.0 {
+            s.push_str(&format!(" flow={}", fmt_num(e.flow)));
+        }
+    }
     if e.kind == Kind::Ring && e.thick != d.thick {
         s.push_str(&format!(" thick={}", fmt_num(e.thick)));
     }
     if matches!(e.kind, Kind::Rect | Kind::Image) && e.opacity != 100 {
         s.push_str(&format!(" opacity={}", e.opacity));
+    }
+    if matches!(e.kind, Kind::Text | Kind::Ring) {
+        match e.font {
+            Some(crate::TextFont::Pixel) => s.push_str(" font=pixel"),
+            Some(crate::TextFont::Smooth) => s.push_str(" font=smooth"),
+            None => {}
+        }
+        match e.weight {
+            Some(crate::smooth_font::Weight::Light) => s.push_str(" weight=light"),
+            Some(crate::smooth_font::Weight::Regular) => s.push_str(" weight=regular"),
+            Some(crate::smooth_font::Weight::Medium) => s.push_str(" weight=medium"),
+            None => {}
+        }
     }
     if matches!(e.kind, Kind::Text | Kind::Ring) && !e.text.is_empty() {
         s.push_str(&format!(" text={}", quote(&e.text)));
@@ -457,6 +514,23 @@ pub const BUILTIN: &[(&str, &str, &str, &str)] = &[
     ("terminal", "Terminal: green-on-black readout, one line per device", "Terminale: lettura verde su nero, una riga per dispositivo", include_str!("free_builtin/terminal.layout")),
     ("horizon", "Horizon: a huge clock and three thin lines of load", "Orizzonte: un orologio enorme e tre sottili linee di carico", include_str!("free_builtin/horizon.layout")),
     ("ribbon", "Ribbon: clock, song and weather above a ribbon of readings", "Nastro: orologio, brano e meteo sopra un nastro di valori", include_str!("free_builtin/ribbon.layout")),
+    ("atelier", "Atelier: ivory and gold, a light clock and three fine rings", "Atelier: avorio e oro, un orologio sottile e tre anelli fini", include_str!("free_builtin/atelier.layout")),
+    ("noir", "Noir: white on black, a huge light clock and four quiet figures", "Noir: bianco su nero, un orologio enorme e sottile e quattro cifre sobrie", include_str!("free_builtin/noir.layout")),
+    ("pearl", "Pearl: cool and airy, the clock inside a fine ring", "Pearl: fresco e leggero, l'orologio dentro un anello sottile", include_str!("free_builtin/pearl.layout")),
+    ("volt", "Volt: four loud colour blocks with giant figures", "Volt: quattro blocchi di colore con cifre giganti", include_str!("free_builtin/volt.layout")),
+    ("blaze", "Blaze: CPU in orange and GPU in magenta, giant figures", "Blaze: CPU arancione e GPU magenta, cifre giganti", include_str!("free_builtin/blaze.layout")),
+    ("studio", "Studio: paper and ink, a light spec sheet with one orange accent", "Studio: carta e inchiostro, una scheda tecnica chiara con un accento arancione", include_str!("free_builtin/studio.layout")),
+    ("board", "Board: an airport departure board, every number on a tile", "Board: un tabellone da aeroporto, ogni numero su una tessera", include_str!("free_builtin/board.layout")),
+    ("mineral", "Mineral: dark cards in sage green, a ring and six readings on each", "Mineral: card scure verde salvia, un anello e sei valori su ognuna", include_str!("free_builtin/mineral.layout")),
+    ("cluster", "Cluster: a car instrument cluster, three big dials", "Cluster: un quadro strumenti d'auto, tre grandi quadranti", include_str!("free_builtin/cluster.layout")),
+    ("swiss", "Swiss: a red block with a huge clock, big black figures on a light page", "Swiss: blocco rosso con orologio enorme, grandi cifre nere su pagina chiara", include_str!("free_builtin/swiss.layout")),
+    ("dusk", "Dusk: a sunset gradient, a giant light clock, flowing bars", "Dusk: sfumatura da tramonto, orologio gigante leggero, barre che scorrono", include_str!("free_builtin/dusk.layout")),
+    ("aurora", "Aurora: glass cards on a teal-to-violet gradient, flowing bars", "Aurora: card di vetro su sfumatura teal-viola, barre che scorrono", include_str!("free_builtin/aurora.layout")),
+    ("carbon", "Carbon: matte black with amber lines, four columns, flowing bars", "Carbon: nero opaco con filetti ambra, quattro colonne, barre che scorrono", include_str!("free_builtin/carbon.layout")),
+    ("eclipse", "Eclipse: three concentric rings that shimmer, the clock in the middle", "Eclipse: tre anelli concentrici che brillano, orologio al centro", include_str!("free_builtin/eclipse.layout")),
+    ("ledger", "Ledger: a navy ledger with gold lines, one row per device, flowing bars", "Ledger: registro blu con filetti oro, una riga per dispositivo, barre che scorrono", include_str!("free_builtin/ledger.layout")),
+    ("haiku", "Haiku: a huge light clock, lots of space, one line of readings", "Haiku: orologio enorme e leggero, molto spazio, una riga di valori", include_str!("free_builtin/haiku.layout")),
+    ("peach", "Peach: a warm light page with three gradient rings", "Peach: pagina chiara e calda con tre anelli sfumati", include_str!("free_builtin/peach.layout")),
 ];
 
 /// The same designs for a tall, narrow panel (a portrait screen), `(name, file text)`.
@@ -466,6 +540,23 @@ pub const BUILTIN_PORTRAIT: &[(&str, &str)] = &[
     ("terminal", include_str!("free_builtin/terminal.portrait.layout")),
     ("horizon", include_str!("free_builtin/horizon.portrait.layout")),
     ("ribbon", include_str!("free_builtin/ribbon.portrait.layout")),
+    ("atelier", include_str!("free_builtin/atelier.portrait.layout")),
+    ("noir", include_str!("free_builtin/noir.portrait.layout")),
+    ("pearl", include_str!("free_builtin/pearl.portrait.layout")),
+    ("volt", include_str!("free_builtin/volt.portrait.layout")),
+    ("blaze", include_str!("free_builtin/blaze.portrait.layout")),
+    ("studio", include_str!("free_builtin/studio.portrait.layout")),
+    ("board", include_str!("free_builtin/board.portrait.layout")),
+    ("mineral", include_str!("free_builtin/mineral.portrait.layout")),
+    ("cluster", include_str!("free_builtin/cluster.portrait.layout")),
+    ("swiss", include_str!("free_builtin/swiss.portrait.layout")),
+    ("dusk", include_str!("free_builtin/dusk.portrait.layout")),
+    ("aurora", include_str!("free_builtin/aurora.portrait.layout")),
+    ("carbon", include_str!("free_builtin/carbon.portrait.layout")),
+    ("eclipse", include_str!("free_builtin/eclipse.portrait.layout")),
+    ("ledger", include_str!("free_builtin/ledger.portrait.layout")),
+    ("haiku", include_str!("free_builtin/haiku.portrait.layout")),
+    ("peach", include_str!("free_builtin/peach.portrait.layout")),
 ];
 
 /// The text of a built-in design.
@@ -643,17 +734,52 @@ mod tests {
             valid_name(name).unwrap();
             assert!(!en.is_empty() && !it.is_empty());
             let f = load_builtin(name).unwrap_or_else(|e| panic!("{e}"));
-            assert!(f.elements.len() >= 8, "{name}");
+            assert!(f.elements.len() >= 8 || ["blaze", "volt"].contains(name), "{name}");
             // what is written out is read back the same
             assert_eq!(parse(&render(name, &f)).unwrap(), f, "{name}");
         }
         for (name, _, _, _) in BUILTIN {
             let f = load_builtin_for(name, true).unwrap_or_else(|e| panic!("{e}"));
-            assert!(f.elements.len() >= 8, "{name} (portrait)");
+            assert!(f.elements.len() >= 8 || ["blaze", "volt"].contains(name), "{name} (portrait)");
             assert_ne!(f, load_builtin(name).unwrap(), "{name}");
         }
         assert_eq!(BUILTIN_PORTRAIT.len(), BUILTIN.len());
         assert!(builtin("HALO").is_some());
         assert!(builtin("nothing").is_none());
+    }
+
+    #[test]
+    fn the_font_of_a_text_is_read_and_written() {
+        let f = parse("text x=5 y=5 size=9 font=smooth weight=light text=\"{time}\"\nring x=50 y=50 value=cpu font=pixel text=\"{cpu}\"\ntext x=1 y=1 text=\"a\"").unwrap();
+        assert_eq!((f.elements[0].font, f.elements[0].weight), (Some(crate::TextFont::Smooth), Some(crate::smooth_font::Weight::Light)));
+        assert_eq!((f.elements[1].font, f.elements[1].weight), (Some(crate::TextFont::Pixel), None));
+        assert_eq!((f.elements[2].font, f.elements[2].weight), (None, None));
+        assert_eq!(parse(&render("x", &f)).unwrap(), f);
+        assert!(parse("text x=1 y=1 font=fancy text=\"a\"").unwrap_err().contains("line 1"));
+        assert!(parse("text x=1 y=1 weight=heavy text=\"a\"").is_err());
+    }
+
+    #[test]
+    fn a_gradient_and_its_flow_are_read_and_written() {
+        let f = parse("bar x=1 y=1 value=cpu color=#FF0000 color2=#0000FF flow=2.5\nring x=5 y=5 value=gpu color2=#00FF00\nbar x=1 y=9 value=ram").unwrap();
+        assert_eq!((f.elements[0].color2, f.elements[0].flow), (Some((0, 0, 255)), 2.5));
+        assert_eq!((f.elements[1].color2, f.elements[1].flow), (Some((0, 255, 0)), 0.0));
+        assert_eq!((f.elements[2].color2, f.elements[2].flow), (None, 0.0));
+        assert_eq!(parse(&render("x", &f)).unwrap(), f);
+        assert!(f.animated());
+        assert!(!parse("bar x=1 y=1 value=cpu color2=#0000FF").unwrap().animated());
+        assert!(parse("bar x=1 y=1 value=cpu flow=-1").is_err());
+        assert!(parse("bar x=1 y=1 value=cpu color2=nope").is_err());
+    }
+
+    #[test]
+    fn the_built_in_designs_with_flowing_bars_are_the_ones_that_say_so() {
+        for name in ["dusk", "aurora", "carbon", "eclipse", "ledger"] {
+            assert!(load_builtin(name).unwrap().animated(), "{name}");
+            assert!(load_builtin_for(name, true).unwrap().animated(), "{name} (portrait)");
+        }
+        for name in ["swiss", "haiku", "peach", "atelier", "studio", "board"] {
+            assert!(!load_builtin(name).unwrap().animated(), "{name}");
+        }
     }
 }

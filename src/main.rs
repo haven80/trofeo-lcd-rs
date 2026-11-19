@@ -953,7 +953,7 @@ const OVERRIDE_KEYS: &[&str] = &[
     "spectrum_position", "spectrum_width", "spectrum_height", "status_style",
     "background_color", "background_fit", "background_position", "background_offset_x", "background_offset_y",
     "brightness", "deepcool", "fps_monitor", "layout", "layout_spectrum",
-    "layout_hold_on_music", "layout_interval", "panel_opacity", "text_backdrop",
+    "layout_hold_on_music", "layout_interval", "bar_animation", "panel_opacity", "text_backdrop",
     "spectrum_style", "spectrum_style_interval", "spectrum_palette",
     "spectrum_palette_interval", "spectrum_gradient", "spectrum_rainbow_speed",
     "music_screen", "music_blur", "music_progress", "music_bg", "music_bg_brightness",
@@ -1049,7 +1049,7 @@ fn item_key(key: &str) -> Option<(usize, &str)> {
 }
 
 fn is_override_key(key: &str) -> bool {
-    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "fps_item" || key == "clock_backdrop" || key == "clock_format" || key == "clock_ampm" || key == "theme" || key.starts_with("night_") || key.starts_with("alert_") || key.starts_with("profile") || key == "screen_fade_ms" || key == "screen_fade_style" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key == "console" || key.starts_with("console_") || key.starts_with("gaming_") || key.starts_with("steam_") || key.starts_with("hid_") || key == "deepcool_source" || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
+    OVERRIDE_KEYS.contains(&key) || item_key(key).is_some() || key == "net_unit" || key == "mem_unit" || key == "ram_unit" || key == "nowplaying_width" || key == "nowplaying_label" || key == "fps_item" || key == "clock_backdrop" || key == "clock_format" || key == "clock_ampm" || key == "theme" || key.starts_with("night_") || key.starts_with("alert_") || key.starts_with("profile") || key == "bar_animation" || key == "screen_fade_ms" || key == "screen_fade_style" || key == "clock_time_size" || key == "clock_date_size" || key == "weather_unit" || key == "ticker_position" || key == "ticker_size" || key == "ticker_color" || key == "ticker_backdrop" || key == "ticker_width" || key == "percent_decimals" || key == "font" || key == "font_weight" || key == "tiles" || key.starts_with("tiles_") || key.starts_with("frame_") || key == "lhm" || key.starts_with("lhm_") || key.starts_with("dash_") || key == "deck" || key == "deck_gauge" || key == "cards" || key.starts_with("cards_") || key == "orbit" || key.starts_with("orbit_") || key == "console" || key.starts_with("console_") || key.starts_with("gaming_") || key.starts_with("steam_") || key.starts_with("hid_") || key == "deepcool_source" || key == "deepcool_mode" || key == "deepcool_fan" || key == "deepcool_alternate" || (key.starts_with("tile_") && key.ends_with("_color"))
 }
 
 /// Style for a single item of the info block.
@@ -1275,6 +1275,7 @@ fn parse_ui_options(file: &ConfigFile) -> anyhow::Result<UiOptions> {
             Some(v) if v <= fade::MAX_MS => v,
             Some(v) => anyhow::bail!("screen_fade_ms: must be 0..{} (got {v})", fade::MAX_MS),
         },
+        bar_animation: file.get_bool("bar_animation").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(true),
         screen_fade_style: match file.get("screen_fade_style") {
             None => fade::Style::Cross,
             Some(v) => fade::Style::parse(v).ok_or_else(|| anyhow::anyhow!("screen_fade_style: '{}' not valid (cross | black)", v.trim()))?,
@@ -2648,6 +2649,12 @@ fn main() -> anyhow::Result<()> {
         } else {
             target_fps
         };
+        // A free layout with a flowing gradient on a bar or ring (`bar_animation`).
+        let free_name = active_def.filter(|_| is_idle && !(gaming_now && ui_show.dashboard)).and_then(|d| d.name.strip_prefix(layouts::FREE_PREFIX));
+        let target_fps = match free_name {
+            Some(name) if opts().bar_animation => target_fps.max(free_screen.wanted_fps(name, fb.height() > fb.width())),
+            _ => target_fps,
+        };
         let target_fps = match game_style {
             Some(_) => target_fps.max(tiles::game::GameScreen::wanted_fps(&opts().game, config.ui.effect.fps as f32, config.active_fps)),
             None => target_fps,
@@ -3312,6 +3319,7 @@ fn render_preview(config: &Config, req: &PreviewReq) -> anyhow::Result<Framebuff
         } else {
             (0, 0, fb.width(), fb.height())
         };
+        free_draw::set_preview_secs(Some(req.secs));
         free_draw::FreeScreen::new().draw(&mut fb, area, name, &wd, color_mode);
     }
     let target: &mut Framebuffer = if composite { &mut ui } else { &mut fb };
@@ -3531,6 +3539,8 @@ struct UiOptions {
     clock_ampm: bool,
     /// Fade between screens, in ms (0 = off): see `fade.rs`.
     screen_fade_ms: u32,
+    /// Moving gradients on the bars and rings of free layouts that have them (`bar_animation`).
+    bar_animation: bool,
     screen_fade_style: fade::Style,
     clock_time_size: u32,
     clock_date_size: u32,
@@ -3648,6 +3658,7 @@ impl Default for UiOptions {
             clock_12h: false,
             clock_ampm: true,
             screen_fade_ms: 0,
+            bar_animation: true,
             screen_fade_style: fade::Style::Cross,
             alerts: Default::default(),
             clock_time_size: 20,
@@ -5275,6 +5286,11 @@ mod layout_tests {
         assert!(parse_ui_options(&ConfigFile::parse("screen_fade_ms = 5001\n").unwrap()).is_err());
         assert!(parse_ui_options(&ConfigFile::parse("screen_fade_style = wipe\n").unwrap()).is_err());
         assert!(is_override_key("screen_fade_ms") && is_override_key("screen_fade_style"));
+        // moving gradients of the free layouts: on unless switched off
+        assert!(parse_ui_options(&ConfigFile::parse("").unwrap()).unwrap().bar_animation);
+        assert!(!parse_ui_options(&ConfigFile::parse("bar_animation = false\n").unwrap()).unwrap().bar_animation);
+        assert!(parse_ui_options(&ConfigFile::parse("bar_animation = maybe\n").unwrap()).is_err());
+        assert!(is_override_key("bar_animation"));
     }
 
     #[test]

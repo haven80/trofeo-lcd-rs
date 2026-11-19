@@ -124,6 +124,7 @@ impl FreeScreen {
                     _ => 2.0 * x_px.min(aw - x_px),
                 };
                 let limit = if e.w > 0.0 { w_px as u32 } else { room.max(8.0) as u32 };
+                let _font = FontGuard::new(e);
                 let scale = fit_scale(&text, e.size, limit.max(1));
                 let (tw, th) = (Framebuffer::text_width(&text, scale) as f32, Framebuffer::text_height(scale) as f32);
                 let (px, py) = free::place(e, aw, ah, tw, th);
@@ -141,7 +142,21 @@ impl FreeScreen {
                 blend_rect(fb, area, x, y, w_px, h_px, e.back, 1.0);
                 if let Some((frac, v)) = metric_fraction(e, wd) {
                     let c = bar_color(e, frac, v, color_mode);
-                    blend_rect(fb, area, x, y, (w_px * frac).round(), h_px, c, 1.0);
+                    let fill_w = (w_px * frac).round();
+                    match gradient_of(e, v) {
+                        Some((c2, phase)) if fill_w >= 1.0 => {
+                            // the filled part is painted in strips, each in its own colour
+                            let step = 2.0_f32;
+                            let mut at = 0.0_f32;
+                            while at < fill_w {
+                                let sw = step.min(fill_w - at);
+                                let t = (at + sw / 2.0) / fill_w;
+                                blend_rect(fb, area, x + at, y, sw + 0.5, h_px, gradient_at(e.color.unwrap_or(c), c2, t, phase), 1.0);
+                                at += step;
+                            }
+                        }
+                        _ => blend_rect(fb, area, x, y, fill_w, h_px, c, 1.0),
+                    }
                 }
             }
             Kind::Ring => {
@@ -153,9 +168,11 @@ impl FreeScreen {
                 let (cx, cy) = (ax + px + w_px / 2.0, ay + py + h_px / 2.0);
                 let fraction = metric_fraction(e, wd);
                 let fill = fraction.map(|(f, v)| bar_color(e, f, v, color_mode)).unwrap_or(e.back);
-                draw_ring(fb, area, (cx, cy), d / 2.0, e.thick / 100.0, fraction.map_or(0.0, |f| f.0), fill, e.back);
+                let grad = fraction.and_then(|(_, v)| gradient_of(e, v)).map(|(c2, phase)| (e.color.unwrap_or(fill), c2, phase));
+                draw_ring(fb, area, (cx, cy), d / 2.0, e.thick / 100.0, fraction.map_or(0.0, |f| f.0), fill, e.back, grad);
                 if !e.text.is_empty() {
                     let text = resolve(&e.text, wd);
+                    let _font = FontGuard::new(e);
                     let inner = d / 2.0 * (1.0 - e.thick / 100.0);
                     let scale = fit_scale(&text, 40, (inner * 1.7) as u32);
                     let (tw, th) = (Framebuffer::text_width(&text, scale) as f32, Framebuffer::text_height(scale) as f32);
@@ -207,6 +224,7 @@ fn placeholder(name: &str, wd: &layouts::WidgetData) -> String {
         "cpu_freq" => wd.cpu_mhz.map(format_freq_mhz).unwrap_or_else(dash),
         "fps" => wd.fps.map(|f| f.to_string()).unwrap_or_else(dash),
         "ram_used" => gb(wd.used_mb),
+        "ram_free" => gb(wd.total_mb.saturating_sub(wd.used_mb)),
         "ram_total" => gb(wd.total_mb),
         "net_down" => rate(wd.net_kb.0),
         "net_up" => rate(wd.net_kb.1),
@@ -250,6 +268,51 @@ fn metric_fraction(e: &Element, wd: &layouts::WidgetData) -> Option<(f32, f32)> 
     Some((((v - e.min) / (max - e.min)).clamp(0.0, 1.0), v))
 }
 
+/// Seconds since the program started (or the time of a preview picture): the clock of the
+/// moving gradients.
+static PREVIEW_SECS: std::sync::Mutex<Option<f64>> = std::sync::Mutex::new(None);
+
+pub fn set_preview_secs(secs: Option<f64>) {
+    *PREVIEW_SECS.lock().unwrap_or_else(|e| e.into_inner()) = secs;
+}
+
+fn anim_secs() -> f64 {
+    if let Some(s) = *PREVIEW_SECS.lock().unwrap_or_else(|e| e.into_inner()) {
+        return s;
+    }
+    static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+    START.get_or_init(Instant::now).elapsed().as_secs_f64()
+}
+
+/// The second colour of a bar or ring and where its gradient is now (0..1 of a loop; 0 when
+/// the animation is off or the gradient is still: -1), unless the value is over `hot`.
+fn gradient_of(e: &Element, v: f32) -> Option<(Rgb, f32)> {
+    let c2 = e.color2?;
+    if e.hot.is_some_and(|h| v >= h) {
+        return None;
+    }
+    let phase = if e.flow > 0.0 && opts().bar_animation { ((anim_secs() / e.flow as f64).fract()) as f32 } else { -1.0 };
+    Some((c2, phase))
+}
+
+/// The colour at `t` (0..1 along the filled part). Still (`phase` < 0): a straight run from
+/// `c1` to `c2`. Moving (`phase` 0..1 of a loop): a wave of the two colours that travels along.
+fn gradient_at(c1: Rgb, c2: Rgb, t: f32, phase: f32) -> Rgb {
+    let k = if phase >= 0.0 { 0.5 - 0.5 * ((t - phase) * std::f32::consts::TAU).cos() } else { t.clamp(0.0, 1.0) };
+    let m = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * k).round().clamp(0.0, 255.0) as u8;
+    (m(c1.0, c2.0), m(c1.1, c2.1), m(c1.2, c2.2))
+}
+
+/// Does the layout `name` have a moving gradient? Then the screen wants a steady frame rate.
+impl FreeScreen {
+    pub fn wanted_fps(&mut self, name: &str, portrait: bool) -> f32 {
+        match self.layout(name, portrait) {
+            Ok(l) if l.animated() => 20.0,
+            _ => 0.0,
+        }
+    }
+}
+
 fn bar_color(e: &Element, frac: f32, v: f32, color_mode: ColorMode) -> Rgb {
     if e.hot.is_some_and(|h| v >= h) {
         return e.hot_color;
@@ -259,6 +322,25 @@ fn bar_color(e: &Element, frac: f32, v: f32, color_mode: ColorMode) -> Rgb {
 
 /// Text at a pixel position that may be partly outside the area (it is then not drawn
 /// beyond the screen's edge).
+/// The font of an element for as long as it lives: the text style is put back when it is dropped.
+struct FontGuard((trofeo_lcd::TextFont, Option<trofeo_lcd::smooth_font::Weight>));
+
+impl FontGuard {
+    fn new(e: &Element) -> FontGuard {
+        let before = trofeo_lcd::text_style();
+        if e.font.is_some() || e.weight.is_some() {
+            trofeo_lcd::set_text_style(e.font.unwrap_or(before.0), e.weight.or(before.1));
+        }
+        FontGuard(before)
+    }
+}
+
+impl Drop for FontGuard {
+    fn drop(&mut self) {
+        trofeo_lcd::set_text_style(self.0 .0, self.0 .1);
+    }
+}
+
 fn put_text(fb: &mut Framebuffer, area: (u32, u32, u32, u32), x: f32, y: f32, text: &str, c: Rgb, scale: u32) {
     let (x, y) = (x.round().max(0.0) as u32, y.round().max(0.0) as u32);
     if x >= fb.width() || y >= fb.height() || x >= area.0 + area.2 + 200 {
@@ -302,7 +384,8 @@ fn blend_rect(fb: &mut Framebuffer, area: (u32, u32, u32, u32), x: f32, y: f32, 
 }
 
 /// A ring: `frac` of it (clockwise from the top) in `fill`, the rest in `back`.
-fn draw_ring(fb: &mut Framebuffer, area: (u32, u32, u32, u32), center: (f32, f32), radius: f32, thick: f32, frac: f32, fill: Rgb, back: Rgb) {
+#[allow(clippy::too_many_arguments)]
+fn draw_ring(fb: &mut Framebuffer, area: (u32, u32, u32, u32), center: (f32, f32), radius: f32, thick: f32, frac: f32, fill: Rgb, back: Rgb, grad: Option<(Rgb, Rgb, f32)>) {
     let inner = radius * (1.0 - thick.clamp(0.02, 1.0));
     let Some((x0, y0, cw, ch)) = clip(fb, area, center.0 - radius - 1.0, center.1 - radius - 1.0, radius * 2.0 + 2.0, radius * 2.0 + 2.0) else { return };
     let stride = fb.width() as usize;
@@ -319,7 +402,13 @@ fn draw_ring(fb: &mut Framebuffer, area: (u32, u32, u32, u32), center: (f32, f32
             if turn < 0.0 {
                 turn += 1.0;
             }
-            let c = if turn <= frac { fill } else { back };
+            let c = if turn > frac {
+                back
+            } else if let (Some((c1, c2, phase)), true) = (grad, frac > 0.0) {
+                gradient_at(c1, c2, turn / frac, phase)
+            } else {
+                fill
+            };
             let i = (yy as usize * stride + xx as usize) * 3;
             mix(&mut px[i..i + 3], c, cover);
         }
@@ -426,5 +515,36 @@ mod tests {
         assert!(fb2.as_bytes_mut().iter().any(|b| *b != 0), "the error is written on the screen");
         free::set_dir(None);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_gradient_runs_from_one_colour_to_the_other_and_a_moving_one_travels() {
+        let (a, b) = ((0, 0, 0), (200, 100, 50));
+        assert_eq!(gradient_at(a, b, 0.0, -1.0), a);
+        assert_eq!(gradient_at(a, b, 1.0, -1.0), b);
+        assert_eq!(gradient_at(a, b, 0.5, -1.0), (100, 50, 25));
+        // moving: the wave is at its first colour where the phase is, and at the other half a loop away
+        assert_eq!(gradient_at(a, b, 0.25, 0.25), a);
+        assert_eq!(gradient_at(a, b, 0.75, 0.25), b);
+        assert_ne!(gradient_at(a, b, 0.25, 0.0), gradient_at(a, b, 0.25, 0.25));
+    }
+
+    #[test]
+    fn a_bar_with_a_gradient_is_painted_in_two_colours_and_flows_with_the_clock() {
+        let f = free::parse("bar x=0 y=0 w=100 h=100 value=cpu max=37 color=#000000 color2=#FF0000 flow=4").unwrap();
+        let e = &f.elements[0];
+        let draw = |secs: f64| {
+            set_preview_secs(Some(secs));
+            let mut screen = FreeScreen::new();
+            let mut fb = Framebuffer::new(trofeo_lcd::Resolution::new(400, 40));
+            screen.element(&mut fb, (0, 0, 400, 40), e, &data(), ColorMode::Default, (255, 255, 255));
+            (0..400).map(|x| fb.as_bytes_mut()[(20 * 400 + x) * 3]).collect::<Vec<u8>>()
+        };
+        let a = draw(0.0);
+        assert!(a.iter().any(|r| *r > 200) && a.iter().any(|r| *r < 50), "both colours are there");
+        assert_ne!(a, draw(1.0), "a second later the pattern has moved");
+        assert_eq!(a, draw(4.0), "after a loop it is the same");
+        set_preview_secs(None);
+        assert!(free::parse("bar x=0 y=0 value=cpu color2=#FF0000 flow=4").unwrap().animated());
     }
 }

@@ -213,6 +213,23 @@ pub const LAYOUT_NAMES: &[(&str, &str, &str)] = &[
     ("terminal", "Terminal: green-on-black readout, one line per device", "Terminale: lettura verde su nero, una riga per dispositivo"),
     ("horizon", "Horizon: a huge clock and three thin lines of load", "Orizzonte: un orologio enorme e tre sottili linee di carico"),
     ("ribbon", "Ribbon: clock, song and weather above a ribbon of readings", "Nastro: orologio, brano e meteo sopra un nastro di valori"),
+    ("atelier", "Atelier: ivory and gold, a light clock and three fine rings", "Atelier: avorio e oro, un orologio sottile e tre anelli fini"),
+    ("noir", "Noir: white on black, a huge light clock and four quiet figures", "Noir: bianco su nero, un orologio enorme e sottile e quattro cifre sobrie"),
+    ("pearl", "Pearl: cool and airy, the clock inside a fine ring", "Pearl: fresco e leggero, l'orologio dentro un anello sottile"),
+    ("volt", "Volt: four loud colour blocks with giant figures", "Volt: quattro blocchi di colore con cifre giganti"),
+    ("blaze", "Blaze: CPU in orange and GPU in magenta, giant figures", "Blaze: CPU arancione e GPU magenta, cifre giganti"),
+    ("studio", "Studio: paper and ink, a light spec sheet with one orange accent", "Studio: carta e inchiostro, una scheda tecnica chiara con un accento arancione"),
+    ("board", "Board: an airport departure board, every number on a tile", "Board: un tabellone da aeroporto, ogni numero su una tessera"),
+    ("mineral", "Mineral: dark cards in sage green, a ring and six readings on each", "Mineral: card scure verde salvia, un anello e sei valori su ognuna"),
+    ("cluster", "Cluster: a car instrument cluster, three big dials", "Cluster: un quadro strumenti d'auto, tre grandi quadranti"),
+    ("swiss", "Swiss: a red block with a huge clock, big black figures on a light page", "Swiss: blocco rosso con orologio enorme, grandi cifre nere su pagina chiara"),
+    ("dusk", "Dusk: a sunset gradient, a giant light clock, flowing bars", "Dusk: sfumatura da tramonto, orologio gigante leggero, barre che scorrono"),
+    ("aurora", "Aurora: glass cards on a teal-to-violet gradient, flowing bars", "Aurora: card di vetro su sfumatura teal-viola, barre che scorrono"),
+    ("carbon", "Carbon: matte black with amber lines, four columns, flowing bars", "Carbon: nero opaco con filetti ambra, quattro colonne, barre che scorrono"),
+    ("eclipse", "Eclipse: three concentric rings that shimmer, the clock in the middle", "Eclipse: tre anelli concentrici che brillano, orologio al centro"),
+    ("ledger", "Ledger: a navy ledger with gold lines, one row per device, flowing bars", "Ledger: registro blu con filetti oro, una riga per dispositivo, barre che scorrono"),
+    ("haiku", "Haiku: a huge light clock, lots of space, one line of readings", "Haiku: orologio enorme e leggero, molto spazio, una riga di valori"),
+    ("peach", "Peach: a warm light page with three gradient rings", "Peach: pagina chiara e calda con tre anelli sfumati"),
 ];
 
 /// The tiles of `tiles = ...`: (name, English, Italian).
@@ -509,6 +526,9 @@ pub fn fields() -> Vec<Field> {
     add(Field::new("layout_spectrum", "layouts", "Spectrum over the panels", "Spettro sopra i pannelli", Bool)
         .def("false")
         .help("Show the audio spectrum on top of a panel while music plays", "Mostra lo spettro sopra un pannello mentre suona la musica"));
+    add(Field::new("bar_animation", "layouts", "Moving gradients on the bars and rings of free layouts", "Gradienti in movimento su barre e anelli dei layout liberi", Bool)
+        .def("true")
+        .help("Some screens (free layouts) have bars whose gradient flows; false keeps them still", "Alcune schermate (layout liberi) hanno barre con gradiente che scorre; false le tiene ferme"));
     add(Field::new("layout_hold_on_music", "layouts", "Stay on the first screen while music plays", "Resta sulla prima schermata mentre suona la musica", Bool).def("false"));
     add(Field::new("gaming_screen", "gaming", "Switch to the gaming screen by itself", "Passa da solo alla schermata gaming", Bool)
         .def("true")
