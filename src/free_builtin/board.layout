@@ -1,0 +1,82 @@
+# board — an airport departure board: every number on a tile.
+rect  x=0 y=0 w=100 h=100 color=#08090A opacity=92
+text  x=2 y=9 anchor=l size=5 font=smooth weight=medium color=#F2F2F2 text="TIME"
+rect  x=1 y=3 w=0.25 h=19 color=#6CD4A0
+text  x=12.5 y=4 size=2 font=smooth weight=medium color=#8C9490 text="LOCAL TIME"
+rect  x=12.5 y=9.5 w=33.4 h=13 color=#202225
+rect  x=12.5 y=15.85 w=33.4 h=0.3 color=#08090A
+text  x=29.2 y=16.0 anchor=c w=32.4 size=8 font=pixel color=#F2F2F2 text="{time_short}"
+text  x=47.9 y=4 size=2 font=smooth weight=medium color=#8C9490 text="WEATHER"
+rect  x=47.9 y=9.5 w=16 h=13 color=#202225
+rect  x=47.9 y=15.85 w=16 h=0.3 color=#08090A
+text  x=55.9 y=16.0 anchor=c w=15 size=6 font=pixel color=#F2F2F2 text="{weather_temp}"
+text  x=65.3 y=4 size=2 font=smooth weight=medium color=#8C9490 text="NOW PLAYING"
+rect  x=65.3 y=9.5 w=33 h=13 color=#202225
+rect  x=65.3 y=15.85 w=33 h=0.3 color=#08090A
+text  x=81.8 y=16.0 anchor=c w=32 size=4 font=pixel color=#F2F2F2 text="{song}"
+rect  x=1 y=28 w=0.25 h=20 color=#6CD4A0
+text  x=2 y=39 anchor=l size=4 font=smooth weight=medium color=#F2F2F2 text="CPU"
+text  x=12.5 y=29 size=2 font=smooth weight=medium color=#8C9490 text="TEMP"
+rect  x=12.5 y=34.5 w=16 h=13 color=#202225
+rect  x=12.5 y=40.85 w=16 h=0.3 color=#08090A
+text  x=20.5 y=41.0 anchor=c w=15 size=6 font=pixel color=#F2F2F2 text="{cpu_temp}"
+text  x=29.9 y=29 size=2 font=smooth weight=medium color=#8C9490 text="LOAD"
+rect  x=29.9 y=34.5 w=16 h=13 color=#202225
+rect  x=29.9 y=40.85 w=16 h=0.3 color=#08090A
+text  x=37.9 y=41.0 anchor=c w=15 size=6 font=pixel color=#F2F2F2 text="{cpu}"
+text  x=47.3 y=29 size=2 font=smooth weight=medium color=#8C9490 text="POWER"
+rect  x=47.3 y=34.5 w=16 h=13 color=#202225
+rect  x=47.3 y=40.85 w=16 h=0.3 color=#08090A
+text  x=55.3 y=41.0 anchor=c w=15 size=6 font=pixel color=#F2F2F2 text="{cpu_power}"
+text  x=64.69999999999999 y=29 size=2 font=smooth weight=medium color=#8C9490 text="CLOCK"
+rect  x=64.69999999999999 y=34.5 w=16 h=13 color=#202225
+rect  x=64.69999999999999 y=40.85 w=16 h=0.3 color=#08090A
+text  x=72.69999999999999 y=41.0 anchor=c w=15 size=6 font=pixel color=#F2F2F2 text="{cpu_freq}"
+text  x=82.1 y=29 size=2 font=smooth weight=medium color=#8C9490 text="NETWORK"
+rect  x=82.1 y=34.5 w=16 h=13 color=#202225
+rect  x=82.1 y=40.85 w=16 h=0.3 color=#08090A
+text  x=90.1 y=41.0 anchor=c w=15 size=6 font=pixel color=#F2F2F2 text="{net_down}"
+rect  x=1 y=52 w=0.25 h=20 color=#6CD4A0
+text  x=2 y=63 anchor=l size=4 font=smooth weight=medium color=#F2F2F2 text="GPU"
+text  x=12.5 y=53 size=2 font=smooth weight=medium color=#8C9490 text="TEMP"
+rect  x=12.5 y=58.5 w=16 h=13 color=#202225
+rect  x=12.5 y=64.85 w=16 h=0.3 color=#08090A
+text  x=20.5 y=65.0 anchor=c w=15 size=6 font=pixel color=#F2F2F2 text="{gpu_temp}"
+text  x=29.9 y=53 size=2 font=smooth weight=medium color=#8C9490 text="HOTSPOT"
+rect  x=29.9 y=58.5 w=16 h=13 color=#202225
+rect  x=29.9 y=64.85 w=16 h=0.3 color=#08090A
+text  x=37.9 y=65.0 anchor=c w=15 size=6 font=pixel color=#F2F2F2 text="{gpu_hotspot}"
+text  x=47.3 y=53 size=2 font=smooth weight=medium color=#8C9490 text="LOAD"
+rect  x=47.3 y=58.5 w=16 h=13 color=#202225
+rect  x=47.3 y=64.85 w=16 h=0.3 color=#08090A
+text  x=55.3 y=65.0 anchor=c w=15 size=6 font=pixel color=#F2F2F2 text="{gpu}"
+text  x=64.69999999999999 y=53 size=2 font=smooth weight=medium color=#8C9490 text="POWER"
+rect  x=64.69999999999999 y=58.5 w=16 h=13 color=#202225
+rect  x=64.69999999999999 y=64.85 w=16 h=0.3 color=#08090A
+text  x=72.69999999999999 y=65.0 anchor=c w=15 size=6 font=pixel color=#F2F2F2 text="{gpu_power}"
+text  x=82.1 y=53 size=2 font=smooth weight=medium color=#8C9490 text="FPS"
+rect  x=82.1 y=58.5 w=16 h=13 color=#202225
+rect  x=82.1 y=64.85 w=16 h=0.3 color=#08090A
+text  x=90.1 y=65.0 anchor=c w=15 size=6 font=pixel color=#6CD4A0 text="{fps}"
+rect  x=1 y=76 w=0.25 h=20 color=#6CD4A0
+text  x=2 y=87 anchor=l size=4 font=smooth weight=medium color=#F2F2F2 text="MEMORY"
+text  x=12.5 y=77 size=2 font=smooth weight=medium color=#8C9490 text="USED"
+rect  x=12.5 y=82.5 w=16 h=13 color=#202225
+rect  x=12.5 y=88.85 w=16 h=0.3 color=#08090A
+text  x=20.5 y=89.0 anchor=c w=15 size=6 font=pixel color=#F2F2F2 text="{ram_used}"
+text  x=29.9 y=77 size=2 font=smooth weight=medium color=#8C9490 text="FREE"
+rect  x=29.9 y=82.5 w=16 h=13 color=#202225
+rect  x=29.9 y=88.85 w=16 h=0.3 color=#08090A
+text  x=37.9 y=89.0 anchor=c w=15 size=6 font=pixel color=#F2F2F2 text="{ram_free}"
+text  x=47.3 y=77 size=2 font=smooth weight=medium color=#8C9490 text="LOAD"
+rect  x=47.3 y=82.5 w=16 h=13 color=#202225
+rect  x=47.3 y=88.85 w=16 h=0.3 color=#08090A
+text  x=55.3 y=89.0 anchor=c w=15 size=6 font=pixel color=#F2F2F2 text="{ram}"
+text  x=64.69999999999999 y=77 size=2 font=smooth weight=medium color=#8C9490 text="DISK READ"
+rect  x=64.69999999999999 y=82.5 w=16 h=13 color=#202225
+rect  x=64.69999999999999 y=88.85 w=16 h=0.3 color=#08090A
+text  x=72.69999999999999 y=89.0 anchor=c w=15 size=6 font=pixel color=#F2F2F2 text="{disk_read}"
+text  x=82.1 y=77 size=2 font=smooth weight=medium color=#8C9490 text="DISK WRITE"
+rect  x=82.1 y=82.5 w=16 h=13 color=#202225
+rect  x=82.1 y=88.85 w=16 h=0.3 color=#08090A
+text  x=90.1 y=89.0 anchor=c w=15 size=6 font=pixel color=#F2F2F2 text="{disk_write}"

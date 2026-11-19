@@ -1,0 +1,14 @@
+# haiku
+rect  x=0 y=0 w=100 h=100 color=#0F1013 opacity=66
+text  x=6 y=40 anchor=l size=29 font=smooth weight=light color=#F5F5F4 text="{time_short}"
+text  x=6.5 y=70 anchor=tl size=3 font=smooth weight=regular color=#8D9097 text="{date}"
+text  x=97 y=7 anchor=r w=30 size=4 font=smooth weight=light color=#B9BBC0 text="{weather_temp}   {weather_city}"
+rect  x=6.5 y=84 w=87 h=0.25 color=#2B2D33 opacity=100
+rect  x=6.5 y=89.2 w=0.7 h=2.6 color=#E8C07A opacity=100
+text  x=7.9 y=90.5 anchor=l w=15 size=4 font=smooth weight=light color=#C9CACE text="CPU  {cpu}"
+rect  x=24 y=89.2 w=0.7 h=2.6 color=#E8C07A opacity=100
+text  x=25.4 y=90.5 anchor=l w=15 size=4 font=smooth weight=light color=#C9CACE text="GPU  {gpu}"
+rect  x=41.5 y=89.2 w=0.7 h=2.6 color=#E8C07A opacity=100
+text  x=42.9 y=90.5 anchor=l w=15 size=4 font=smooth weight=light color=#C9CACE text="MEMORY  {ram}"
+rect  x=59 y=89.2 w=0.7 h=2.6 color=#E8C07A opacity=100
+text  x=60.4 y=90.5 anchor=l w=15 size=4 font=smooth weight=light color=#C9CACE text="TEMP  {cpu_temp}"

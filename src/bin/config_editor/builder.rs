@@ -645,6 +645,34 @@ impl Builder {
                         ui.end_row();
                     }
                     if matches!(e.kind, Kind::Text | Kind::Ring) {
+                        ui.label(tr(l, "Font", "Carattere"));
+                        ui.horizontal(|ui| {
+                            let name = |f: Option<trofeo_lcd::TextFont>| match f {
+                                None => tr(l, "as configured", "come da configurazione"),
+                                Some(trofeo_lcd::TextFont::Pixel) => "pixel",
+                                Some(trofeo_lcd::TextFont::Smooth) => "smooth",
+                            };
+                            egui::ComboBox::from_id_salt("builder_font").selected_text(name(e.font)).width(120.0).show_ui(ui, |ui| {
+                                for f in [None, Some(trofeo_lcd::TextFont::Pixel), Some(trofeo_lcd::TextFont::Smooth)] {
+                                    ui.selectable_value(&mut e.font, f, name(f));
+                                }
+                            });
+                            if e.font == Some(trofeo_lcd::TextFont::Smooth) {
+                                use trofeo_lcd::smooth_font::Weight;
+                                let wname = |w: Option<Weight>| match w {
+                                    None => tr(l, "auto", "auto"),
+                                    Some(Weight::Light) => "light",
+                                    Some(Weight::Regular) => "regular",
+                                    Some(Weight::Medium) => "medium",
+                                };
+                                egui::ComboBox::from_id_salt("builder_weight").selected_text(wname(e.weight)).width(80.0).show_ui(ui, |ui| {
+                                    for w in [None, Some(Weight::Light), Some(Weight::Regular), Some(Weight::Medium)] {
+                                        ui.selectable_value(&mut e.weight, w, wname(w));
+                                    }
+                                });
+                            }
+                        });
+                        ui.end_row();
                         ui.label(if e.kind == Kind::Text { tr(l, "Text", "Testo") } else { tr(l, "Text inside", "Testo dentro") });
                         ui.vertical(|ui| {
                             ui.add(egui::TextEdit::singleline(&mut e.text).desired_width(150.0));
@@ -702,6 +730,25 @@ impl Builder {
                         ui.label(tr(l, "Track color", "Colore del fondo"));
                         color_button(ui, &mut e.back);
                         ui.end_row();
+                        ui.label(tr(l, "Gradient to", "Gradiente verso"));
+                        ui.horizontal(|ui| {
+                            let mut on = e.color2.is_some();
+                            if ui.checkbox(&mut on, "").on_hover_text(tr(l, "The filled part runs from the color to this one", "La parte piena va dal colore a questo")).changed() {
+                                e.color2 = on.then(|| e.color.unwrap_or((0x00, 0xD4, 0xFF)));
+                                if !on {
+                                    e.flow = 0.0;
+                                }
+                            }
+                            if let Some(c) = e.color2.as_mut() {
+                                color_button(ui, c);
+                            }
+                        });
+                        ui.end_row();
+                        if e.color2.is_some() {
+                            ui.label(tr(l, "Flow (s per loop)", "Scorrimento (s a giro)"));
+                            ui.add(egui::Slider::new(&mut e.flow, 0.0..=20.0).custom_formatter(|v, _| if v <= 0.0 { "still".to_string() } else { format!("{v:.1}") }));
+                            ui.end_row();
+                        }
                     }
                     if e.kind == Kind::Ring {
                         ui.label(tr(l, "Thickness", "Spessore"));

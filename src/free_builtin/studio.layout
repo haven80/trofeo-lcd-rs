@@ -1,0 +1,52 @@
+# studio — paper and ink: a light spec sheet, black figures, one orange accent.
+rect  x=0 y=0 w=100 h=100 color=#ECE9E1 opacity=96
+text  x=2.2 y=5 size=3 font=smooth weight=medium color=#6B6A66 text="{date}"
+text  x=2 y=31 anchor=l size=18 font=smooth weight=light color=#111111 text="{time_short}"
+rect  x=2.2 y=50 w=23 h=0.25 color=#BDB8AD
+text  x=2.2 y=62 anchor=l size=9 font=smooth weight=light color=#111111 text="{weather_temp}"
+text  x=11 y=62 anchor=l size=3 font=smooth weight=regular color=#6B6A66 text="{weather_city}"
+rect  x=2.2 y=73 w=23 h=0.25 color=#BDB8AD
+text  x=2.2 y=79 size=2 font=smooth weight=medium color=#FF6A1A text="NOW PLAYING"
+text  x=2.2 y=85 w=23 size=4 font=smooth weight=medium color=#111111 text="{song}"
+rect  x=28 y=3 w=22 h=0.7 color=#111111
+rect  x=28 y=7 w=0.5 h=2.2 color=#FF6A1A
+text  x=29 y=8.2 anchor=l size=3 font=smooth weight=medium color=#111111 text="CPU"
+text  x=28 y=30 anchor=l size=20 font=smooth weight=light color=#111111 text="{cpu_temp}"
+rect  x=28 y=48 w=22 h=0.25 color=#BDB8AD
+text  x=28.0 y=51 size=2 font=smooth weight=medium color=#6B6A66 text="LOAD"
+text  x=28.0 y=57 w=10.5 size=7 font=smooth weight=regular color=#111111 text="{cpu}"
+text  x=39.2 y=51 size=2 font=smooth weight=medium color=#6B6A66 text="POWER"
+text  x=39.2 y=57 w=10.5 size=7 font=smooth weight=regular color=#111111 text="{cpu_power}"
+text  x=28.0 y=75 size=2 font=smooth weight=medium color=#6B6A66 text="CLOCK"
+text  x=28.0 y=81 w=10.5 size=7 font=smooth weight=regular color=#111111 text="{cpu_freq}"
+text  x=39.2 y=75 size=2 font=smooth weight=medium color=#6B6A66 text="NETWORK"
+text  x=39.2 y=81 w=10.5 size=7 font=smooth weight=regular color=#111111 text="{net_down}"
+rect  x=28 y=73 w=22 h=0.25 color=#BDB8AD
+rect  x=52.5 y=3 w=22 h=0.7 color=#111111
+rect  x=52.5 y=7 w=0.5 h=2.2 color=#FF6A1A
+text  x=53.5 y=8.2 anchor=l size=3 font=smooth weight=medium color=#111111 text="GPU"
+text  x=52.5 y=30 anchor=l size=20 font=smooth weight=light color=#111111 text="{gpu_temp}"
+rect  x=52.5 y=48 w=22 h=0.25 color=#BDB8AD
+text  x=52.5 y=51 size=2 font=smooth weight=medium color=#6B6A66 text="LOAD"
+text  x=52.5 y=57 w=10.5 size=7 font=smooth weight=regular color=#111111 text="{gpu}"
+text  x=63.7 y=51 size=2 font=smooth weight=medium color=#6B6A66 text="POWER"
+text  x=63.7 y=57 w=10.5 size=7 font=smooth weight=regular color=#111111 text="{gpu_power}"
+text  x=52.5 y=75 size=2 font=smooth weight=medium color=#6B6A66 text="HOTSPOT"
+text  x=52.5 y=81 w=10.5 size=7 font=smooth weight=regular color=#111111 text="{gpu_hotspot}"
+text  x=63.7 y=75 size=2 font=smooth weight=medium color=#6B6A66 text="FPS"
+text  x=63.7 y=81 w=10.5 size=7 font=smooth weight=regular color=#111111 text="{fps}"
+rect  x=52.5 y=73 w=22 h=0.25 color=#BDB8AD
+rect  x=77 y=3 w=22 h=0.7 color=#111111
+rect  x=77 y=7 w=0.5 h=2.2 color=#FF6A1A
+text  x=78 y=8.2 anchor=l size=3 font=smooth weight=medium color=#111111 text="MEMORY"
+text  x=77 y=30 anchor=l size=20 font=smooth weight=light color=#111111 text="{ram}"
+rect  x=77 y=48 w=22 h=0.25 color=#BDB8AD
+text  x=77.0 y=51 size=2 font=smooth weight=medium color=#6B6A66 text="USED"
+text  x=77.0 y=57 w=10.5 size=7 font=smooth weight=regular color=#111111 text="{ram_used}"
+text  x=88.2 y=51 size=2 font=smooth weight=medium color=#6B6A66 text="FREE"
+text  x=88.2 y=57 w=10.5 size=7 font=smooth weight=regular color=#111111 text="{ram_free}"
+text  x=77.0 y=75 size=2 font=smooth weight=medium color=#6B6A66 text="DISK READ"
+text  x=77.0 y=81 w=10.5 size=7 font=smooth weight=regular color=#111111 text="{disk_read}"
+text  x=88.2 y=75 size=2 font=smooth weight=medium color=#6B6A66 text="DISK WRITE"
+text  x=88.2 y=81 w=10.5 size=7 font=smooth weight=regular color=#111111 text="{disk_write}"
+rect  x=77 y=73 w=22 h=0.25 color=#BDB8AD

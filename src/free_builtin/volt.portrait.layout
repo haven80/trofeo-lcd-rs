@@ -1,0 +1,17 @@
+# volt (portrait)
+rect  x=3 y=1.5 w=94 h=23 color=#C6FF00 opacity=95
+text  x=8 y=5 size=3 font=smooth weight=medium color=#000000 text="CPU"
+text  x=7 y=14 anchor=l size=18 font=smooth weight=medium color=#000000 text="{cpu}"
+bar   x=8 y=20 w=84 h=1.5 value=cpu color=#000000 back=#8DB300
+rect  x=3 y=26 w=94 h=23 color=#FFFFFF opacity=95
+text  x=8 y=29.5 size=3 font=smooth weight=medium color=#000000 text="GPU"
+text  x=7 y=38.5 anchor=l size=18 font=smooth weight=medium color=#000000 text="{gpu}"
+bar   x=8 y=44.5 w=84 h=1.5 value=gpu color=#000000 back=#BDBDBD
+rect  x=3 y=50.5 w=94 h=23 color=#FF2E93 opacity=95
+text  x=8 y=54 size=3 font=smooth weight=medium color=#000000 text="TEMP"
+text  x=7 y=63 anchor=l size=18 font=smooth weight=medium color=#000000 text="{cpu_temp}"
+bar   x=8 y=69 w=84 h=1.5 value=cpu_temp color=#000000 back=#B3206A
+rect  x=3 y=75 w=94 h=23 color=#00E5FF opacity=95
+text  x=8 y=78.5 size=3 font=smooth weight=medium color=#000000 text="TIME"
+text  x=7 y=88 anchor=l size=16 font=smooth weight=medium color=#000000 text="{time_short}"
+text  x=8 y=94 size=3 font=smooth weight=medium color=#000000 text="{date}"

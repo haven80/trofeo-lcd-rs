@@ -1,0 +1,29 @@
+# carbon (portrait)
+rect  x=0 y=0 w=100 h=100 color=#0A0B0D opacity=80
+text  x=6 y=3.5 anchor=l size=12 font=smooth weight=light color=#F4F4F5 text="{time_short}"
+text  x=6 y=8 anchor=tl w=88 size=3 font=smooth weight=regular color=#8B8F96 text="{date}"
+text  x=94 y=5.5 anchor=r size=6 font=smooth weight=light color=#C9CBCF text="{weather_temp}"
+rect  x=5 y=11.5 w=90 h=0.15 color=#2A2C31 opacity=100
+rect  x=5 y=14.0 w=90 h=0.2 color=#FFB000 opacity=100
+text  x=5 y=14.8 anchor=tl size=3 font=smooth weight=medium color=#FFB000 text="PROCESSOR"
+text  x=5 y=22.0 anchor=l w=90 size=12 font=smooth weight=light color=#F4F4F5 text="{cpu_temp}"
+bar   x=5 y=27.8 w=90 h=0.55 value=cpu color=#FFB000 color2=#FF4D00 flow=3 back=#23252A
+text  x=5 y=29.0 anchor=tl w=90 size=4 font=smooth weight=regular color=#C9CBCF text="{cpu}   {cpu_power}"
+text  x=5 y=31.8 anchor=tl w=90 size=3 font=smooth weight=regular color=#8B8F96 text="{cpu_freq}"
+rect  x=5 y=35.5 w=90 h=0.2 color=#FFB000 opacity=100
+text  x=5 y=36.3 anchor=tl size=3 font=smooth weight=medium color=#FFB000 text="GRAPHICS"
+text  x=5 y=43.5 anchor=l w=90 size=12 font=smooth weight=light color=#F4F4F5 text="{gpu_temp}"
+bar   x=5 y=49.3 w=90 h=0.55 value=gpu color=#FFB000 color2=#FF4D00 flow=3 back=#23252A
+text  x=5 y=50.5 anchor=tl w=90 size=4 font=smooth weight=regular color=#C9CBCF text="{gpu}   {gpu_power}"
+text  x=5 y=53.3 anchor=tl w=90 size=3 font=smooth weight=regular color=#8B8F96 text="{fps} FPS"
+rect  x=5 y=57.0 w=90 h=0.2 color=#FFB000 opacity=100
+text  x=5 y=57.8 anchor=tl size=3 font=smooth weight=medium color=#FFB000 text="MEMORY"
+text  x=5 y=65.0 anchor=l w=90 size=12 font=smooth weight=light color=#F4F4F5 text="{ram}"
+bar   x=5 y=70.8 w=90 h=0.55 value=ram color=#FFB000 color2=#FF4D00 flow=3 back=#23252A
+text  x=5 y=72.0 anchor=tl w=90 size=4 font=smooth weight=regular color=#C9CBCF text="{ram_used}   {ram_free}"
+text  x=5 y=74.8 anchor=tl w=90 size=3 font=smooth weight=regular color=#8B8F96 text="{ram_total}"
+rect  x=5 y=78.5 w=90 h=0.2 color=#FFB000 opacity=100
+text  x=5 y=79.3 anchor=tl size=3 font=smooth weight=medium color=#FFB000 text="NETWORK"
+text  x=5 y=86.5 anchor=l w=90 size=8 font=smooth weight=light color=#F4F4F5 text="{net_down}"
+text  x=5 y=93.5 anchor=tl w=90 size=4 font=smooth weight=regular color=#C9CBCF text="{net_up}"
+text  x=5 y=96.3 anchor=tl w=90 size=3 font=smooth weight=regular color=#8B8F96 text="{disk_read}   {disk_write}"

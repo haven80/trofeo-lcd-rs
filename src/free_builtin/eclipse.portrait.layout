@@ -1,0 +1,19 @@
+# eclipse (portrait)
+rect  x=0 y=0 w=100 h=100 color=#0B0D14 opacity=72
+ring  x=50 y=21 anchor=c w=80 h=19.2 value=cpu color=#F5C26B color2=#FFF1CC flow=6 back=#1C2030 thick=3.2 hot=90 hot_color=#FF6B6B
+ring  x=50 y=21 anchor=c w=62 h=14.9 value=gpu color=#F28BA8 color2=#FFD3E0 flow=7 back=#1C2030 thick=4 hot=90 hot_color=#FF6B6B
+ring  x=50 y=21 anchor=c w=44 h=10.6 value=ram text="{time_short}" font=smooth weight=light color=#7CD6E0 color2=#D3F6FA flow=8 back=#1C2030 thick=5.5 hot=90 hot_color=#FF6B6B
+text  x=50 y=2 anchor=t size=3 font=smooth weight=medium color=#8F95A8 text="{date}"
+text  x=50 y=41.5 anchor=t size=4 font=smooth weight=light color=#C7CBD8 text="{weather_temp}   {weather_city}"
+rect  x=6 y=47.6 w=0.8 h=12.5 color=#F5C26B opacity=100
+text  x=9 y=47 anchor=tl size=3 font=smooth weight=medium color=#F5C26B text="PROCESSOR"
+text  x=9 y=53 anchor=l size=10 font=smooth weight=light color=#F4F5F8 text="{cpu}"
+text  x=9 y=58 anchor=tl w=84 size=3 font=smooth weight=regular color=#C7CBD8 text="{cpu_temp}  {cpu_power}  {cpu_freq}"
+rect  x=6 y=66.6 w=0.8 h=12.5 color=#F28BA8 opacity=100
+text  x=9 y=66 anchor=tl size=3 font=smooth weight=medium color=#F28BA8 text="GRAPHICS"
+text  x=9 y=72 anchor=l size=10 font=smooth weight=light color=#F4F5F8 text="{gpu}"
+text  x=9 y=77 anchor=tl w=84 size=3 font=smooth weight=regular color=#C7CBD8 text="{gpu_temp}  {gpu_power}  {fps} FPS"
+rect  x=6 y=85.6 w=0.8 h=12.5 color=#7CD6E0 opacity=100
+text  x=9 y=85 anchor=tl size=3 font=smooth weight=medium color=#7CD6E0 text="MEMORY"
+text  x=9 y=91 anchor=l size=10 font=smooth weight=light color=#F4F5F8 text="{ram}"
+text  x=9 y=96 anchor=tl w=84 size=3 font=smooth weight=regular color=#C7CBD8 text="{ram_used} of {ram_total}"

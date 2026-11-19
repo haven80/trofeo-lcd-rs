@@ -1,0 +1,21 @@
+# ledger (portrait)
+rect  x=0 y=0 w=100 h=100 color=#0D1321 opacity=82
+text  x=50 y=4 anchor=c size=14 font=smooth weight=light color=#F1EBDD text="{time_short}"
+text  x=50 y=9.5 anchor=t size=3 font=smooth weight=regular color=#9AA3B8 text="{date}"
+text  x=50 y=12.5 anchor=t size=4 font=smooth weight=light color=#D6D0C0 text="{weather_temp}   {weather_city}"
+rect  x=5 y=17 w=90 h=0.15 color=#C8A96A opacity=100
+text  x=5 y=20 anchor=tl size=3 font=smooth weight=medium color=#C8A96A text="CPU"
+text  x=95 y=23 anchor=tr w=90 size=4.5 font=smooth weight=light color=#F1EBDD text="{cpu}  {cpu_temp}  {cpu_power}"
+bar   x=5 y=29 w=90 h=0.5 value=cpu color=#C8A96A color2=#F7E7B4 flow=4 back=#1F2840
+text  x=5 y=36 anchor=tl size=3 font=smooth weight=medium color=#C8A96A text="GPU"
+text  x=95 y=39 anchor=tr w=90 size=4.5 font=smooth weight=light color=#F1EBDD text="{gpu}  {gpu_temp}  {gpu_power}"
+bar   x=5 y=45 w=90 h=0.5 value=gpu color=#C8A96A color2=#F7E7B4 flow=4 back=#1F2840
+text  x=5 y=52 anchor=tl size=3 font=smooth weight=medium color=#C8A96A text="MEMORY"
+text  x=95 y=55 anchor=tr w=90 size=4.5 font=smooth weight=light color=#F1EBDD text="{ram}  {ram_used} / {ram_total}"
+bar   x=5 y=61 w=90 h=0.5 value=ram color=#C8A96A color2=#F7E7B4 flow=4 back=#1F2840
+text  x=5 y=68 anchor=tl size=3 font=smooth weight=medium color=#C8A96A text="NETWORK"
+text  x=95 y=71 anchor=tr w=90 size=4.5 font=smooth weight=light color=#F1EBDD text="DN {net_down}  UP {net_up}"
+rect  x=5 y=77.2 w=90 h=0.12 color=#1F2840 opacity=100
+text  x=5 y=84 anchor=tl size=3 font=smooth weight=medium color=#C8A96A text="DISK"
+text  x=95 y=87 anchor=tr w=90 size=4.5 font=smooth weight=light color=#F1EBDD text="R {disk_read}  W {disk_write}"
+rect  x=5 y=93.2 w=90 h=0.12 color=#1F2840 opacity=100

@@ -1,0 +1,57 @@
+# mineral (portrait)
+rect  x=0 y=0 w=100 h=100 color=#0E1012 opacity=70
+rect  x=3 y=1 w=94 h=10.5 color=#1B1E21
+text  x=6 y=5 anchor=l size=13 font=smooth weight=light color=#F3F5F4 text="{time_short}"
+text  x=6 y=8.6 w=60 size=3 font=smooth weight=regular color=#8C9490 text="{date}"
+rect  x=3 y=12.5 w=94 h=7 color=#1B1E21
+text  x=6 y=14.8 anchor=l size=5 font=smooth weight=light color=#F3F5F4 text="{weather_temp}"
+text  x=28 y=14.8 anchor=l w=66 size=3 font=smooth weight=regular color=#8C9490 text="{weather_city}"
+text  x=6 y=17.2 w=88 size=3 font=smooth weight=regular color=#F3F5F4 text="{song}"
+rect  x=3 y=20.5 w=94 h=25.6 color=#1B1E21
+text  x=7 y=23.1 anchor=l size=3 font=smooth weight=medium color=#A9CDB8 text="CPU"
+text  x=6.5 y=28.5 anchor=l size=12 font=smooth weight=light color=#F3F5F4 text="{cpu_temp}"
+ring  x=80 y=28.5 anchor=c w=30 h=7.2 value=cpu text="{cpu}" font=smooth weight=light color=#A9CDB8 back=#2E3336 thick=9 hot=90 hot_color=#E58A7B
+text  x=7 y=34.7 size=2 font=smooth weight=medium color=#8C9490 text="POWER"
+text  x=7 y=36.900000000000006 w=27 size=5 font=smooth weight=regular color=#F3F5F4 text="{cpu_power}"
+text  x=37 y=34.7 size=2 font=smooth weight=medium color=#8C9490 text="CLOCK"
+text  x=37 y=36.900000000000006 w=27 size=5 font=smooth weight=regular color=#F3F5F4 text="{cpu_freq}"
+text  x=67 y=34.7 size=2 font=smooth weight=medium color=#8C9490 text="FPS"
+text  x=67 y=36.900000000000006 w=27 size=5 font=smooth weight=regular color=#F3F5F4 text="{fps}"
+text  x=7 y=40.1 size=2 font=smooth weight=medium color=#8C9490 text="DOWN"
+text  x=7 y=42.300000000000004 w=27 size=5 font=smooth weight=regular color=#F3F5F4 text="{net_down}"
+text  x=37 y=40.1 size=2 font=smooth weight=medium color=#8C9490 text="UP"
+text  x=37 y=42.300000000000004 w=27 size=5 font=smooth weight=regular color=#F3F5F4 text="{net_up}"
+text  x=67 y=40.1 size=2 font=smooth weight=medium color=#8C9490 text="DISK READ"
+text  x=67 y=42.300000000000004 w=27 size=5 font=smooth weight=regular color=#F3F5F4 text="{disk_read}"
+rect  x=3 y=46.9 w=94 h=25.6 color=#1B1E21
+text  x=7 y=49.5 anchor=l size=3 font=smooth weight=medium color=#A9CDB8 text="GPU"
+text  x=6.5 y=54.9 anchor=l size=12 font=smooth weight=light color=#F3F5F4 text="{gpu_temp}"
+ring  x=80 y=54.9 anchor=c w=30 h=7.2 value=gpu text="{gpu}" font=smooth weight=light color=#A9CDB8 back=#2E3336 thick=9 hot=90 hot_color=#E58A7B
+text  x=7 y=61.099999999999994 size=2 font=smooth weight=medium color=#8C9490 text="POWER"
+text  x=7 y=63.3 w=27 size=5 font=smooth weight=regular color=#F3F5F4 text="{gpu_power}"
+text  x=37 y=61.099999999999994 size=2 font=smooth weight=medium color=#8C9490 text="HOTSPOT"
+text  x=37 y=63.3 w=27 size=5 font=smooth weight=regular color=#F3F5F4 text="{gpu_hotspot}"
+text  x=67 y=61.099999999999994 size=2 font=smooth weight=medium color=#8C9490 text="FPS"
+text  x=67 y=63.3 w=27 size=5 font=smooth weight=regular color=#F3F5F4 text="{fps}"
+text  x=7 y=66.5 size=2 font=smooth weight=medium color=#8C9490 text="CPU TEMP"
+text  x=7 y=68.7 w=27 size=5 font=smooth weight=regular color=#F3F5F4 text="{cpu_temp}"
+text  x=37 y=66.5 size=2 font=smooth weight=medium color=#8C9490 text="RAM"
+text  x=37 y=68.7 w=27 size=5 font=smooth weight=regular color=#F3F5F4 text="{ram}"
+text  x=67 y=66.5 size=2 font=smooth weight=medium color=#8C9490 text="DISK WRITE"
+text  x=67 y=68.7 w=27 size=5 font=smooth weight=regular color=#F3F5F4 text="{disk_write}"
+rect  x=3 y=73.3 w=94 h=25.6 color=#1B1E21
+text  x=7 y=75.89999999999999 anchor=l size=3 font=smooth weight=medium color=#A9CDB8 text="MEMORY"
+text  x=6.5 y=81.3 anchor=l size=8 font=smooth weight=light color=#F3F5F4 text="{ram_used}"
+ring  x=80 y=81.3 anchor=c w=30 h=7.2 value=ram text="{ram}" font=smooth weight=light color=#A9CDB8 back=#2E3336 thick=9 hot=90 hot_color=#E58A7B
+text  x=7 y=87.5 size=2 font=smooth weight=medium color=#8C9490 text="FREE"
+text  x=7 y=89.7 w=27 size=5 font=smooth weight=regular color=#F3F5F4 text="{ram_free}"
+text  x=37 y=87.5 size=2 font=smooth weight=medium color=#8C9490 text="TOTAL"
+text  x=37 y=89.7 w=27 size=5 font=smooth weight=regular color=#F3F5F4 text="{ram_total}"
+text  x=67 y=87.5 size=2 font=smooth weight=medium color=#8C9490 text="READ"
+text  x=67 y=89.7 w=27 size=5 font=smooth weight=regular color=#F3F5F4 text="{disk_read}"
+text  x=7 y=92.9 size=2 font=smooth weight=medium color=#8C9490 text="WRITE"
+text  x=7 y=95.10000000000001 w=27 size=5 font=smooth weight=regular color=#F3F5F4 text="{disk_write}"
+text  x=37 y=92.9 size=2 font=smooth weight=medium color=#8C9490 text="DOWN"
+text  x=37 y=95.10000000000001 w=27 size=5 font=smooth weight=regular color=#F3F5F4 text="{net_down}"
+text  x=67 y=92.9 size=2 font=smooth weight=medium color=#8C9490 text="UP"
+text  x=67 y=95.10000000000001 w=27 size=5 font=smooth weight=regular color=#F3F5F4 text="{net_up}"

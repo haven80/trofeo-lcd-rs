@@ -1,0 +1,16 @@
+# noir (portrait)
+rect  x=0 y=0 w=100 h=100 color=#000000 opacity=78
+text  x=50 y=12 anchor=c size=22 font=smooth weight=light color=#FFFFFF text="{time_short}"
+text  x=50 y=19 anchor=c size=3 font=smooth weight=light color=#8A8A93 text="{date}"
+rect  x=10 y=25 w=80 h=0.1 color=#E5484D
+text  x=10 y=35 anchor=l size=3 font=smooth weight=regular color=#8A8A93 text="CPU"
+text  x=90 y=35 anchor=r size=13 font=smooth weight=light color=#FFFFFF text="{cpu}"
+rect  x=10 y=43 w=80 h=0.1 color=#2A2A30
+text  x=10 y=53 anchor=l size=3 font=smooth weight=regular color=#8A8A93 text="GPU"
+text  x=90 y=53 anchor=r size=13 font=smooth weight=light color=#FFFFFF text="{gpu}"
+rect  x=10 y=61 w=80 h=0.1 color=#2A2A30
+text  x=10 y=71 anchor=l size=3 font=smooth weight=regular color=#8A8A93 text="TEMPERATURE"
+text  x=90 y=71 anchor=r size=13 font=smooth weight=light color=#FFFFFF text="{cpu_temp}"
+rect  x=10 y=79 w=80 h=0.1 color=#2A2A30
+text  x=10 y=89 anchor=l size=3 font=smooth weight=regular color=#8A8A93 text="MEMORY"
+text  x=90 y=89 anchor=r size=13 font=smooth weight=light color=#FFFFFF text="{ram}"

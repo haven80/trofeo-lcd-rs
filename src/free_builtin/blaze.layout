@@ -1,0 +1,12 @@
+# blaze — two halves on fire: the CPU in orange, the GPU in magenta, the clock between them.
+rect  x=0 y=0 w=50 h=100 color=#FF5A1F opacity=82
+rect  x=50 y=0 w=50 h=100 color=#C2188F opacity=82
+text  x=4 y=14 size=4 font=smooth weight=medium color=#FFFFFF text="CPU"
+text  x=4 y=52 anchor=l size=27 font=smooth weight=medium color=#FFFFFF text="{cpu}"
+text  x=4 y=80 size=5 font=smooth weight=regular color=#FFE3D6 text="{cpu_temp}   {cpu_freq}"
+bar   x=4 y=92 w=40 h=3 value=cpu color=#FFFFFF back=#C2410C
+text  x=54 y=14 size=4 font=smooth weight=medium color=#FFFFFF text="GPU"
+text  x=54 y=52 anchor=l size=27 font=smooth weight=medium color=#FFFFFF text="{gpu}"
+text  x=54 y=80 size=5 font=smooth weight=regular color=#FFD9F0 text="{gpu_temp}   {gpu_power}"
+bar   x=54 y=92 w=42 h=3 value=gpu color=#FFFFFF back=#8A0F67
+text  x=96 y=6 anchor=tr size=5 font=smooth weight=medium color=#FFFFFF text="{time_short}"

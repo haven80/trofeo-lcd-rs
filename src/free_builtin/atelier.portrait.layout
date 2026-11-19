@@ -1,0 +1,13 @@
+# atelier (portrait)
+rect  x=0 y=0 w=100 h=100 color=#0C0C0F opacity=72
+rect  x=6 y=3 w=88 h=0.1 color=#B79A5B
+rect  x=6 y=97 w=88 h=0.1 color=#B79A5B
+text  x=50 y=13 anchor=c size=22 font=smooth weight=light color=#F4EDE0 text="{time_short}"
+text  x=50 y=20 anchor=c size=3 font=smooth weight=light color=#CBB27A text="{date}"
+rect  x=30 y=25 w=40 h=0.1 color=#B79A5B opacity=70
+ring  x=50 y=40 w=65 h=15.6 anchor=c value=cpu text="{cpu}" font=smooth weight=light color=#E9D7A8 back=#2A2A30 thick=3.5 hot=90 hot_color=#E5484D
+text  x=50 y=51 anchor=c size=3 font=smooth weight=regular color=#B79A5B text="PROCESSOR"
+ring  x=50 y=62 w=65 h=15.6 anchor=c value=gpu text="{gpu}" font=smooth weight=light color=#E9D7A8 back=#2A2A30 thick=3.5 hot=90 hot_color=#E5484D
+text  x=50 y=73 anchor=c size=3 font=smooth weight=regular color=#B79A5B text="GRAPHICS"
+ring  x=50 y=84 w=65 h=15.6 anchor=c value=ram text="{ram}" font=smooth weight=light color=#E9D7A8 back=#2A2A30 thick=3.5 hot=90 hot_color=#E5484D
+text  x=50 y=95 anchor=c size=3 font=smooth weight=regular color=#B79A5B text="MEMORY"

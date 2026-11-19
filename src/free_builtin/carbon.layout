@@ -1,0 +1,33 @@
+# carbon
+rect  x=0 y=0 w=100 h=100 color=#0A0B0D opacity=80
+text  x=3 y=9 anchor=l size=8 font=smooth weight=light color=#F4F4F5 text="{time_short}"
+text  x=16 y=9 anchor=l size=3 font=smooth weight=regular color=#8B8F96 text="{date}"
+text  x=97 y=9 anchor=r w=30 size=4 font=smooth weight=light color=#C9CBCF text="{weather_temp}   {weather_city}"
+rect  x=3 y=19 w=94 h=0.3 color=#2A2C31 opacity=100
+rect  x=3 y=25 w=21.5 h=0.4 color=#FFB000 opacity=100
+text  x=3 y=29 anchor=tl size=3 font=smooth weight=medium color=#FFB000 text="PROCESSOR"
+text  x=3 y=52 anchor=l w=21 size=11 font=smooth weight=light color=#F4F4F5 text="{cpu_temp}"
+bar   x=3 y=68 w=21.5 h=1.6 value=cpu color=#FFB000 color2=#FF4D00 flow=3 back=#23252A
+text  x=3 y=74 anchor=tl w=10 size=4 font=smooth weight=regular color=#C9CBCF text="{cpu}"
+text  x=14 y=74 anchor=tl w=10 size=4 font=smooth weight=regular color=#C9CBCF text="{cpu_power}"
+text  x=3 y=86 anchor=tl w=21 size=4 font=smooth weight=regular color=#8B8F96 text="{cpu_freq}"
+rect  x=27 y=25 w=21.5 h=0.4 color=#FFB000 opacity=100
+text  x=27 y=29 anchor=tl size=3 font=smooth weight=medium color=#FFB000 text="GRAPHICS"
+text  x=27 y=52 anchor=l w=21 size=11 font=smooth weight=light color=#F4F4F5 text="{gpu_temp}"
+bar   x=27 y=68 w=21.5 h=1.6 value=gpu color=#FFB000 color2=#FF4D00 flow=3 back=#23252A
+text  x=27 y=74 anchor=tl w=10 size=4 font=smooth weight=regular color=#C9CBCF text="{gpu}"
+text  x=38 y=74 anchor=tl w=10 size=4 font=smooth weight=regular color=#C9CBCF text="{gpu_power}"
+text  x=27 y=86 anchor=tl w=21 size=4 font=smooth weight=regular color=#8B8F96 text="{fps} FPS"
+rect  x=51 y=25 w=21.5 h=0.4 color=#FFB000 opacity=100
+text  x=51 y=29 anchor=tl size=3 font=smooth weight=medium color=#FFB000 text="MEMORY"
+text  x=51 y=52 anchor=l w=21 size=11 font=smooth weight=light color=#F4F4F5 text="{ram}"
+bar   x=51 y=68 w=21.5 h=1.6 value=ram color=#FFB000 color2=#FF4D00 flow=3 back=#23252A
+text  x=51 y=74 anchor=tl w=10 size=4 font=smooth weight=regular color=#C9CBCF text="{ram_used}"
+text  x=62 y=74 anchor=tl w=10 size=4 font=smooth weight=regular color=#C9CBCF text="{ram_free}"
+text  x=51 y=86 anchor=tl w=21 size=4 font=smooth weight=regular color=#8B8F96 text="{ram_total}"
+rect  x=75 y=25 w=21.5 h=0.4 color=#FFB000 opacity=100
+text  x=75 y=29 anchor=tl size=3 font=smooth weight=medium color=#FFB000 text="NETWORK"
+text  x=75 y=52 anchor=l w=21 size=9 font=smooth weight=light color=#F4F4F5 text="{net_down}"
+text  x=75 y=74 anchor=tl w=10 size=4 font=smooth weight=regular color=#C9CBCF text="{net_up}"
+text  x=86 y=74 anchor=tl w=10 size=4 font=smooth weight=regular color=#C9CBCF text="{disk_read}"
+text  x=75 y=86 anchor=tl w=21 size=4 font=smooth weight=regular color=#8B8F96 text="{disk_write}"

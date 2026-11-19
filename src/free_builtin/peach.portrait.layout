@@ -1,0 +1,15 @@
+# peach (portrait)
+rect  x=0 y=0 w=100 h=100 color=#FFF4EC opacity=97
+text  x=50 y=2.5 anchor=t size=3 font=smooth weight=medium color=#8A7A74 text="{date}"
+text  x=50 y=10 anchor=c size=17 font=smooth weight=light color=#2B2B33 text="{time_short}"
+text  x=50 y=16.5 anchor=t size=5 font=smooth weight=light color=#2B2B33 text="{weather_temp}   {weather_city}"
+text  x=50 y=20.5 anchor=t w=88 size=3 font=smooth weight=regular color=#8A7A74 text="{song}"
+ring  x=50 y=36 anchor=c w=70 h=16.8 value=cpu text="{cpu}" font=smooth weight=light color=#FF7A59 color2=#FFB199 back=#F0DFD2 thick=7 hot=92 hot_color=#E5484D
+text  x=50 y=45.2 anchor=c size=3 font=smooth weight=medium color=#FF7A59 text="PROCESSOR"
+text  x=50 y=47.2 anchor=c w=80 size=3 font=smooth weight=regular color=#6B5E58 text="{cpu_temp}  ·  {cpu_power}"
+ring  x=50 y=58 anchor=c w=70 h=16.8 value=gpu text="{gpu}" font=smooth weight=light color=#2FB5A8 color2=#8EE3D9 back=#F0DFD2 thick=7 hot=92 hot_color=#E5484D
+text  x=50 y=67.2 anchor=c size=3 font=smooth weight=medium color=#2FB5A8 text="GRAPHICS"
+text  x=50 y=69.2 anchor=c w=80 size=3 font=smooth weight=regular color=#6B5E58 text="{gpu_temp}  ·  {gpu_power}"
+ring  x=50 y=80 anchor=c w=70 h=16.8 value=ram text="{ram}" font=smooth weight=light color=#2B3A67 color2=#6F86C9 back=#F0DFD2 thick=7 hot=92 hot_color=#E5484D
+text  x=50 y=89.2 anchor=c size=3 font=smooth weight=medium color=#2B3A67 text="MEMORY"
+text  x=50 y=91.2 anchor=c w=80 size=3 font=smooth weight=regular color=#6B5E58 text="{ram_used} / {ram_total}"

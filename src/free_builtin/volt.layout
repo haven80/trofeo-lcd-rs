@@ -1,0 +1,17 @@
+# volt — four loud blocks, giant black figures.
+rect  x=1 y=5 w=23.5 h=90 color=#C6FF00 opacity=95
+text  x=3 y=12 size=4 font=smooth weight=medium color=#000000 text="CPU"
+text  x=2.5 y=52 anchor=l size=18 font=smooth weight=medium color=#000000 text="{cpu}"
+bar   x=3 y=82 w=19.5 h=7 value=cpu color=#000000 back=#8DB300
+rect  x=26 y=5 w=23.5 h=90 color=#FFFFFF opacity=95
+text  x=27.5 y=12 size=4 font=smooth weight=medium color=#000000 text="GPU"
+text  x=27 y=52 anchor=l size=18 font=smooth weight=medium color=#000000 text="{gpu}"
+bar   x=27.5 y=82 w=19.5 h=7 value=gpu color=#000000 back=#BDBDBD
+rect  x=51 y=5 w=23.5 h=90 color=#FF2E93 opacity=95
+text  x=52.5 y=12 size=4 font=smooth weight=medium color=#000000 text="TEMP"
+text  x=52 y=52 anchor=l size=18 font=smooth weight=medium color=#000000 text="{cpu_temp}"
+bar   x=52.5 y=82 w=19.5 h=7 value=cpu_temp color=#000000 back=#B3206A
+rect  x=76 y=5 w=23 h=90 color=#00E5FF opacity=95
+text  x=77.5 y=12 size=4 font=smooth weight=medium color=#000000 text="TIME"
+text  x=77.5 y=48 anchor=l size=12 font=smooth weight=medium color=#000000 text="{time_short}"
+text  x=77.5 y=76 w=20 size=3 font=smooth weight=medium color=#000000 text="{date}"

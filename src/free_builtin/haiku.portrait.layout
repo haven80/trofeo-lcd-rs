@@ -1,0 +1,14 @@
+# haiku (portrait)
+rect  x=0 y=0 w=100 h=100 color=#0F1013 opacity=66
+text  x=50 y=6 anchor=t size=3 font=smooth weight=light color=#B9BBC0 text="{weather_temp}   {weather_city}"
+text  x=50 y=34 anchor=c size=22 font=smooth weight=light color=#F5F5F4 text="{time_short}"
+text  x=50 y=43 anchor=t size=3 font=smooth weight=regular color=#8D9097 text="{date}"
+rect  x=6 y=72 w=88 h=0.12 color=#2B2D33 opacity=100
+rect  x=6 y=75.65 w=1.4 h=0.7 color=#E8C07A opacity=100
+text  x=9 y=76.0 anchor=l w=80 size=5 font=smooth weight=light color=#C9CACE text="CPU   {cpu}"
+rect  x=6 y=80.85000000000001 w=1.4 h=0.7 color=#E8C07A opacity=100
+text  x=9 y=81.2 anchor=l w=80 size=5 font=smooth weight=light color=#C9CACE text="GPU   {gpu}"
+rect  x=6 y=86.05000000000001 w=1.4 h=0.7 color=#E8C07A opacity=100
+text  x=9 y=86.4 anchor=l w=80 size=5 font=smooth weight=light color=#C9CACE text="MEMORY   {ram}"
+rect  x=6 y=91.25 w=1.4 h=0.7 color=#E8C07A opacity=100
+text  x=9 y=91.6 anchor=l w=80 size=5 font=smooth weight=light color=#C9CACE text="TEMP   {cpu_temp}"

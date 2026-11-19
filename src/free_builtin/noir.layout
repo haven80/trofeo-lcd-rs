@@ -1,0 +1,13 @@
+# noir — white on black, one accent: a huge light clock, a hairline, four quiet figures.
+rect  x=0 y=0 w=100 h=100 color=#000000 opacity=78
+text  x=50 y=27 anchor=c size=26 font=smooth weight=light color=#FFFFFF text="{time_short}"
+text  x=50 y=57 anchor=c size=4 font=smooth weight=light color=#8A8A93 text="{date}"
+rect  x=10 y=66 w=80 h=0.35 color=#E5484D
+text  x=17 y=79 anchor=c size=10 font=smooth weight=light color=#FFFFFF text="{cpu}"
+text  x=17 y=93 anchor=c size=3 font=smooth weight=regular color=#8A8A93 text="CPU"
+text  x=39 y=79 anchor=c size=10 font=smooth weight=light color=#FFFFFF text="{gpu}"
+text  x=39 y=93 anchor=c size=3 font=smooth weight=regular color=#8A8A93 text="GPU"
+text  x=61 y=79 anchor=c size=10 font=smooth weight=light color=#FFFFFF text="{cpu_temp}"
+text  x=61 y=93 anchor=c size=3 font=smooth weight=regular color=#8A8A93 text="TEMPERATURE"
+text  x=83 y=79 anchor=c size=10 font=smooth weight=light color=#FFFFFF text="{ram}"
+text  x=83 y=93 anchor=c size=3 font=smooth weight=regular color=#8A8A93 text="MEMORY"

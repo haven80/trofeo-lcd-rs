@@ -1,0 +1,10 @@
+# pearl — cool and airy: the clock inside a fine ring, a ring on each side.
+rect  x=0 y=0 w=100 h=100 color=#0A0F1A opacity=55
+ring  x=50 y=46 w=18.7 h=79 anchor=c value=cpu text="{time_short}" font=smooth weight=light color=#CFE3FF back=#222B3D thick=2.6
+text  x=50 y=96 anchor=b size=3 font=smooth weight=light color=#8FA6C8 text="{date}"
+ring  x=19 y=50 w=12 h=50 anchor=c value=gpu text="{gpu}" font=smooth weight=light color=#BFD4F2 back=#222B3D thick=4 hot=90 hot_color=#FF8A8A
+text  x=19 y=84 anchor=c size=3 font=smooth weight=regular color=#8FA6C8 text="GRAPHICS"
+ring  x=81 y=50 w=12 h=50 anchor=c value=ram text="{ram}" font=smooth weight=light color=#BFD4F2 back=#222B3D thick=4 hot=90 hot_color=#FF8A8A
+text  x=81 y=84 anchor=c size=3 font=smooth weight=regular color=#8FA6C8 text="MEMORY"
+text  x=4 y=9 size=4 font=smooth weight=light color=#BFD4F2 text="{cpu_temp}  {gpu_temp}"
+text  x=96 y=9 anchor=tr size=4 font=smooth weight=light color=#BFD4F2 text="{weather_temp}  {weather_city}"

@@ -1,0 +1,13 @@
+# blaze (portrait)
+rect  x=0 y=0 w=100 h=50 color=#FF5A1F opacity=82
+rect  x=0 y=50 w=100 h=50 color=#C2188F opacity=82
+text  x=7 y=5 size=4 font=smooth weight=medium color=#FFFFFF text="CPU"
+text  x=6 y=24 anchor=l size=22 font=smooth weight=medium color=#FFFFFF text="{cpu}"
+text  x=7 y=37 size=4 font=smooth weight=regular color=#FFE3D6 text="{cpu_temp}   {cpu_freq}"
+bar   x=7 y=45 w=86 h=1.2 value=cpu color=#FFFFFF back=#C2410C
+text  x=7 y=55 size=4 font=smooth weight=medium color=#FFFFFF text="GPU"
+text  x=6 y=74 anchor=l size=22 font=smooth weight=medium color=#FFFFFF text="{gpu}"
+text  x=7 y=87 size=4 font=smooth weight=regular color=#FFD9F0 text="{gpu_temp}   {gpu_power}"
+bar   x=7 y=95 w=86 h=1.2 value=gpu color=#FFFFFF back=#8A0F67
+rect  x=50 y=50 w=44 h=5.5 anchor=c color=#000000 opacity=85
+text  x=50 y=50 anchor=c size=6 font=smooth weight=medium color=#FFFFFF text="{time_short}"

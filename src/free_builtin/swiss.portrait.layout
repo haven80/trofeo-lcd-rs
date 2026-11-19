@@ -1,0 +1,22 @@
+# swiss (portrait)
+rect  x=0 y=0 w=100 h=100 color=#F3F1EC opacity=97
+rect  x=0 y=0 w=100 h=34 color=#E30613 opacity=100
+text  x=5 y=1.8 anchor=tl size=3 font=smooth weight=medium color=#FFFFFF text="{date}"
+text  x=4.5 y=12.5 anchor=l size=20 font=smooth weight=light color=#FFFFFF text="{time_short}"
+text  x=5 y=21.5 anchor=tl size=4 font=smooth weight=light color=#FFFFFF text="{weather_temp}   {weather_city}"
+text  x=5 y=28 anchor=tl w=90 size=3 font=smooth weight=regular color=#FFE0E2 text="{song}"
+rect  x=5 y=37 w=90 h=0.25 color=#111111 opacity=100
+text  x=5 y=37.8 anchor=tl size=3 font=smooth weight=medium color=#111111 text="CPU"
+text  x=5 y=44 anchor=l size=15 font=smooth weight=light color=#111111 text="{cpu}"
+text  x=95 y=44 anchor=r w=36 size=4 font=smooth weight=regular color=#5A5852 text="{cpu_temp}  {cpu_power}"
+bar   x=5 y=53.5 w=90 h=0.6 value=cpu color=#E30613 back=#D9D5CC
+rect  x=5 y=58 w=90 h=0.25 color=#111111 opacity=100
+text  x=5 y=58.8 anchor=tl size=3 font=smooth weight=medium color=#111111 text="GPU"
+text  x=5 y=65 anchor=l size=15 font=smooth weight=light color=#111111 text="{gpu}"
+text  x=95 y=65 anchor=r w=36 size=4 font=smooth weight=regular color=#5A5852 text="{gpu_temp}  {gpu_power}"
+bar   x=5 y=74.5 w=90 h=0.6 value=gpu color=#E30613 back=#D9D5CC
+rect  x=5 y=79 w=90 h=0.25 color=#111111 opacity=100
+text  x=5 y=79.8 anchor=tl size=3 font=smooth weight=medium color=#111111 text="MEMORY"
+text  x=5 y=86 anchor=l size=15 font=smooth weight=light color=#111111 text="{ram}"
+text  x=95 y=86 anchor=r w=36 size=4 font=smooth weight=regular color=#5A5852 text="{ram_used} / {ram_total}"
+bar   x=5 y=95.5 w=90 h=0.6 value=ram color=#E30613 back=#D9D5CC

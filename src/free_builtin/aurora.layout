@@ -1,0 +1,78 @@
+# aurora
+rect  x=0.000 y=0 w=2.080 h=100 color=#05202B opacity=92
+rect  x=2.000 y=0 w=2.080 h=100 color=#05232E opacity=92
+rect  x=4.000 y=0 w=2.080 h=100 color=#062530 opacity=92
+rect  x=6.000 y=0 w=2.080 h=100 color=#062833 opacity=92
+rect  x=8.000 y=0 w=2.080 h=100 color=#062A36 opacity=92
+rect  x=10.000 y=0 w=2.080 h=100 color=#072D38 opacity=92
+rect  x=12.000 y=0 w=2.080 h=100 color=#072F3B opacity=92
+rect  x=14.000 y=0 w=2.080 h=100 color=#08323E opacity=92
+rect  x=16.000 y=0 w=2.080 h=100 color=#083541 opacity=92
+rect  x=18.000 y=0 w=2.080 h=100 color=#083743 opacity=92
+rect  x=20.000 y=0 w=2.080 h=100 color=#093A46 opacity=92
+rect  x=22.000 y=0 w=2.080 h=100 color=#093C49 opacity=92
+rect  x=24.000 y=0 w=2.080 h=100 color=#093F4B opacity=92
+rect  x=26.000 y=0 w=2.080 h=100 color=#0A414E opacity=92
+rect  x=28.000 y=0 w=2.080 h=100 color=#0A4451 opacity=92
+rect  x=30.000 y=0 w=2.080 h=100 color=#0B4753 opacity=92
+rect  x=32.000 y=0 w=2.080 h=100 color=#0B4956 opacity=92
+rect  x=34.000 y=0 w=2.080 h=100 color=#0C4958 opacity=92
+rect  x=36.000 y=0 w=2.080 h=100 color=#0D485B opacity=92
+rect  x=38.000 y=0 w=2.080 h=100 color=#0E475D opacity=92
+rect  x=40.000 y=0 w=2.080 h=100 color=#0F465F opacity=92
+rect  x=42.000 y=0 w=2.080 h=100 color=#104561 opacity=92
+rect  x=44.000 y=0 w=2.080 h=100 color=#114463 opacity=92
+rect  x=46.000 y=0 w=2.080 h=100 color=#124365 opacity=92
+rect  x=48.000 y=0 w=2.080 h=100 color=#134267 opacity=92
+rect  x=50.000 y=0 w=2.080 h=100 color=#13426A opacity=92
+rect  x=52.000 y=0 w=2.080 h=100 color=#14416C opacity=92
+rect  x=54.000 y=0 w=2.080 h=100 color=#15406E opacity=92
+rect  x=56.000 y=0 w=2.080 h=100 color=#163F70 opacity=92
+rect  x=58.000 y=0 w=2.080 h=100 color=#173E72 opacity=92
+rect  x=60.000 y=0 w=2.080 h=100 color=#183D74 opacity=92
+rect  x=62.000 y=0 w=2.080 h=100 color=#193C76 opacity=92
+rect  x=64.000 y=0 w=2.080 h=100 color=#1A3B79 opacity=92
+rect  x=66.000 y=0 w=2.080 h=100 color=#1C397A opacity=92
+rect  x=68.000 y=0 w=2.080 h=100 color=#1E3879 opacity=92
+rect  x=70.000 y=0 w=2.080 h=100 color=#203679 opacity=92
+rect  x=72.000 y=0 w=2.080 h=100 color=#223478 opacity=92
+rect  x=74.000 y=0 w=2.080 h=100 color=#233278 opacity=92
+rect  x=76.000 y=0 w=2.080 h=100 color=#253077 opacity=92
+rect  x=78.000 y=0 w=2.080 h=100 color=#272E77 opacity=92
+rect  x=80.000 y=0 w=2.080 h=100 color=#292D76 opacity=92
+rect  x=82.000 y=0 w=2.080 h=100 color=#2B2B75 opacity=92
+rect  x=84.000 y=0 w=2.080 h=100 color=#2D2975 opacity=92
+rect  x=86.000 y=0 w=2.080 h=100 color=#2F2774 opacity=92
+rect  x=88.000 y=0 w=2.080 h=100 color=#312574 opacity=92
+rect  x=90.000 y=0 w=2.080 h=100 color=#332373 opacity=92
+rect  x=92.000 y=0 w=2.080 h=100 color=#352273 opacity=92
+rect  x=94.000 y=0 w=2.080 h=100 color=#372072 opacity=92
+rect  x=96.000 y=0 w=2.080 h=100 color=#391E72 opacity=92
+rect  x=98.000 y=0 w=2.080 h=100 color=#3B1C71 opacity=92
+text  x=3.2 y=8 anchor=tl size=3 font=smooth weight=medium color=#9FD8E0 text="{date}"
+text  x=3 y=34 anchor=l size=15 font=smooth weight=light color=#F2FBFF text="{time_short}"
+rect  x=3.2 y=52 w=18 h=0.35 color=#7CF0C9 opacity=70
+text  x=3.2 y=60 anchor=l size=8 font=smooth weight=light color=#F2FBFF text="{weather_temp}"
+text  x=3.2 y=70 anchor=tl size=3 font=smooth weight=regular color=#9FD8E0 text="{weather_city}"
+text  x=3.2 y=86 anchor=tl w=22 size=3 font=smooth weight=regular color=#C9F2F5 text="{song}"
+rect  x=27 y=8 w=22.5 h=84 color=#FFFFFF opacity=9
+rect  x=27 y=8 w=22.5 h=0.4 color=#FFFFFF opacity=35
+rect  x=27 y=91.6 w=22.5 h=0.4 color=#FFFFFF opacity=18
+text  x=28.8 y=14 anchor=tl size=3 font=smooth weight=medium color=#7CF0C9 text="PROCESSOR"
+text  x=28.8 y=46 anchor=l size=14 font=smooth weight=light color=#F2FBFF text="{cpu}"
+text  x=28.8 y=70 anchor=tl w=19 size=4 font=smooth weight=regular color=#C9F2F5 text="{cpu_temp}  ·  {cpu_power}"
+bar   x=28.8 y=82 w=18.9 h=2 value=cpu color=#7CF0C9 color2=#5AA8FF flow=4 back=#16384A
+rect  x=51 y=8 w=22.5 h=84 color=#FFFFFF opacity=9
+rect  x=51 y=8 w=22.5 h=0.4 color=#FFFFFF opacity=35
+rect  x=51 y=91.6 w=22.5 h=0.4 color=#FFFFFF opacity=18
+text  x=52.8 y=14 anchor=tl size=3 font=smooth weight=medium color=#7CF0C9 text="GRAPHICS"
+text  x=52.8 y=46 anchor=l size=14 font=smooth weight=light color=#F2FBFF text="{gpu}"
+text  x=52.8 y=70 anchor=tl w=19 size=4 font=smooth weight=regular color=#C9F2F5 text="{gpu_temp}  ·  {gpu_power}"
+bar   x=52.8 y=82 w=18.9 h=2 value=gpu color=#7CF0C9 color2=#5AA8FF flow=4 back=#16384A
+rect  x=75 y=8 w=22.5 h=84 color=#FFFFFF opacity=9
+rect  x=75 y=8 w=22.5 h=0.4 color=#FFFFFF opacity=35
+rect  x=75 y=91.6 w=22.5 h=0.4 color=#FFFFFF opacity=18
+text  x=76.8 y=14 anchor=tl size=3 font=smooth weight=medium color=#7CF0C9 text="MEMORY"
+text  x=76.8 y=46 anchor=l size=14 font=smooth weight=light color=#F2FBFF text="{ram}"
+text  x=76.8 y=70 anchor=tl w=19 size=4 font=smooth weight=regular color=#C9F2F5 text="{ram_used} / {ram_total}"
+bar   x=76.8 y=82 w=18.9 h=2 value=ram color=#7CF0C9 color2=#5AA8FF flow=4 back=#16384A

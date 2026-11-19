@@ -1,0 +1,68 @@
+# dusk
+rect  x=0.000 y=0 w=2.080 h=100 color=#1E0B3F opacity=90
+rect  x=2.000 y=0 w=2.080 h=100 color=#230D44 opacity=90
+rect  x=4.000 y=0 w=2.080 h=100 color=#280E48 opacity=90
+rect  x=6.000 y=0 w=2.080 h=100 color=#2D104D opacity=90
+rect  x=8.000 y=0 w=2.080 h=100 color=#321252 opacity=90
+rect  x=10.000 y=0 w=2.080 h=100 color=#371357 opacity=90
+rect  x=12.000 y=0 w=2.080 h=100 color=#3C155B opacity=90
+rect  x=14.000 y=0 w=2.080 h=100 color=#411660 opacity=90
+rect  x=16.000 y=0 w=2.080 h=100 color=#461865 opacity=90
+rect  x=18.000 y=0 w=2.080 h=100 color=#4B1A6A opacity=90
+rect  x=20.000 y=0 w=2.080 h=100 color=#501B6E opacity=90
+rect  x=22.000 y=0 w=2.080 h=100 color=#551D73 opacity=90
+rect  x=24.000 y=0 w=2.080 h=100 color=#5A1F78 opacity=90
+rect  x=26.000 y=0 w=2.080 h=100 color=#612178 opacity=90
+rect  x=28.000 y=0 w=2.080 h=100 color=#682478 opacity=90
+rect  x=30.000 y=0 w=2.080 h=100 color=#702677 opacity=90
+rect  x=32.000 y=0 w=2.080 h=100 color=#772976 opacity=90
+rect  x=34.000 y=0 w=2.080 h=100 color=#7F2C75 opacity=90
+rect  x=36.000 y=0 w=2.080 h=100 color=#862E74 opacity=90
+rect  x=38.000 y=0 w=2.080 h=100 color=#8E3173 opacity=90
+rect  x=40.000 y=0 w=2.080 h=100 color=#953473 opacity=90
+rect  x=42.000 y=0 w=2.080 h=100 color=#9D3772 opacity=90
+rect  x=44.000 y=0 w=2.080 h=100 color=#A43971 opacity=90
+rect  x=46.000 y=0 w=2.080 h=100 color=#AC3C70 opacity=90
+rect  x=48.000 y=0 w=2.080 h=100 color=#B33F6F opacity=90
+rect  x=50.000 y=0 w=2.080 h=100 color=#B9426E opacity=90
+rect  x=52.000 y=0 w=2.080 h=100 color=#BE476B opacity=90
+rect  x=54.000 y=0 w=2.080 h=100 color=#C34B68 opacity=90
+rect  x=56.000 y=0 w=2.080 h=100 color=#C85065 opacity=90
+rect  x=58.000 y=0 w=2.080 h=100 color=#CD5562 opacity=90
+rect  x=60.000 y=0 w=2.080 h=100 color=#D1595F opacity=90
+rect  x=62.000 y=0 w=2.080 h=100 color=#D65E5C opacity=90
+rect  x=64.000 y=0 w=2.080 h=100 color=#DB6259 opacity=90
+rect  x=66.000 y=0 w=2.080 h=100 color=#E06756 opacity=90
+rect  x=68.000 y=0 w=2.080 h=100 color=#E56B53 opacity=90
+rect  x=70.000 y=0 w=2.080 h=100 color=#EA7050 opacity=90
+rect  x=72.000 y=0 w=2.080 h=100 color=#EE754D opacity=90
+rect  x=74.000 y=0 w=2.080 h=100 color=#F2794C opacity=90
+rect  x=76.000 y=0 w=2.080 h=100 color=#F37E4E opacity=90
+rect  x=78.000 y=0 w=2.080 h=100 color=#F48351 opacity=90
+rect  x=80.000 y=0 w=2.080 h=100 color=#F58853 opacity=90
+rect  x=82.000 y=0 w=2.080 h=100 color=#F78C56 opacity=90
+rect  x=84.000 y=0 w=2.080 h=100 color=#F89159 opacity=90
+rect  x=86.000 y=0 w=2.080 h=100 color=#F9965B opacity=90
+rect  x=88.000 y=0 w=2.080 h=100 color=#FA9B5E opacity=90
+rect  x=90.000 y=0 w=2.080 h=100 color=#FBA061 opacity=90
+rect  x=92.000 y=0 w=2.080 h=100 color=#FCA563 opacity=90
+rect  x=94.000 y=0 w=2.080 h=100 color=#FDA966 opacity=90
+rect  x=96.000 y=0 w=2.080 h=100 color=#FEAE68 opacity=90
+rect  x=98.000 y=0 w=2.080 h=100 color=#FFB36B opacity=90
+text  x=5 y=7 anchor=tl size=3 font=smooth weight=medium color=#FFD9E6 text="{date}"
+text  x=4.5 y=36 anchor=l size=23 font=smooth weight=light color=#FFF6F0 text="{time_short}"
+text  x=5 y=60 anchor=tl size=3 font=smooth weight=regular color=#FFD9E6 text="{weather_city}"
+text  x=5 y=68 anchor=tl size=9 font=smooth weight=light color=#FFF6F0 text="{weather_temp}"
+text  x=5 y=87 anchor=tl w=38 size=3 font=smooth weight=regular color=#FFE9DD text="{song}"
+text  x=58 y=10 anchor=tl size=3 font=smooth weight=medium color=#FFD9E6 text="PROCESSOR"
+text  x=58 y=23.5 anchor=l size=9 font=smooth weight=light color=#FFF6F0 text="{cpu}"
+text  x=96 y=21.5 anchor=r w=22 size=4 font=smooth weight=regular color=#FFE9DD text="{cpu_temp}  ·  {cpu_power}"
+bar   x=58 y=29.5 w=38 h=1.4 value=cpu color=#FFFFFF color2=#8A3FA0 flow=3 back=#3B1650
+text  x=58 y=38 anchor=tl size=3 font=smooth weight=medium color=#FFD9E6 text="GRAPHICS"
+text  x=58 y=51.5 anchor=l size=9 font=smooth weight=light color=#FFF6F0 text="{gpu}"
+text  x=96 y=49.5 anchor=r w=22 size=4 font=smooth weight=regular color=#FFE9DD text="{gpu_temp}  ·  {gpu_power}"
+bar   x=58 y=57.5 w=38 h=1.4 value=gpu color=#FFFFFF color2=#8A3FA0 flow=3 back=#3B1650
+text  x=58 y=66 anchor=tl size=3 font=smooth weight=medium color=#FFD9E6 text="MEMORY"
+text  x=58 y=79.5 anchor=l size=9 font=smooth weight=light color=#FFF6F0 text="{ram}"
+text  x=96 y=77.5 anchor=r w=22 size=4 font=smooth weight=regular color=#FFE9DD text="{ram_used} of {ram_total}"
+bar   x=58 y=85.5 w=38 h=1.4 value=ram color=#FFFFFF color2=#8A3FA0 flow=3 back=#3B1650

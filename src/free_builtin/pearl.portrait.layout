@@ -1,0 +1,12 @@
+# pearl (portrait)
+rect  x=0 y=0 w=100 h=100 color=#0A0F1A opacity=55
+text  x=50 y=4 anchor=t size=3 font=smooth weight=light color=#8FA6C8 text="{date}"
+ring  x=50 y=27 w=86 h=20.6 anchor=c value=cpu text="{time_short}" font=smooth weight=light color=#CFE3FF back=#222B3D thick=2.6
+ring  x=27 y=55 w=40 h=9.6 anchor=c value=gpu text="{gpu}" font=smooth weight=light color=#BFD4F2 back=#222B3D thick=4 hot=90 hot_color=#FF8A8A
+text  x=27 y=63 anchor=c size=3 font=smooth weight=regular color=#8FA6C8 text="GRAPHICS"
+ring  x=73 y=55 w=40 h=9.6 anchor=c value=ram text="{ram}" font=smooth weight=light color=#BFD4F2 back=#222B3D thick=4 hot=90 hot_color=#FF8A8A
+text  x=73 y=63 anchor=c size=3 font=smooth weight=regular color=#8FA6C8 text="MEMORY"
+text  x=50 y=76 anchor=c size=5 font=smooth weight=light color=#BFD4F2 text="{cpu_temp}   {gpu_temp}"
+text  x=50 y=80 anchor=c size=3 font=smooth weight=regular color=#8FA6C8 text="CPU       GPU"
+text  x=50 y=90 anchor=c size=5 font=smooth weight=light color=#BFD4F2 text="{weather_temp}"
+text  x=50 y=94 anchor=c size=3 font=smooth weight=regular color=#8FA6C8 text="{weather_city}"

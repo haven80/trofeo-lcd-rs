@@ -1,0 +1,58 @@
+# mineral — dark mineral cards, sage green, a ring and six small readings on each.
+rect  x=0 y=0 w=100 h=100 color=#0E1012 opacity=70
+rect  x=1 y=3 w=17 h=16 color=#1B1E21
+text  x=2.4 y=11.5 anchor=l size=9 font=smooth weight=light color=#F3F5F4 text="{time_short}"
+rect  x=19.5 y=3 w=22 h=16 color=#1B1E21
+text  x=21 y=11.5 anchor=l size=8 font=smooth weight=light color=#F3F5F4 text="{weather_temp}"
+text  x=31.5 y=11.5 anchor=l w=9.5 size=3 font=smooth weight=regular color=#8C9490 text="{weather_city}"
+rect  x=43 y=3 w=56 h=16 color=#1B1E21
+text  x=44.5 y=6.5 size=2 font=smooth weight=medium color=#A9CDB8 text="NOW PLAYING"
+text  x=44.5 y=11 w=52 size=5 font=smooth weight=regular color=#F3F5F4 text="{song}"
+rect  x=1 y=22 w=32.3 h=75 color=#1B1E21
+text  x=2.5 y=25.5 anchor=l size=3 font=smooth weight=medium color=#A9CDB8 text="CPU"
+text  x=2.5 y=44 anchor=l size=17 font=smooth weight=light color=#F3F5F4 text="{cpu_temp}"
+ring  x=27 y=44 w=9.5 h=40 anchor=c value=cpu text="{cpu}" font=smooth weight=light color=#A9CDB8 back=#2E3336 thick=9 hot=90 hot_color=#E58A7B
+text  x=2.5 y=62 size=2 font=smooth weight=medium color=#8C9490 text="POWER"
+text  x=2.5 y=66.6 w=9.6 size=5 font=smooth weight=regular color=#F3F5F4 text="{cpu_power}"
+text  x=12.9 y=62 size=2 font=smooth weight=medium color=#8C9490 text="CLOCK"
+text  x=12.9 y=66.6 w=9.6 size=5 font=smooth weight=regular color=#F3F5F4 text="{cpu_freq}"
+text  x=23.3 y=62 size=2 font=smooth weight=medium color=#8C9490 text="FPS"
+text  x=23.3 y=66.6 w=9.6 size=5 font=smooth weight=regular color=#F3F5F4 text="{fps}"
+text  x=2.5 y=79 size=2 font=smooth weight=medium color=#8C9490 text="DOWN"
+text  x=2.5 y=83.6 w=9.6 size=5 font=smooth weight=regular color=#F3F5F4 text="{net_down}"
+text  x=12.9 y=79 size=2 font=smooth weight=medium color=#8C9490 text="UP"
+text  x=12.9 y=83.6 w=9.6 size=5 font=smooth weight=regular color=#F3F5F4 text="{net_up}"
+text  x=23.3 y=79 size=2 font=smooth weight=medium color=#8C9490 text="DISK READ"
+text  x=23.3 y=83.6 w=9.6 size=5 font=smooth weight=regular color=#F3F5F4 text="{disk_read}"
+rect  x=34 y=22 w=32.3 h=75 color=#1B1E21
+text  x=35.5 y=25.5 anchor=l size=3 font=smooth weight=medium color=#A9CDB8 text="GPU"
+text  x=35.5 y=44 anchor=l size=17 font=smooth weight=light color=#F3F5F4 text="{gpu_temp}"
+ring  x=60 y=44 w=9.5 h=40 anchor=c value=gpu text="{gpu}" font=smooth weight=light color=#A9CDB8 back=#2E3336 thick=9 hot=90 hot_color=#E58A7B
+text  x=35.5 y=62 size=2 font=smooth weight=medium color=#8C9490 text="POWER"
+text  x=35.5 y=66.6 w=9.6 size=5 font=smooth weight=regular color=#F3F5F4 text="{gpu_power}"
+text  x=45.9 y=62 size=2 font=smooth weight=medium color=#8C9490 text="HOTSPOT"
+text  x=45.9 y=66.6 w=9.6 size=5 font=smooth weight=regular color=#F3F5F4 text="{gpu_hotspot}"
+text  x=56.3 y=62 size=2 font=smooth weight=medium color=#8C9490 text="FPS"
+text  x=56.3 y=66.6 w=9.6 size=5 font=smooth weight=regular color=#F3F5F4 text="{fps}"
+text  x=35.5 y=79 size=2 font=smooth weight=medium color=#8C9490 text="CPU TEMP"
+text  x=35.5 y=83.6 w=9.6 size=5 font=smooth weight=regular color=#F3F5F4 text="{cpu_temp}"
+text  x=45.9 y=79 size=2 font=smooth weight=medium color=#8C9490 text="RAM"
+text  x=45.9 y=83.6 w=9.6 size=5 font=smooth weight=regular color=#F3F5F4 text="{ram}"
+text  x=56.3 y=79 size=2 font=smooth weight=medium color=#8C9490 text="DISK WRITE"
+text  x=56.3 y=83.6 w=9.6 size=5 font=smooth weight=regular color=#F3F5F4 text="{disk_write}"
+rect  x=67 y=22 w=32.3 h=75 color=#1B1E21
+text  x=68.5 y=25.5 anchor=l size=3 font=smooth weight=medium color=#A9CDB8 text="MEMORY"
+text  x=68.5 y=44 anchor=l size=11 font=smooth weight=light color=#F3F5F4 text="{ram_used}"
+ring  x=93 y=44 w=9.5 h=40 anchor=c value=ram text="{ram}" font=smooth weight=light color=#A9CDB8 back=#2E3336 thick=9 hot=90 hot_color=#E58A7B
+text  x=68.5 y=62 size=2 font=smooth weight=medium color=#8C9490 text="FREE"
+text  x=68.5 y=66.6 w=9.6 size=5 font=smooth weight=regular color=#F3F5F4 text="{ram_free}"
+text  x=78.9 y=62 size=2 font=smooth weight=medium color=#8C9490 text="TOTAL"
+text  x=78.9 y=66.6 w=9.6 size=5 font=smooth weight=regular color=#F3F5F4 text="{ram_total}"
+text  x=89.3 y=62 size=2 font=smooth weight=medium color=#8C9490 text="READ"
+text  x=89.3 y=66.6 w=9.6 size=5 font=smooth weight=regular color=#F3F5F4 text="{disk_read}"
+text  x=68.5 y=79 size=2 font=smooth weight=medium color=#8C9490 text="WRITE"
+text  x=68.5 y=83.6 w=9.6 size=5 font=smooth weight=regular color=#F3F5F4 text="{disk_write}"
+text  x=78.9 y=79 size=2 font=smooth weight=medium color=#8C9490 text="DOWN"
+text  x=78.9 y=83.6 w=9.6 size=5 font=smooth weight=regular color=#F3F5F4 text="{net_down}"
+text  x=89.3 y=79 size=2 font=smooth weight=medium color=#8C9490 text="UP"
+text  x=89.3 y=83.6 w=9.6 size=5 font=smooth weight=regular color=#F3F5F4 text="{net_up}"
