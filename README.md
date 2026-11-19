@@ -39,36 +39,89 @@ and imports the themes of other people.
 
 ![Your themes, in Share your design](img/editor-themes.png)
 
-### Five new screens
+### Twenty-two built-in screens, some with bars that flow
 
-Ready to use with `layout = halo` (or `gauges`, `terminal`, `horizon`, `ribbon`), no file needed; each one has a version
-for portrait panels, chosen by itself.
+They come with the program: `layout = atelier` (or any name below) and that is all, no file needed. Each one has a version
+for portrait panels, chosen by itself. In the layout builder, *Copy a built-in design* makes a file of yours to change.
+Five of them have **bars and rings with a gradient that flows** (`bar_animation = false` keeps them still).
 
-**Halo** — two big rings for CPU and GPU, the clock in the middle, memory below.
+**Dusk** — a sunset gradient, a giant light clock, bars whose colours flow.
+
+![Dusk](img/layout-dusk-animated.gif)
+
+**Aurora** — glass cards on a teal-to-violet gradient, bars that flow.
+
+![Aurora](img/layout-aurora-animated.gif)
+
+**Carbon** — matte black with amber lines, four columns, bars that flow.
+
+![Carbon](img/layout-carbon-animated.gif)
+
+**Eclipse** — three concentric rings that shimmer, the clock in the middle.
+
+![Eclipse](img/layout-eclipse-animated.gif)
+
+**Ledger** — a navy ledger with gold lines, one row per device.
+
+![Ledger](img/layout-ledger-animated.gif)
+
+**Swiss** — a red block with a huge clock, big black figures on a light page.
+
+![Swiss](img/layout-swiss.png)
+
+**Haiku** — a huge light clock, lots of space, one line of readings. **Peach** — a warm light page with three gradient rings.
+
+![Haiku](img/layout-haiku.png)
+![Peach](img/layout-peach.png)
+
+**Atelier** — ivory and champagne gold on charcoal: a light clock, hairlines, three fine rings.
+
+![Atelier](img/layout-atelier.png)
+
+**Studio** — paper and ink: a light spec sheet, black figures, one orange accent.
+
+![Studio](img/layout-studio.png)
+
+**Noir** — white on black, one red hairline: a huge light clock and four quiet figures.
+
+![Noir](img/layout-noir.png)
+
+**Mineral** — dark cards in sage green, a ring and six readings on each.
+
+![Mineral](img/layout-mineral.png)
+
+**Cluster** — a car instrument cluster: three big dials, the clock and the song on the side.
+
+![Cluster](img/layout-cluster.png)
+
+**Board** — an airport departure board: every number on a tile.
+
+![Board](img/layout-board.png)
+
+**Pearl** — cool and airy, the clock inside a fine ring. **Volt** — four loud colour blocks with giant figures.
+**Blaze** — CPU in orange, GPU in magenta, giant figures.
+
+![Pearl](img/layout-pearl.png)
+![Volt](img/layout-volt.png)
+![Blaze](img/layout-blaze.png)
+
+And, in the pixel font: **Halo**, **Gauges**, **Terminal**, **Horizon** and **Ribbon**.
 
 ![Halo](img/layout-halo.png)
-
-**Gauges** — four dials: load and temperature of CPU and GPU.
-
 ![Gauges](img/layout-gauges.png)
-
-**Ribbon** — clock, song and weather above a ribbon of readings.
-
-![Ribbon](img/layout-ribbon.png)
-
-**Terminal** — green-on-black readout, one line per device. **Horizon** — a huge clock and three thin lines of load.
-
-![Terminal](img/layout-terminal.png)
-![Horizon](img/layout-horizon.png)
 
 On a portrait panel:
 
-<img src="img/layout-halo-portrait.png" height="420"> <img src="img/layout-gauges-portrait.png" height="420"> <img src="img/layout-terminal-portrait.png" height="420"> <img src="img/layout-ribbon-portrait.png" height="420">
+<img src="img/layout-dusk-portrait.png" height="420"> <img src="img/layout-aurora-portrait.png" height="420"> <img src="img/layout-carbon-portrait.png" height="420"> <img src="img/layout-eclipse-portrait.png" height="420"> <img src="img/layout-swiss-portrait.png" height="420"> <img src="img/layout-atelier-portrait.png" height="420"> <img src="img/layout-studio-portrait.png" height="420"> <img src="img/layout-mineral-portrait.png" height="420">
 
 More designs, in the same spirit: [Deck, Cards, Orbit and Console](docs/CONFIGURATION.md#deck-cards-orbit-and-console),
 [the music screens](OPTIONS_GUIDE.md#music-screen-now-playing-card) and [the gaming screens](docs/CONFIGURATION.md#gaming-screens).
 
 ## What's new
+
+**2.25.0 — eight more screens, and bars with a flowing gradient.** `swiss`, `dusk`, `aurora`, `carbon`, `eclipse`, `ledger`, `haiku` and `peach`: twenty-two built-in screens in all, each with a portrait version. Bars and rings of free layouts can have a second colour (`color2`) and a gradient that flows (`flow`, seconds per loop), used by `dusk`, `aurora`, `carbon`, `eclipse` and `ledger`; `bar_animation = false` (settings editor, *Screens*) keeps all of them still. The animation only runs while such a screen is shown.
+
+**2.24.0 — nine more built-in screens, in a smooth font.** `atelier`, `noir`, `pearl`, `volt`, `blaze`, `studio` (paper and ink), `board` (departure board), `mineral` (dark cards) and `cluster` (three dials) join `halo`, `gauges`, `terminal`, `horizon` and `ribbon`: fourteen screens ready for `layout = name`, each with a portrait version. Free layouts learn `font=smooth weight=light` (a text can use the thin Poppins whatever the global font), and the new `{ram_free}`.
 
 **2.23.0 — five new built-in screens.** `layout = halo | gauges | terminal | horizon | ribbon`: **halo** (two big rings for CPU and GPU, the clock in the middle, memory below), **gauges** (four dials: load and temperature of CPU and GPU), **terminal** (green-on-black readout, one line per device), **horizon** (a huge clock and three thin lines of load) and **ribbon** (clock, song and weather above a ribbon of readings). Each has a version for portrait panels, chosen by itself. They are free layouts that come with the program, so no file is needed; in the settings editor *Screens → Layout builder → Copy a built-in design* makes a file of yours to change, and a file of yours with the same name takes the place of the built-in one.
 

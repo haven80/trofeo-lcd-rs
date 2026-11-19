@@ -1243,8 +1243,8 @@ ring  x=80 y=62 w=30 h=70 anchor=c value=gpu text="{gpu}"
 
 - **Positions and sizes are percentages of the screen** (`x`, `y`, `w`, `h`), so the same file fits a landscape and a portrait panel. `x`, `y` is where the `anchor` point of the element goes: `tl` (top left, the default), `t`, `tr`, `l`, `c` (centre), `r`, `bl`, `b`, `br`.
 - **Elements are drawn in the order of the file** (the last one is on top), over the background of the configuration.
-- `text`: `text="..."`, `size` (the scale of the font, 1-80), `color`; `w` is an optional limit of the width (a longer text is made smaller). Inside the text `{name}` is replaced with a live value: `{cpu}` `{gpu}` `{ram}` `{cpu_temp}` `{gpu_temp}` `{gpu_hotspot}` `{cpu_power}` `{gpu_power}` `{cpu_mhz}` `{cpu_freq}` `{fps}` `{ram_used}` `{ram_total}` `{net_down}` `{net_up}` `{disk_read}` `{disk_write}` `{song}` `{time}` `{time_short}` `{date}` `{weather_temp}` `{weather_city}`. A value that is not available on your PC shows `--`.
-- `bar`: `w`, `h`, `value=` one of `cpu gpu ram cpu_temp gpu_temp gpu_hotspot cpu_power gpu_power cpu_mhz fps`, `min` (0) and `max` (the usual maximum of the value), `color` (default: by level), `back` (the track), `hot=` and `hot_color=` (from that value up the bar takes that color).
+- `text`: `text="..."`, `size` (the scale of the font, 1-80), `color`, `font` (`pixel` or `smooth`) and `weight` (`light`, `regular`, `medium`; for the smooth font); `w` is an optional limit of the width (a longer text is made smaller). Inside the text `{name}` is replaced with a live value: `{cpu}` `{gpu}` `{ram}` `{cpu_temp}` `{gpu_temp}` `{gpu_hotspot}` `{cpu_power}` `{gpu_power}` `{cpu_mhz}` `{cpu_freq}` `{fps}` `{ram_used}` `{ram_free}` `{ram_total}` `{net_down}` `{net_up}` `{disk_read}` `{disk_write}` `{song}` `{time}` `{time_short}` `{date}` `{weather_temp}` `{weather_city}`. A value that is not available on your PC shows `--`.
+- `bar`: `w`, `h`, `value=` one of `cpu gpu ram cpu_temp gpu_temp gpu_hotspot cpu_power gpu_power cpu_mhz fps`, `min` (0) and `max` (the usual maximum of the value), `color` (default: by level), `back` (the track), `color2` (a second color: the filled part runs from `color` to it) and `flow` (seconds per loop of a gradient that flows along; 0 = still), `hot=` and `hot_color=` (from that value up the bar takes that color).
 - `ring`: like `bar` (`w`, `h` give the size, the ring is a circle in it), plus `thick` (% of the radius) and `text` (shown in the middle, sized to fit).
 - `rect`: `w`, `h`, `color`, `opacity` (0-100).
 - `image`: `file="C:\Pictures\logo.png"` (a path, or relative to the folder of the configuration file), `w`, `h` (the picture is fitted in), `opacity`. PNG, JPEG, GIF (first frame), BMP, WebP.
@@ -1256,24 +1256,61 @@ The free layout is a screen like *tiles* or *frame*: it is shown when idle, and 
 
 ### Built-in designs
 
-Five free layouts come with the program, so `layout = halo` works with no file:
+Twenty-two free layouts come with the program, so `layout = atelier` works with no file:
 
 | Name | What it shows |
 |---|---|
+| `swiss` | a red block with a huge clock, big black figures on a light page |
+| `dusk` | a sunset gradient, a giant light clock, bars whose colours flow *(animated)* |
+| `aurora` | glass cards on a teal-to-violet gradient, bars that flow *(animated)* |
+| `carbon` | matte black with amber lines, four columns, bars that flow *(animated)* |
+| `eclipse` | three concentric rings that shimmer, the clock in the middle *(animated)* |
+| `ledger` | a navy ledger with gold lines, one row per device, bars that flow *(animated)* |
+| `haiku` | a huge light clock, lots of space, one line of readings |
+| `peach` | a warm light page with three gradient rings |
+| `atelier` | ivory and champagne gold on charcoal: a light clock, hairlines, three fine rings |
+| `noir` | white on black, one red hairline: a huge light clock and four quiet figures |
+| `pearl` | cool and airy: the clock inside a fine ring, a ring on each side |
+| `studio` | paper and ink: a light spec sheet, black figures, one orange accent |
+| `mineral` | dark cards in sage green, a ring and six readings on each |
+| `cluster` | a car instrument cluster: three big dials, the clock and the song on the side |
+| `board` | an airport departure board: every number on a tile (pixel font) |
+| `volt` | four loud colour blocks with giant figures |
+| `blaze` | CPU in orange and GPU in magenta, giant figures |
 | `halo` | two big rings (CPU, GPU), the clock in the middle, memory below |
 | `gauges` | four dials: load and temperature of CPU and GPU |
 | `terminal` | green-on-black readout, one line per device (CPU, GPU, RAM, network, disk) |
 | `horizon` | a huge clock and three thin lines of load (CPU, GPU, RAM) |
 | `ribbon` | clock, song and weather above a ribbon of readings |
 
+![dusk](img/layout-dusk-animated.gif)
+![aurora](img/layout-aurora-animated.gif)
+![carbon](img/layout-carbon-animated.gif)
+![eclipse](img/layout-eclipse-animated.gif)
+![ledger](img/layout-ledger-animated.gif)
+![swiss](img/layout-swiss.png)
+![haiku](img/layout-haiku.png)
+![peach](img/layout-peach.png)
+![atelier](img/layout-atelier.png)
+![studio](img/layout-studio.png)
+![noir](img/layout-noir.png)
+![mineral](img/layout-mineral.png)
+![cluster](img/layout-cluster.png)
+![board](img/layout-board.png)
+![pearl](img/layout-pearl.png)
+![volt](img/layout-volt.png)
+![blaze](img/layout-blaze.png)
 ![halo](img/layout-halo.png)
 ![gauges](img/layout-gauges.png)
 ![terminal](img/layout-terminal.png)
 ![horizon](img/layout-horizon.png)
 ![ribbon](img/layout-ribbon.png)
 
-On a portrait panel the program uses the version drawn for it. To change one, open the layout builder and pick **Copy a built-in design** (the copy is named as you typed in the name box, or `<design>-mine`); or save a file `layouts/halo.layout` yourself: a file with the same name takes the place of the built-in one. The five are in the screens list of the settings editor, among the other layouts.
+On a portrait panel the program uses the version drawn for it. To change one, open the layout builder and pick **Copy a built-in design** (the copy is named as you typed in the name box, or `<design>-mine`); or save a file `layouts/atelier.layout` yourself: a file with the same name takes the place of the built-in one. The built-in designs are in the screens list of the settings editor, among the other layouts.
 
+**Moving gradients.** A `bar` or `ring` can have a second colour, `color2=#RRGGBB`: the filled part then runs from `color` to `color2` (a straight run, whatever the value). With `flow=<seconds>` the gradient also flows along the bar or round the ring, one loop in that many seconds (`flow=0` or no `flow`: still). A bar over its `hot` value takes the hot colour as before. `dusk`, `aurora`, `carbon`, `eclipse` and `ledger` use it. In the layout builder: *Gradient to* (the second colour) and *Flow* under the bar or ring. While a screen with a flowing gradient is on, the program draws about 20 frames a second (and nothing more when there is none).
+
+**Font of a text.** In a free layout every `text` and `ring` can say `font=smooth` (the thin anti-aliased Poppins) or `font=pixel`, and with the smooth font `weight=light`, `regular` or `medium`. Without them the text uses the font of the configuration (`font = ...`). This is how `atelier` and the others get their light, elegant figures whatever the global font is. The layout builder has the same choices under *Font*.
 
 ## Preset layouts
 
@@ -1282,6 +1319,7 @@ On a portrait panel the program uses the version drawn for it. To change one, op
 | `layout` | `--layout` | one or more names, comma-separated, each optionally `name:seconds` | none (standard screen) |
 | `layout_interval` | `--layout-interval` | `2`-`3600` | `15` |
 | `layout_spectrum` | `--layout-spectrum` | `true`/`false` | `false` |
+| `bar_animation` | `--bar-animation` | `true`/`false` | `true` |
 | `layout_hold_on_music` | `--layout-hold-on-music` | `true`/`false` | `false` |
 
 Names (`trofeo_lcd.exe --layout list` prints these with descriptions):
@@ -1299,6 +1337,8 @@ gaming, cpu, gpu, tiles, deck, cards, orbit, console, steam, frame, weather, new
   on top of a panel layout; the game dashboard stays on regardless — turn it
   off with `hide = dashboard`). Set `layout_spectrum = true` to keep the audio
   spectrum visible on top of a panel layout while music is playing.
+
+**Moving gradients** (`bar_animation`): the free layouts that have a flowing gradient on their bars or rings (`dusk`, `aurora`, `carbon`, `eclipse`, `ledger`, and your own with `flow=`) move; `bar_animation = false` keeps every gradient still, and then the screen is drawn at the usual idle rate. Applies live when the file is saved.
 
 **Staying put while music plays**: with `layout_hold_on_music = true` the
 rotation freezes on the *first* layout of the list as soon as music starts
