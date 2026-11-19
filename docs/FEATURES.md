@@ -29,8 +29,8 @@
 - **Deck, Cards, Orbit and Console**: four more full screens with graphs of the last minutes —
   instrument columns, colourful cards, concentric rings and a console-style row of tiles with a
   focus that moves (see [Deck, Cards, Orbit and Console](CONFIGURATION.md#deck-cards-orbit-and-console)).
-- **Five built-in free layouts**: `halo`, `gauges`, `terminal`, `horizon` and `ribbon`, ready to use with
-  `layout = halo` and to copy in the layout builder (see [the options guide](../OPTIONS_GUIDE.md#built-in-designs)).
+- **Twenty-two built-in free layouts**, five of them with bars and rings whose gradient flows (`bar_animation`): `swiss`, `dusk`, `aurora`, `carbon`, `eclipse`, `ledger`, `haiku`, `peach`, `atelier`, `noir`, `pearl`, `volt`, `blaze`, `studio`, `board`, `mineral`, `cluster`, `halo`, `gauges`, `terminal`, `horizon` and `ribbon`, ready to use with
+  `layout = atelier` and to copy in the layout builder (see [the options guide](../OPTIONS_GUIDE.md#built-in-designs)).
 - **Gaming screens and the Steam cover flow**: nine designs for the in-game screen (arena, zen, cockpit, tactical, neon,
   telemetry, quest, arcade, classic) with the name of the game and facts about it, and `layout = steam`, a cover flow
   of your Steam library (see [Gaming screens](CONFIGURATION.md#gaming-screens) and [Steam cover flow](CONFIGURATION.md#steam-cover-flow)).

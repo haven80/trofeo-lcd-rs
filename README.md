@@ -1,159 +1,374 @@
-# trofeo_lcd
+<h1 align="center">trofeo_lcd</h1>
 
-![overview](img/overview.png)
+<p align="center"><b>Beautiful screens for your Thermalright Trofeo Vision LCD.</b><br>
+Twenty-two new designs and all the classic screens, bars that flow, your own layouts and themes — a lightweight, open-source alternative to TRCC.</p>
 
-![overview2](img/overview2.jpeg)
-![overview3](img/overview3.jpeg)
-![overview4](img/overview4.jpeg)
-![overview5](img/overview5.jpeg)
-![overview6](img/overview6.jpeg)
+<h3 align="center">New designs <sub>(the bars of the animated ones really move)</sub></h3>
 
-**A lightweight, open-source alternative to the official Thermalright TRCC
-software.** Audio visualizer + system info monitor for the
-**Thermalright Trofeo Vision 9.16 LCD** (USB `0416:5408`, "LY" protocol), the
-**Trofeo Vision 11.3 LCD** (1920×400, same USB ID and protocol) and the
-**Trofeo Vision 6.86 LCD** (1280×480, USB `0416:5302`) — see
-[Supported panels](#supported-panels).
+<table>
+<tr>
+<td width="50%" align="center"><img src="img/layout-dusk-animated.gif" width="100%" alt="dusk"><br><sub><code>layout = dusk</code></sub></td>
+<td width="50%" align="center"><img src="img/layout-aurora-animated.gif" width="100%" alt="aurora"><br><sub><code>layout = aurora</code></sub></td>
+</tr>
+<tr>
+<td width="50%" align="center"><img src="img/layout-eclipse-animated.gif" width="100%" alt="eclipse"><br><sub><code>layout = eclipse</code></sub></td>
+<td width="50%" align="center"><img src="img/layout-carbon-animated.gif" width="100%" alt="carbon"><br><sub><code>layout = carbon</code></sub></td>
+</tr>
+<tr>
+<td width="50%" align="center"><img src="img/layout-ledger-animated.gif" width="100%" alt="ledger"><br><sub><code>layout = ledger</code></sub></td>
+<td width="50%" align="center"><img src="img/layout-atelier.png" width="100%" alt="atelier"><br><sub><code>layout = atelier</code></sub></td>
+</tr>
+<tr>
+<td width="50%" align="center"><img src="img/layout-noir.png" width="100%" alt="noir"><br><sub><code>layout = noir</code></sub></td>
+<td width="50%" align="center"><img src="img/layout-volt.png" width="100%" alt="volt"><br><sub><code>layout = volt</code></sub></td>
+</tr>
+<tr>
+<td width="50%" align="center"><img src="img/layout-swiss.png" width="100%" alt="swiss"><br><sub><code>layout = swiss</code></sub></td>
+<td width="50%" align="center"><img src="img/layout-studio.png" width="100%" alt="studio"><br><sub><code>layout = studio</code></sub></td>
+</tr>
+<tr>
+<td width="50%" align="center"><img src="img/layout-cluster.png" width="100%" alt="cluster"><br><sub><code>layout = cluster</code></sub></td>
+<td width="50%" align="center"><img src="img/layout-pearl.png" width="100%" alt="pearl"><br><sub><code>layout = pearl</code></sub></td>
+</tr>
+</table>
 
-This project is a fork of [sukualam/trofeo-lcd](https://github.com/sukualam/trofeo-lcd),
-whose driver was rewritten byte-for-byte from
-[thermalright-trcc-linux](https://github.com/Lexonight1/thermalright-trcc-linux).
-See **[NOTICE.md](./NOTICE.md)** for the full provenance and a summary of
-what this fork adds on top of the original.
+<h3 align="center">Classic screens</h3>
 
-## Highlights
+<table>
+<tr>
+<td width="33%" align="center"><img src="img/layout-deck.png" width="100%" alt="deck"><br><sub><code>layout = deck</code></sub></td>
+<td width="33%" align="center"><img src="img/layout-orbit.png" width="100%" alt="orbit"><br><sub><code>layout = orbit</code></sub></td>
+<td width="33%" align="center"><img src="img/layout-cards.png" width="100%" alt="cards"><br><sub><code>layout = cards</code></sub></td>
+</tr>
+<tr>
+<td width="33%" align="center"><img src="img/layout-console.png" width="100%" alt="console"><br><sub><code>layout = console</code></sub></td>
+<td width="33%" align="center"><img src="img/tiles-hotspot.png" width="100%" alt="tiles"><br><sub><code>layout = tiles</code></sub></td>
+<td width="33%" align="center"><img src="img/steam-coverflow.png" width="100%" alt="steam"><br><sub><code>layout = steam</code></sub></td>
+</tr>
+<tr>
+<td width="33%" align="center"><img src="img/layout-default.png" width="100%" alt="default"><br><sub><code>layout = default</code></sub></td>
+<td width="33%" align="center"><img src="img/layout-default2.png" width="100%" alt="default2"><br><sub><code>layout = default2</code></sub></td>
+<td width="33%" align="center"><img src="img/layout-frame.png" width="100%" alt="frame"><br><sub><code>layout = frame</code></sub></td>
+</tr>
+<tr>
+<td width="33%" align="center"><img src="img/layout-weather.png" width="100%" alt="weather"><br><sub><code>layout = weather</code></sub></td>
+<td width="33%" align="center"><img src="img/layout-news.png" width="100%" alt="news"><br><sub><code>layout = news</code></sub></td>
+<td width="33%" align="center"><img src="img/layout-cpu-gpu.png" width="100%" alt="cpu-gpu"><br><sub><code>layout = cpu-gpu</code></sub></td>
+</tr>
+<tr>
+<td width="33%" align="center"><img src="img/layout-temps.png" width="100%" alt="temps"><br><sub><code>layout = temps</code></sub></td>
+<td width="33%" align="center"><img src="img/layout-overview.png" width="100%" alt="overview"><br><sub><code>layout = overview</code></sub></td>
+<td width="33%" align="center"><img src="img/layout-grid6.png" width="100%" alt="grid6"><br><sub><code>layout = grid6</code></sub></td>
+</tr>
+<tr>
+<td width="33%" align="center"><img src="img/layout-clock-center.png" width="100%" alt="clock-center"><br><sub><code>layout = clock-center</code></sub></td>
+<td width="33%" align="center"><img src="img/layout-io.png" width="100%" alt="io"><br><sub><code>layout = io</code></sub></td>
+<td width="33%" align="center"><img src="img/layout-music.png" width="100%" alt="music"><br><sub><code>layout = music</code></sub></td>
+</tr>
+<tr>
+<td width="33%" align="center"><img src="img/layout-gaming.png" width="100%" alt="gaming"><br><sub><code>layout = gaming</code></sub></td>
+<td width="33%" align="center"><img src="img/layout-cpu.png" width="100%" alt="cpu"><br><sub><code>layout = cpu</code></sub></td>
+<td width="33%" align="center"><img src="img/layout-gpu.png" width="100%" alt="gpu"><br><sub><code>layout = gpu</code></sub></td>
+</tr>
+</table>
 
-### Design your own look: the editor with the layout builder and the themes
+<p align="center"><sub><b>43 screens</b> (22 new designs, 12 shown here, and 21 classics), plus nine for music and nine for games. Every one has a portrait version. <a href="#the-screens">Details and portrait versions ↓</a></sub></p>
 
-The settings editor (`trofeo_config`) is where you make the screen yours, without touching a text file.
+<p align="center">
+<a href="#the-screens">The screens</a> ·
+<a href="#the-classic-screens">Classic screens</a> ·
+<a href="#make-your-own">Make your own</a> ·
+<a href="#install">Install</a> ·
+<a href="#settings-editor-trofeo_config">Settings editor</a> ·
+<a href="#the-gallery">Gallery</a> ·
+<a href="./docs/README.md">Docs</a>
+</p>
 
-**Layout builder** — drag texts with live values, bars, rings, rectangles and pictures anywhere on the screen and see
-them drawn by the real program, as you move them. Every change is saved at once, undo and redo work, and *Copy a
-built-in design* starts you from one of the screens below.
+---
 
-![The layout builder, with a copy of the Halo design](img/editor-builder.png)
+## The screens
 
-**Themes** — one line (`theme = ocean`) gives a whole look: eight themes come with the program, and *Share your design →
-Your themes* saves the look you made as a theme of your own, copies it as text, attaches it to a gallery post as a file,
-and imports the themes of other people.
+Pick a look with one line in the configuration file (or in the settings editor, *Screens*) — nothing else to install:
 
-![Your themes, in Share your design](img/editor-themes.png)
+```ini
+layout = dusk
+```
 
-### Twenty-two built-in screens, some with bars that flow
+Every design has a **version for portrait panels**, chosen by itself, uses your **background and theme**, and follows your clock and weather settings. Rotate several: `layout = dusk:20, halo:10, aurora`. All of them are free layouts, so you can **copy one in the layout builder and make it yours** (see [Make your own](#make-your-own)). The full catalogue, with the portrait versions, is in **[docs/LAYOUTS.md](./docs/LAYOUTS.md)**.
 
-They come with the program: `layout = atelier` (or any name below) and that is all, no file needed. Each one has a version
-for portrait panels, chosen by itself. In the layout builder, *Copy a built-in design* makes a file of yours to change.
-Five of them have **bars and rings with a gradient that flows** (`bar_animation = false` keeps them still).
+### Flowing bars
 
-**Dusk** — a sunset gradient, a giant light clock, bars whose colours flow.
+Bars and rings whose gradient flows, all the time. `bar_animation = false` keeps them still.
 
-![Dusk](img/layout-dusk-animated.gif)
+<table>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-dusk-animated.gif" width="100%" alt="Dusk"><br><b>Dusk</b> <sup>animated</sup><br>A sunset gradient from violet to orange, a giant light clock, three readings with a flowing bar.<br><code>layout = dusk</code></td>
+<td width="50%" valign="top"><img src="img/layout-aurora-animated.gif" width="100%" alt="Aurora"><br><b>Aurora</b> <sup>animated</sup><br>Glass cards on a teal-to-violet gradient: processor, graphics, memory.<br><code>layout = aurora</code></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-carbon-animated.gif" width="100%" alt="Carbon"><br><b>Carbon</b> <sup>animated</sup><br>Matte black, amber lines, four columns: processor, graphics, memory, network.<br><code>layout = carbon</code></td>
+<td width="50%" valign="top"><img src="img/layout-eclipse-animated.gif" width="100%" alt="Eclipse"><br><b>Eclipse</b> <sup>animated</sup><br>Three concentric rings that shimmer, the clock in the middle.<br><code>layout = eclipse</code></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-ledger-animated.gif" width="100%" alt="Ledger"><br><b>Ledger</b> <sup>animated</sup><br>A navy ledger with gold lines, one row per device.<br><code>layout = ledger</code></td>
+<td width="50%"></td>
+</tr>
+</table>
 
-**Aurora** — glass cards on a teal-to-violet gradient, bars that flow.
+### Elegant and calm
 
-![Aurora](img/layout-aurora-animated.gif)
+A light, thin typeface, a lot of room, one or two colours.
 
-**Carbon** — matte black with amber lines, four columns, bars that flow.
+<table>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-atelier.png" width="100%" alt="Atelier"><br><b>Atelier</b><br>Ivory and champagne gold on charcoal: a light clock, hairlines, three fine rings.<br><code>layout = atelier</code></td>
+<td width="50%" valign="top"><img src="img/layout-noir.png" width="100%" alt="Noir"><br><b>Noir</b><br>White on black with one red hairline: a huge light clock and four quiet figures.<br><code>layout = noir</code></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-pearl.png" width="100%" alt="Pearl"><br><b>Pearl</b><br>Cool and airy: the clock inside a fine ring, a ring on each side.<br><code>layout = pearl</code></td>
+<td width="50%" valign="top"><img src="img/layout-haiku.png" width="100%" alt="Haiku"><br><b>Haiku</b><br>A huge light clock, lots of space, one line of readings.<br><code>layout = haiku</code></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-mineral.png" width="100%" alt="Mineral"><br><b>Mineral</b><br>Dark cards in sage green, a ring and six readings on each.<br><code>layout = mineral</code></td>
+<td width="50%" valign="top"><img src="img/layout-cluster.png" width="100%" alt="Cluster"><br><b>Cluster</b><br>A car instrument cluster: three big dials, the clock and the song on the side.<br><code>layout = cluster</code></td>
+</tr>
+</table>
 
-![Carbon](img/layout-carbon-animated.gif)
+### Light pages
 
-**Eclipse** — three concentric rings that shimmer, the clock in the middle.
+For a bright desk or a white case.
 
-![Eclipse](img/layout-eclipse-animated.gif)
+<table>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-studio.png" width="100%" alt="Studio"><br><b>Studio</b><br>Paper and ink: a light spec sheet, black figures, one orange accent.<br><code>layout = studio</code></td>
+<td width="50%" valign="top"><img src="img/layout-swiss.png" width="100%" alt="Swiss"><br><b>Swiss</b><br>A red block with a huge clock, big black figures and thin bars on a light page.<br><code>layout = swiss</code></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-peach.png" width="100%" alt="Peach"><br><b>Peach</b><br>A warm light page with three gradient rings.<br><code>layout = peach</code></td>
+<td width="50%"></td>
+</tr>
+</table>
 
-**Ledger** — a navy ledger with gold lines, one row per device.
+### Loud
 
-![Ledger](img/layout-ledger-animated.gif)
+Big colour, giant figures.
 
-**Swiss** — a red block with a huge clock, big black figures on a light page.
+<table>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-volt.png" width="100%" alt="Volt"><br><b>Volt</b><br>Four loud colour blocks with giant figures.<br><code>layout = volt</code></td>
+<td width="50%" valign="top"><img src="img/layout-blaze.png" width="100%" alt="Blaze"><br><b>Blaze</b><br>CPU in orange, GPU in magenta, giant figures.<br><code>layout = blaze</code></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-board.png" width="100%" alt="Board"><br><b>Board</b><br>An airport departure board: every number on a tile.<br><code>layout = board</code></td>
+<td width="50%"></td>
+</tr>
+</table>
 
-![Swiss](img/layout-swiss.png)
+### Pixel classics
 
-**Haiku** — a huge light clock, lots of space, one line of readings. **Peach** — a warm light page with three gradient rings.
+The 5×7 pixel font of the original program.
 
-![Haiku](img/layout-haiku.png)
-![Peach](img/layout-peach.png)
+<table>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-halo.png" width="100%" alt="Halo"><br><b>Halo</b><br>Two big rings for CPU and GPU, the clock in the middle, memory below.<br><code>layout = halo</code></td>
+<td width="50%" valign="top"><img src="img/layout-gauges.png" width="100%" alt="Gauges"><br><b>Gauges</b><br>Four dials: load and temperature of CPU and GPU.<br><code>layout = gauges</code></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-terminal.png" width="100%" alt="Terminal"><br><b>Terminal</b><br>Green-on-black readout, one line per device.<br><code>layout = terminal</code></td>
+<td width="50%" valign="top"><img src="img/layout-horizon.png" width="100%" alt="Horizon"><br><b>Horizon</b><br>A huge clock and three thin lines of load.<br><code>layout = horizon</code></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-ribbon.png" width="100%" alt="Ribbon"><br><b>Ribbon</b><br>Clock, song and weather above a ribbon of readings.<br><code>layout = ribbon</code></td>
+<td width="50%"></td>
+</tr>
+</table>
 
-**Atelier** — ivory and champagne gold on charcoal: a light clock, hairlines, three fine rings.
+### And on a portrait panel
 
-![Atelier](img/layout-atelier.png)
+<p align="center">
+<img src="img/layout-dusk-portrait.png" height="460"> <img src="img/layout-aurora-portrait.png" height="460"> <img src="img/layout-carbon-portrait.png" height="460"> <img src="img/layout-eclipse-portrait.png" height="460"> <img src="img/layout-atelier-portrait.png" height="460"> <img src="img/layout-studio-portrait.png" height="460"> <img src="img/layout-mineral-portrait.png" height="460"> <img src="img/layout-swiss-portrait.png" height="460">
+</p>
 
-**Studio** — paper and ink: a light spec sheet, black figures, one orange accent.
+---
 
-![Studio](img/layout-studio.png)
+## The classic screens
 
-**Noir** — white on black, one red hairline: a huge light clock and four quiet figures.
+The screens the program has always had — and they keep getting better. They are chosen with `layout = <name>`, like the new designs above, and all of them work on portrait panels too.
 
-![Noir](img/layout-noir.png)
+### Standard screens
 
-**Mineral** — dark cards in sage green, a ring and six readings on each.
+The original look: status lines on top, a spectrum while music plays, a big clock when idle, and the pixel game under it.
 
-![Mineral](img/layout-mineral.png)
+<table>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-default.png" width="100%" alt="Default"><br><b>Default</b><br>Status lines on top, spectrum with music, large clock when idle. <a href="docs/CONFIGURATION.md#what-to-show-where-and-colors">More</a><br><code>layout = default</code></td>
+<td width="50%" valign="top"><img src="img/layout-default2.png" width="100%" alt="Default 2"><br><b>Default 2</b><br>Like default, but every item has its own size, position and colour. <a href="docs/CONFIGURATION.md#what-to-show-where-and-colors">More</a><br><code>layout = default2</code></td>
+</tr>
+</table>
 
-**Cluster** — a car instrument cluster: three big dials, the clock and the song on the side.
+### Instrument screens
 
-![Cluster](img/layout-cluster.png)
+Live gauges and graphs of the last minutes. Choose the parts with `deck = cpu, gpu, ram, clock` and the like.
 
-**Board** — an airport departure board: every number on a tile.
+<table>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-deck.png" width="100%" alt="Deck"><br><b>Deck</b><br>Instrument columns: a gauge, a big value, a graph and four readings per column. <a href="docs/CONFIGURATION.md#deck-cards-orbit-and-console">More</a><br><code>layout = deck</code></td>
+<td width="50%" valign="top"><img src="img/layout-orbit.png" width="100%" alt="Orbit"><br><b>Orbit</b><br>Concentric rings per device with the readings beside them. <a href="docs/CONFIGURATION.md#deck-cards-orbit-and-console">More</a><br><code>layout = orbit</code></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-cards.png" width="100%" alt="Cards"><br><b>Cards</b><br>Colourful cards in a mosaic, each with a ghost graph of its own history. <a href="docs/CONFIGURATION.md#deck-cards-orbit-and-console">More</a><br><code>layout = cards</code></td>
+<td width="50%" valign="top"><img src="img/layout-console.png" width="100%" alt="Console"><br><b>Console</b><br>A bar with the names and the clock over a row of tiles; the one in focus grows and shows the details. <a href="docs/CONFIGURATION.md#deck-cards-orbit-and-console">More</a><br><code>layout = console</code></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="img/tiles-hotspot.png" width="100%" alt="Tiles"><br><b>Tiles</b><br>Rounded glass tiles with big values, bars and rings, chosen one by one. <a href="docs/CONFIGURATION.md#tiles-layout-glass-dashboard">More</a><br><code>layout = tiles</code></td>
+<td width="50%"></td>
+</tr>
+</table>
 
-![Board](img/layout-board.png)
+### One thing, large
 
-**Pearl** — cool and airy, the clock inside a fine ring. **Volt** — four loud colour blocks with giant figures.
-**Blaze** — CPU in orange, GPU in magenta, giant figures.
+When you only care about a few numbers.
 
-![Pearl](img/layout-pearl.png)
-![Volt](img/layout-volt.png)
-![Blaze](img/layout-blaze.png)
+<table>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-cpu-gpu.png" width="100%" alt="CPU and GPU"><br><b>CPU and GPU</b><br>CPU and GPU side by side: usage, temperature and watts.<br><code>layout = cpu-gpu</code></td>
+<td width="50%" valign="top"><img src="img/layout-temps.png" width="100%" alt="Temperatures"><br><b>Temperatures</b><br>CPU and GPU temperatures, large, with a bar.<br><code>layout = temps</code></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-overview.png" width="100%" alt="Overview"><br><b>Overview</b><br>CPU, GPU, RAM and clock.<br><code>layout = overview</code></td>
+<td width="50%" valign="top"><img src="img/layout-grid6.png" width="100%" alt="Grid 6"><br><b>Grid 6</b><br>A 3×2 grid: CPU and GPU usage and temperature, RAM, clock.<br><code>layout = grid6</code></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-clock-center.png" width="100%" alt="Clock centre"><br><b>Clock centre</b><br>The clock in the middle, CPU on the left and GPU on the right.<br><code>layout = clock-center</code></td>
+<td width="50%" valign="top"><img src="img/layout-io.png" width="100%" alt="Input / output"><br><b>Input / output</b><br>Network, disk and RAM.<br><code>layout = io</code></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-cpu.png" width="100%" alt="CPU"><br><b>CPU</b><br>CPU only, large: usage, temperature, frequency, watts.<br><code>layout = cpu</code></td>
+<td width="50%" valign="top"><img src="img/layout-gpu.png" width="100%" alt="GPU"><br><b>GPU</b><br>GPU only, large: usage, temperature, watts.<br><code>layout = gpu</code></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-gaming.png" width="100%" alt="Gaming"><br><b>Gaming</b><br>FPS, GPU, GPU temperature and CPU.<br><code>layout = gaming</code></td>
+<td width="50%" valign="top"><img src="img/layout-music.png" width="100%" alt="Music"><br><b>Music</b><br>The song that is playing, large, and the clock. <a href="OPTIONS_GUIDE.md#music-screen-now-playing-card">More</a><br><code>layout = music</code></td>
+</tr>
+</table>
 
-And, in the pixel font: **Halo**, **Gauges**, **Terminal**, **Horizon** and **Ribbon**.
+### Weather, news, pictures, games
 
-![Halo](img/layout-halo.png)
-![Gauges](img/layout-gauges.png)
+Screens for something other than the PC.
 
-On a portrait panel:
+<table>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-weather.png" width="100%" alt="Weather"><br><b>Weather</b><br>Current weather, large: temperature, condition icon and city. <a href="docs/CONFIGURATION.md#weather">More</a><br><code>layout = weather</code></td>
+<td width="50%" valign="top"><img src="img/layout-news.png" width="100%" alt="News"><br><b>News</b><br>The latest headlines, scrolling. <a href="docs/CONFIGURATION.md#ticker-news-headlines-or-any-custom-feed">More</a><br><code>layout = news</code></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-frame.png" width="100%" alt="Digital frame"><br><b>Digital frame</b><br>A collage of the pictures of a folder, with system info at the sides. <a href="docs/CONFIGURATION.md#digital-frame-picture-collage">More</a><br><code>layout = frame</code></td>
+<td width="50%" valign="top"><img src="img/steam-coverflow.png" width="100%" alt="Steam cover flow"><br><b>Steam cover flow</b><br>The box art of your installed games sliding by with reflections. <a href="docs/CONFIGURATION.md#steam-cover-flow">More</a><br><code>layout = steam</code></td>
+</tr>
+</table>
 
-<img src="img/layout-dusk-portrait.png" height="420"> <img src="img/layout-aurora-portrait.png" height="420"> <img src="img/layout-carbon-portrait.png" height="420"> <img src="img/layout-eclipse-portrait.png" height="420"> <img src="img/layout-swiss-portrait.png" height="420"> <img src="img/layout-atelier-portrait.png" height="420"> <img src="img/layout-studio-portrait.png" height="420"> <img src="img/layout-mineral-portrait.png" height="420">
+### Music screens
 
-More designs, in the same spirit: [Deck, Cards, Orbit and Console](docs/CONFIGURATION.md#deck-cards-orbit-and-console),
-[the music screens](OPTIONS_GUIDE.md#music-screen-now-playing-card) and [the gaming screens](docs/CONFIGURATION.md#gaming-screens).
+While a song plays, the whole panel can become a now-playing card (`music_screen = true`). Nine designs, chosen with `music_layout`: [all the settings](OPTIONS_GUIDE.md#music-screen-now-playing-card).
+
+<table>
+<tr>
+<td width="25%" valign="top"><img src="img/music-vinyl.png" width="100%" alt="Vinyl"><br><b>Vinyl</b></td>
+<td width="25%" valign="top"><img src="img/music-poster.png" width="100%" alt="Poster"><br><b>Poster</b></td>
+<td width="25%" valign="top"><img src="img/music-radial.png" width="100%" alt="Radial"><br><b>Radial</b></td>
+<td width="25%" valign="top"><img src="img/music-wave.png" width="100%" alt="Wave"><br><b>Wave</b></td>
+</tr>
+<tr>
+<td width="25%" valign="top"><img src="img/music-cassette.png" width="100%" alt="Cassette"><br><b>Cassette</b></td>
+<td width="25%" valign="top"><img src="img/music-equalizer.png" width="100%" alt="Equalizer"><br><b>Equalizer</b></td>
+<td width="25%" valign="top"><img src="img/music-minimal.png" width="100%" alt="Minimal"><br><b>Minimal</b></td>
+<td width="25%" valign="top"><img src="img/music-vu.png" width="100%" alt="VU"><br><b>VU</b></td>
+</tr>
+</table>
+
+### Gaming screens
+
+While a game runs, the LCD switches to a screen made for it. Nine designs, chosen with `gaming_layout`, each drawn for landscape and portrait: [all the settings](docs/CONFIGURATION.md#gaming-screens).
+
+<table>
+<tr>
+<td width="33%" valign="top"><img src="img/gaming-arena.png" width="100%" alt="Arena"><br><b>Arena</b></td>
+<td width="33%" valign="top"><img src="img/gaming-cockpit.png" width="100%" alt="Cockpit"><br><b>Cockpit</b></td>
+<td width="33%" valign="top"><img src="img/gaming-neon.png" width="100%" alt="Neon"><br><b>Neon</b></td>
+</tr>
+<tr>
+<td width="33%" valign="top"><img src="img/gaming-quest.png" width="100%" alt="Quest"><br><b>Quest</b></td>
+<td width="33%" valign="top"><img src="img/gaming-arcade.png" width="100%" alt="Arcade"><br><b>Arcade</b></td>
+<td width="33%" valign="top"><img src="img/gaming-classic.png" width="100%" alt="Classic"><br><b>Classic</b></td>
+</tr>
+<tr>
+<td width="33%" valign="top"><img src="img/gaming-tactical.png" width="100%" alt="Tactical"><br><b>Tactical</b></td>
+<td width="33%" valign="top"><img src="img/gaming-telemetry.png" width="100%" alt="Telemetry"><br><b>Telemetry</b></td>
+<td width="33%" valign="top"><img src="img/gaming-zen.png" width="100%" alt="Zen"><br><b>Zen</b></td>
+</tr>
+</table>
+
+---
+
+## Make your own
+
+The **settings editor** (`trofeo_config`) is where you make the screen yours, without touching a text file.
+
+<table>
+<tr>
+<td width="50%" valign="top"><img src="img/editor-builder.png" width="100%" alt="The layout builder"><br><b>Layout builder</b><br>Drag texts with live values, bars, rings, rectangles and pictures anywhere and see them drawn by the real program as you move them. Every change is saved at once; undo and redo work. <i>Copy a built-in design</i> starts you from any screen above.</td>
+<td width="50%" valign="top"><img src="img/editor-themes.png" width="100%" alt="Your themes"><br><b>Themes</b><br><code>theme = ocean</code> gives a whole look in one line (eight come with the program). <i>Share your design → Your themes</i> saves your own, copies it as text, attaches it to a gallery post and imports other people's.</td>
+</tr>
+</table>
+
+A layout is a plain text file, `layouts/<name>.layout`, one element per line — positions in % of the screen, so it fits any panel:
+
+```ini
+rect  x=0 y=0 w=100 h=100 color=#101820 opacity=80
+text  x=5  y=45 anchor=l size=17 font=smooth weight=light text="{time_short}"
+text  x=5  y=72 anchor=l size=4  font=smooth color=#9AA8B8 text="{date}"
+ring  x=70 y=50 anchor=c w=14 h=60 value=cpu text="{cpu}" font=smooth color=#00D4FF color2=#7CF0C9 flow=4 thick=6
+bar   x=55 y=88 w=40 h=2 value=gpu color=#FF4FD8 color2=#FFC845 flow=3
+```
+
+Texts with live values (`{cpu}`, `{gpu_temp}`, `{song}`, `{weather_temp}` …), bars, rings (with gradients that can flow), rectangles and pictures; a thin smooth font or the pixel font; the file is read again every second, so a saved change shows at once. Everything is explained in the [options guide](./OPTIONS_GUIDE.md#free-layouts--design-your-own-screen). Made something you like? **Share it in [the gallery](#the-gallery).**
+
+---
 
 ## What's new
 
-**2.25.0 — eight more screens, and bars with a flowing gradient.** `swiss`, `dusk`, `aurora`, `carbon`, `eclipse`, `ledger`, `haiku` and `peach`: twenty-two built-in screens in all, each with a portrait version. Bars and rings of free layouts can have a second colour (`color2`) and a gradient that flows (`flow`, seconds per loop), used by `dusk`, `aurora`, `carbon`, `eclipse` and `ledger`; `bar_animation = false` (settings editor, *Screens*) keeps all of them still. The animation only runs while such a screen is shown.
+**2.25.0 — eight more screens and bars that flow.** `swiss`, `dusk`, `aurora`, `carbon`, `eclipse`, `ledger`, `haiku`, `peach`; `color2` and `flow` give bars and rings a gradient that travels (`bar_animation = false` keeps them still).<br>
+**2.24.0 — nine screens in a thin font.** `atelier`, `noir`, `pearl`, `volt`, `blaze`, `studio`, `board`, `mineral`, `cluster`; free layouts can use `font=smooth weight=light`.<br>
+**2.23.0 — five screens.** `halo`, `gauges`, `terminal`, `horizon`, `ribbon`; *Copy a built-in design* in the builder.<br>
+**2.22.0 — free layouts.** Your own screen as a text file or with the visual builder.<br>
+**2.21.0 — profiles** (a set of settings per game or situation), **2.20.0 — your own themes**, **2.19.0 — themes, night mode, alerts**.
 
-**2.24.0 — nine more built-in screens, in a smooth font.** `atelier`, `noir`, `pearl`, `volt`, `blaze`, `studio` (paper and ink), `board` (departure board), `mineral` (dark cards) and `cluster` (three dials) join `halo`, `gauges`, `terminal`, `horizon` and `ribbon`: fourteen screens ready for `layout = name`, each with a portrait version. Free layouts learn `font=smooth weight=light` (a text can use the thin Poppins whatever the global font), and the new `{ram_free}`.
+Every version in detail: [docs/HISTORY.md](./docs/HISTORY.md) and the [releases](https://github.com/haven80/trofeo-lcd-rs/releases).
 
-**2.23.0 — five new built-in screens.** `layout = halo | gauges | terminal | horizon | ribbon`: **halo** (two big rings for CPU and GPU, the clock in the middle, memory below), **gauges** (four dials: load and temperature of CPU and GPU), **terminal** (green-on-black readout, one line per device), **horizon** (a huge clock and three thin lines of load) and **ribbon** (clock, song and weather above a ribbon of readings). Each has a version for portrait panels, chosen by itself. They are free layouts that come with the program, so no file is needed; in the settings editor *Screens → Layout builder → Copy a built-in design* makes a file of yours to change, and a file of yours with the same name takes the place of the built-in one.
+---
 
-**2.22.0 — free layouts.** Design your own screen: texts with live values (`{cpu}`, `{time}`, `{song}`...), bars, rings, rectangles and pictures, placed anywhere, in a text file `layouts/<name>.layout` or with the **visual builder** in the settings editor (drag, resize, edit, undo). Use it with `layout = my-screen`.
+## About
 
-**2.21.0 — profiles.** Named sets of settings that are laid over your configuration while they are in use: `profiles/gaming.profile`, switched from the tray menu, a hotkey (`profile_key`), the settings editor or automatically by the program in the foreground (`profile_rules = mygame.exe=gaming`). Nothing changes unless you make one.
+**A lightweight, open-source alternative to the official Thermalright TRCC software.** Audio visualizer + system info monitor for the **Thermalright Trofeo Vision 9.16 LCD** (USB `0416:5408`, "LY" protocol), the **Trofeo Vision 11.3 LCD** (1920×400, same USB ID and protocol) and the **Trofeo Vision 6.86 LCD** (1280×480, USB `0416:5302`) — see [Supported panels](#supported-panels).
 
-**2.20.0 — your own themes.** *Share your design* can save the look you made as a theme (`themes/<name>.theme`, used with `theme = name`), copy it as text, attach it to a gallery post as a file and import the themes of others.
+This project is a fork of [sukualam/trofeo-lcd](https://github.com/sukualam/trofeo-lcd), whose driver was rewritten byte-for-byte from [thermalright-trcc-linux](https://github.com/Lexonight1/thermalright-trcc-linux). See **[NOTICE.md](./NOTICE.md)** for the full provenance and a summary of what this fork adds on top of the original.
 
-**2.19.0 — themes, night mode and alerts.** `theme = ocean` gives a whole look in one line (eight
-themes, your own settings always win); `night_mode` dims the screen between two times; `alert_cpu_temp`,
-`alert_ram` and friends show a pulsing red border and the value when a reading stays over its limit.
-All three are **off by default** and cost nothing while off.
+The photos below are the real thing, on a real panel:
 
-**2.18.1 — the documentation is reorganised.** This README is now a short introduction; the rest is in the [docs](./docs/README.md) folder.
+<table>
+<tr>
+<td width="33%"><img src="img/overview2.jpeg" width="100%"></td>
+<td width="33%"><img src="img/overview3.jpeg" width="100%"></td>
+<td width="33%"><img src="img/overview4.jpeg" width="100%"></td>
+</tr>
+<tr>
+<td width="33%"><img src="img/overview5.jpeg" width="100%"></td>
+<td width="33%"><img src="img/overview6.jpeg" width="100%"></td>
+<td width="33%"><img src="img/overview.png" width="100%"></td>
+</tr>
+</table>
 
-**2.18.0 — a clearer settings editor.** A search box finds any setting by its name, its key or
-its hint; the sections are grouped by theme; *Settings I changed* lists what is written in your
-file; after saving, a notice says which changes need a restart; and you can import a design from
-the gallery.
-
-**2.17.0 — share your design.** A new page of the settings editor takes a picture of what is on
-your screen, copies the settings that make up the look (nothing personal) and opens the project's
-gallery form on GitHub. See [the gallery](#the-gallery).
-
-**2.16 — a fade between screens, and a fix for 6.86 screens that blink.** `screen_fade_ms = 600`
-makes the old picture melt into the new one whenever the screen changes (off by default).
-`hid_resend_ms = 1` keeps a Trofeo Vision 6.86 whose picture blinks or goes blank fed with data
-(off by default).
-
-Every version in detail: [docs/HISTORY.md](./docs/HISTORY.md) and the
-[releases](https://github.com/haven80/trofeo-lcd-rs/releases).
+---
 
 ## What it shows
 
