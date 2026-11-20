@@ -230,6 +230,10 @@ pub const LAYOUT_NAMES: &[(&str, &str, &str)] = &[
     ("ledger", "Ledger: a navy ledger with gold lines, one row per device, flowing bars", "Ledger: registro blu con filetti oro, una riga per dispositivo, barre che scorrono"),
     ("haiku", "Haiku: a huge light clock, lots of space, one line of readings", "Haiku: orologio enorme e leggero, molto spazio, una riga di valori"),
     ("peach", "Peach: a warm light page with three gradient rings", "Peach: pagina chiara e calda con tre anelli sfumati"),
+    ("pulse", "Pulse: a big clock over a wide mirrored spectrum", "Pulse: un grande orologio sopra uno spettro speculare a tutta larghezza"),
+    ("radial", "Radial: the spectrum in a ring around the clock", "Radial: lo spettro in un anello attorno all'orologio"),
+    ("stereo", "Stereo: two rings, the left and the right channel, the clock between", "Stereo: due anelli, canale sinistro e destro, l'orologio in mezzo"),
+    ("bands", "Bands: bass, mid and treble, each in a row of its own", "Bands: bassi, medi e alti, ognuno in una riga"),
 ];
 
 /// The tiles of `tiles = ...`: (name, English, Italian).
@@ -693,6 +697,10 @@ pub fn fields() -> Vec<Field> {
         .def("auto")
         .group("bars")
         .help("auto = by level; one color, or two or more for a gradient", "auto = in base al livello; un colore, o due o più per un gradiente"));
+    add(Field::new("tiles_flow", "tiles", "Moving gradient (seconds per loop)", "Gradiente in movimento (secondi a giro)", Float { min: 0.0, max: 60.0 })
+        .def("0")
+        .group("bars")
+        .help("0 = still. Above 0 the colour of the bars and rings travels along them (needs \"Moving gradients\" on in Screens)", "0 = fermo. Sopra 0 il colore di barre e anelli scorre lungo di loro (serve \"Gradienti in movimento\" acceso in Schermate)"));
     for (k, en, it) in TILE_KINDS {
         add(Field::new(&format!("tile_{k}_color"), "tiles", en, it, BarColor).def("auto").group("bars"));
     }
@@ -779,6 +787,10 @@ pub fn fields() -> Vec<Field> {
         .def("50")
         .group("look")
         .help("50 on the dark theme, 85 on the light one. Lower it to see the animated background through the plate; 0 = no plate", "50 col tema scuro, 85 con quello chiaro. Abbassala per vedere lo sfondo animato attraverso il pannello; 0 = nessun pannello"));
+    add(Field::new("dash_flow", "dash", "Moving gradient (seconds per loop)", "Gradiente in movimento (secondi a giro)", Float { min: 0.0, max: 60.0 })
+        .def("0")
+        .group("look")
+        .help("0 = still. Above 0 the rings of orbit, the gauges of deck, the bars of console and the colour of the cards flow (needs \"Moving gradients\" on in Screens)", "0 = fermo. Sopra 0 scorrono gli anelli di orbit, gli indicatori di deck, le barre di console e il colore delle card (serve \"Gradienti in movimento\" acceso in Schermate)"));
     add(Field::new("dash_graph", "dash", "Graphs of the last minutes", "Grafici degli ultimi minuti", Bool).def("true").group("graphs"));
     add(Field::new("dash_history", "dash", "Seconds of history", "Secondi di storico", int(20, 600)).def("90").group("graphs").when("dash_graph", &["true"]));
     add(Field::new("dash_net_max", "dash", "Network speed at 100% (MB/s)", "Velocità di rete al 100% (MB/s)", int(1, 1000)).def("25").group("graphs"));
@@ -905,6 +917,16 @@ pub fn fields() -> Vec<Field> {
         .help("2 or more colors, quiet to loud", "2 o più colori, dal piano al forte"));
     add(Field::new("spectrum_rainbow_speed", "spectrum", "Rainbow speed (°/s)", "Velocità arcobaleno (°/s)", int(0, 360)).def("30"));
 
+    add(Field::new("spectrum_gain", "spectrum", "Gain (dB)", "Guadagno (dB)", Float { min: -24.0, max: 24.0 })
+        .def("0")
+        .help("Makes every spectrum (the main one, the music screens and the free layouts) taller or shorter", "Rende ogni spettro (principale, schermate musica e layout liberi) più alto o più basso"));
+    add(Field::new("spectrum_compress", "spectrum", "Compressor", "Compressore", int(0, 100))
+        .def("0")
+        .help("0 = off. Higher lifts the quiet parts towards the loud ones, so the bars move less between soft and loud", "0 = spento. Più alto solleva le parti piano verso quelle forti, così le barre variano meno tra piano e forte"));
+    add(Field::new("spectrum_auto_gain", "spectrum", "Follow the volume", "Segui il volume", Bool)
+        .def("true")
+        .help("On: the bars always use the whole height, however low the volume. Off: they are as loud as the music is (then the gain matters)", "Acceso: le barre usano sempre tutta l'altezza, qualunque sia il volume. Spento: sono alte quanto è forte la musica (allora conta il guadagno)"));
+
     // ---- single items
     for (k, en, it) in ITEMS {
         let g: &'static str = en;
@@ -993,6 +1015,12 @@ pub fn fields() -> Vec<Field> {
     add(Field::new("silence_threshold", "system", "Silence threshold", "Soglia di silenzio", Float { min: 0.0, max: 1.0 })
         .def("0.005")
         .help("Lower = the spectrum reacts to quieter sound", "Più basso = lo spettro reagisce a suoni più bassi"));
+    add(Field::new("audio_device", "system", "Sound to listen to", "Suono da ascoltare", Text)
+        .restart()
+        .help(
+            "Empty = what the computer plays (the default output). Windows: part of the name of an output or of an input (a microphone, a line in), as in the sound settings. Linux: the name of a PulseAudio/PipeWire source (pactl list short sources)",
+            "Vuoto = ciò che riproduce il computer (l'uscita predefinita). Windows: parte del nome di un'uscita o di un ingresso (microfono, line in), come nelle impostazioni audio. Linux: il nome di una sorgente PulseAudio/PipeWire (pactl list short sources)",
+        ));
     add(Field::new("silence_timeout_ms", "system", "Quiet time before idle (ms)", "Silenzio prima dello stato di riposo (ms)", int(0, 60000)).def("800"));
     add(Field::new("gpu_usage_source", "system", "GPU usage from", "Carico GPU da", Choice(&["auto", "windows"]))
         .def("auto")

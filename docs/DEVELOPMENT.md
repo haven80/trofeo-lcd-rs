@@ -15,13 +15,13 @@ On Linux it needs `pkg-config` and the PulseAudio headers. Windows builds are ma
 ## Code structure
 
 - `src/lib.rs` — USB driver: handshake, chunking, JPEG encode, `Framebuffer`.
-- `src/audio.rs` — audio capture (WASAPI / PulseAudio-PipeWire).
+- `src/audio.rs` — audio capture (WASAPI loopback or input / PulseAudio-PipeWire): a mono ring and a left/right ring, the device chosen by `audio_device`.
 - `src/cpu_sensor.rs`, `src/cpu_freq.rs` — CPU temp/power & frequency.
 - `src/deepcool/` — DeepCool display drivers (HID).
 - `src/dxgi_capture.rs` + `src/bin/screen.rs` — second monitor mode.
 - `src/weather.rs` + `src/weather_icon.rs` — weather (Open-Meteo) and its condition icons.
 - `src/ticker.rs` — news ticker: RSS/Atom feeds, plain-text URLs, or a local file.
-- `src/spectrum.rs` — spectrum styles and color palettes.
+- `src/spectrum.rs` — spectrum styles and color palettes, and the `Feed` (the bars of the mix, the left and the right channel) that free layouts read.
 - `src/media.rs` + `src/music_screen.rs` — now-playing info (Windows media controls / `playerctl`) and the Spotify-style music screen.
 - `src/pixel_game.rs` — the self-playing pixel-art platformer under the clock.
 - `src/effect.rs` — the animated backgrounds (plasma, aurora, lava, waves, matrix, rain, aquarium, network, globe and their light variants).
@@ -35,7 +35,7 @@ On Linux it needs `pkg-config` and the PulseAudio headers. Windows builds are ma
 - `src/themes.rs` — the themes: the built-in ones, and the ones of your own (`themes/<name>.theme`: save, list, load, export, checks).
 - `src/free.rs` — free layouts: the file format (read, write, check), the placeholders and metrics.
 - `src/free_builtin/` — the text of the built-in free layouts (landscape and `.portrait` versions), used through `free::BUILTIN`.
-- `src/free_draw.rs` — draws a free layout (text, bar, ring, rect, image) with live values.
+- `src/free_draw.rs` — draws a free layout (text, bar, ring, rect, image, spectrum) with live values; `src/free_draw/spectrum_el.rs` draws the `spectrum` element (rows, columns, circles).
 - `src/bin/config_editor/builder.rs` — the visual builder of free layouts in the settings editor.
 - `src/profiles.rs` — profiles: the files, the choice (rule, hand, file), the rules and the hold, the hotkey order.
 - `src/alerts.rs` — threshold alerts: the rules, the delay and hysteresis, the border and bar.

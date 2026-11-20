@@ -1,0 +1,10 @@
+# stereo
+rect  x=0 y=0 w=100 h=100 color=#080A10
+spectrum x=15 y=50 anchor=c w=24 h=92 shape=circle style=bars channel=left bars=48 gap=30 inner=50 color=#00E0FF color2=#2A6BFF flow=7
+spectrum x=85 y=50 anchor=c w=24 h=92 shape=circle style=bars channel=right bars=48 gap=30 inner=50 flip=false color=#FF6AD8 color2=#FFB84A flow=7
+text  x=15 y=50 anchor=c size=4 font=smooth weight=medium color=#BFEFFF text="LEFT"
+text  x=85 y=50 anchor=c size=4 font=smooth weight=medium color=#FFD0F0 text="RIGHT"
+text  x=50 y=36 anchor=c size=14 font=smooth weight=light color=#FFFFFF text="{time_short}"
+text  x=50 y=54 anchor=c size=3 font=smooth weight=regular color=#9AA8C8 text="{date}"
+text  x=50 y=70 anchor=c size=3 font=smooth weight=regular color=#7C88A8 text="CPU {cpu}    GPU {gpu}"
+text  x=50 y=92 anchor=b size=3 font=smooth weight=regular color=#9AA8C8 w=30 text="{song}"

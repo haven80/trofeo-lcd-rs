@@ -1,0 +1,8 @@
+# pulse (portrait)
+rect  x=0 y=0 w=100 h=100 color=#060912
+text  x=50 y=6 anchor=t size=14 font=smooth weight=light color=#FFFFFF text="{time_short}"
+text  x=50 y=13.5 anchor=t size=3 font=smooth weight=regular color=#9AA8C8 text="{date}"
+text  x=10 y=19 anchor=tl size=4 font=smooth weight=regular color=#9AE8FF text="CPU {cpu}"
+text  x=90 y=19 anchor=tr size=4 font=smooth weight=regular color=#FFB0E8 text="GPU {gpu}"
+text  x=50 y=24 anchor=t size=3 font=smooth weight=regular color=#9AA8C8 w=90 text="{song}"
+spectrum x=0 y=30 w=100 h=68 shape=column sym=true style=bars bars=64 gap=35 color=#00D4FF color2=#FF4FD8 flow=8

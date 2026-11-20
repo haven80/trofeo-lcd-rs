@@ -142,6 +142,8 @@ pub struct Settings {
     pub bg_dim: u32,
     pub deck: Vec<PKind>,
     pub deck_gauge: bool,
+    /// Seconds a loop of the moving gradient takes on the rings, gauges, bars and cards (`dash_flow`, 0 = still).
+    pub flow: f32,
     pub cards: Vec<Vec<PKind>>,
     pub cards_radius: Option<u32>,
     pub cards_gap: u32,
@@ -195,6 +197,7 @@ impl Default for Settings {
             cards_radius: None,
             cards_gap: 12,
             orbit: vec![PKind::Cpu, PKind::Gpu, PKind::Ram],
+            flow: 0.0,
             orbit_clock: true,
             orbit_legend: true,
             console: vec![PKind::Cpu, PKind::Gpu, PKind::Ram, PKind::Net, PKind::Disk],
@@ -342,6 +345,12 @@ pub fn parse(file: &ConfigFile) -> anyhow::Result<Settings> {
     }
     if let Some(v) = boolean("deck_gauge")? {
         s.deck_gauge = v;
+    }
+    if let Some(v) = file.get_f32("dash_flow").map_err(|e| anyhow::anyhow!(e))? {
+        if !(0.0..=60.0).contains(&v) {
+            anyhow::bail!("dash_flow: must be between 0 and 60 seconds (got {v})");
+        }
+        s.flow = v;
     }
     if let Some(v) = file.get("cards") {
         s.cards = parse_cards(v)?;
@@ -986,7 +995,12 @@ fn deck_column(p: &mut Painter, c: &Ctx, panel: &Panel, acc: Rgb, (x, y, w, h): 
             let gh = (h * 0.012).clamp(2.0, 4.0);
             p.layer.fill_rrect_solid((x + pad, gy, inner, gh), gh / 2.0, ink, 28);
             let fw = (inner * f).max(gh);
-            p.layer.fill_rrect((x + pad, gy, fw, gh), gh / 2.0, &move |t| lerp_rgb(acc, (255, 255, 255), t * 0.35), 255);
+            let fs = tiles::flow_secs(c.s.flow);
+            if fs > 0.0 {
+                p.layer.fill_rrect((x + pad, gy, fw, gh), gh / 2.0, &move |t| lerp_rgb(acc, (255, 255, 255), tiles::flow_t(t, fs) * 0.7), 255);
+            } else {
+                p.layer.fill_rrect((x + pad, gy, fw, gh), gh / 2.0, &move |t| lerp_rgb(acc, (255, 255, 255), t * 0.35), 255);
+            }
         }
     }
     let lcap = (h * 0.052).clamp(8.0, 17.0);
@@ -1111,7 +1125,10 @@ fn card(p: &mut Painter, c: &Ctx, panel: &Panel, idx: usize, (x, y, w, h): (f32,
     let b = if paper { (0xE2, 0xDF, 0xD8) } else { lerp_rgb(a, tone(accent(c.s, idx + 1)), 0.38) };
     let b = if light { darken(b, 0.04) } else { darken(b, 0.1) };
     let alpha = (c.s.cards_opacity.min(100) * 255 / 100) as u8;
-    p.layer.fill_rrect((x, y, w, h), radius, &move |t| lerp_rgb(a, b, t), alpha);
+    let fs = tiles::flow_secs(c.s.flow);
+    // moving: the card's colour drifts towards the next card's colour and back
+    let b = if fs > 0.0 && !paper { lerp_rgb(a, tone(accent(c.s, idx + 1)), 0.9) } else { b };
+    p.layer.fill_rrect((x, y, w, h), radius, &move |t| lerp_rgb(a, b, tiles::flow_t(t, fs)), alpha);
     let (line, _, _) = line_style(c.s);
     p.layer.stroke_rrect((x, y, w, h), radius, 1.2, line, 40);
     // dark text on light cards; when the cards are see-through the text follows the theme, since
@@ -1287,8 +1304,15 @@ fn orbit_cluster(p: &mut Painter, c: &Ctx, panel: &Panel, color0: usize, (x, y, 
         let r_out = r - i as f32 * (thick + gap);
         let col = accent(c.s, color0 + i);
         p.layer.arc(cx, cy, r_out, thick, 1.0, &move |_| col, 34);
-        let c2 = lerp_rgb(col, (255, 255, 255), 0.3);
-        p.layer.arc(cx, cy, r_out, thick, ring.frac.max(0.012), &move |t| lerp_rgb(col, c2, t), 255);
+        let fs = tiles::flow_secs(c.s.flow);
+        if fs > 0.0 {
+            // a moving gradient: from this ring's colour to the next one's, travelling round
+            let c2 = lerp_rgb(col, accent(c.s, color0 + i + 1), 0.8);
+            p.layer.arc(cx, cy, r_out, thick, ring.frac.max(0.012), &move |t| lerp_rgb(col, c2, tiles::flow_t(t, fs)), 255);
+        } else {
+            let c2 = lerp_rgb(col, (255, 255, 255), 0.3);
+            p.layer.arc(cx, cy, r_out, thick, ring.frac.max(0.012), &move |t| lerp_rgb(col, c2, t), 255);
+        }
     }
     // the centre
     let inner_r = r - n as f32 * (thick + gap) + gap;
@@ -1494,7 +1518,9 @@ fn console_tile(p: &mut Painter, c: &Ctx, panel: &Panel, idx: usize, focused: bo
             let by = y + h - pad - bar_h;
             p.layer.fill_rrect_solid((x + pad, by, inner, bar_h), bar_h / 2.0, ink, 40);
             if f > 0.0 {
-                p.layer.fill_rrect((x + pad, by, (inner * f).max(bar_h), bar_h), bar_h / 2.0, &move |t| lerp_rgb(col, lerp_rgb(col, (255, 255, 255), 0.4), t), 255);
+                let fs = tiles::flow_secs(c.s.flow);
+                let k = if fs > 0.0 { 0.75 } else { 0.4 };
+                p.layer.fill_rrect((x + pad, by, (inner * f).max(bar_h), bar_h), bar_h / 2.0, &move |t| lerp_rgb(col, lerp_rgb(col, (255, 255, 255), k), tiles::flow_t(t, fs)), 255);
             }
         }
         return;
@@ -1618,11 +1644,13 @@ impl DashScreen {
     /// Frames per second the screen wants: the graphs move once a second, a background effect
     /// or image needs its own rate.
     pub fn wanted_fps(s: &Settings, effect_fps: f32, active_fps: f32) -> f32 {
-        match s.bg {
+        let base = match s.bg {
             BgMode::Effect => effect_fps,
             BgMode::Image => active_fps,
             _ => 4.0,
-        }
+        };
+        // a moving gradient needs a steady rate
+        if tiles::flow_secs(s.flow) > 0.0 { base.max(20.0) } else { base }
     }
 
     #[allow(clippy::too_many_arguments)]

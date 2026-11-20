@@ -1,7 +1,7 @@
 <h1 align="center">trofeo_lcd</h1>
 
 <p align="center"><b>Beautiful screens for your Thermalright Trofeo Vision LCD.</b><br>
-Twenty-two new designs and all the classic screens, bars that flow, your own layouts and themes — a lightweight, open-source alternative to TRCC.</p>
+Twenty-six new designs and all the classic screens, a music spectrum you can put anywhere, bars that flow, your own layouts and themes — a lightweight, open-source alternative to TRCC.</p>
 
 <h3 align="center">New designs <sub>(the bars of the animated ones really move)</sub></h3>
 
@@ -29,6 +29,14 @@ Twenty-two new designs and all the classic screens, bars that flow, your own lay
 <tr>
 <td width="50%" align="center"><img src="img/layout-cluster.png" width="100%" alt="cluster"><br><sub><code>layout = cluster</code></sub></td>
 <td width="50%" align="center"><img src="img/layout-pearl.png" width="100%" alt="pearl"><br><sub><code>layout = pearl</code></sub></td>
+</tr>
+<tr>
+<td width="50%" align="center"><img src="img/layout-pulse-animated.gif" width="100%" alt="pulse"><br><sub><code>layout = pulse</code> · spectrum</sub></td>
+<td width="50%" align="center"><img src="img/layout-radial-animated.gif" width="100%" alt="radial"><br><sub><code>layout = radial</code> · spectrum</sub></td>
+</tr>
+<tr>
+<td width="50%" align="center"><img src="img/layout-stereo-animated.gif" width="100%" alt="stereo"><br><sub><code>layout = stereo</code> · left / right</sub></td>
+<td width="50%" align="center"><img src="img/layout-bands-animated.gif" width="100%" alt="bands"><br><sub><code>layout = bands</code> · bass / mids / highs</sub></td>
 </tr>
 </table>
 
@@ -72,7 +80,7 @@ Twenty-two new designs and all the classic screens, bars that flow, your own lay
 </tr>
 </table>
 
-<p align="center"><sub><b>43 screens</b> (22 new designs, 12 shown here, and 21 classics), plus nine for music and nine for games. Every one has a portrait version. <a href="#the-screens">Details and portrait versions ↓</a></sub></p>
+<p align="center"><sub><b>47 screens</b> (26 new designs, 16 shown here, and 21 classics), plus nine for music and nine for games. Every one has a portrait version. <a href="#the-screens">Details and portrait versions ↓</a></sub></p>
 
 <p align="center">
 <a href="#the-screens">The screens</a> ·
@@ -114,6 +122,23 @@ Bars and rings whose gradient flows, all the time. `bar_animation = false` keeps
 <td width="50%"></td>
 </tr>
 </table>
+
+### Music spectrum
+
+A spectrum you place yourself: a row, a column or a circle, the left or the right channel, only the bass, mids or highs, mirrored, with your own colours. It moves with the music; without sound the picture is still. Add one to any layout with a single line (see [The spectrum in a layout](./OPTIONS_GUIDE.md#the-spectrum-in-a-layout)).
+
+<table>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-pulse-animated.gif" width="100%" alt="Pulse"><br><b>Pulse</b> <sup>animated</sup><br>A mirrored row of 80 bars under the clock, the colour flows.<br><code>layout = pulse</code></td>
+<td width="50%" valign="top"><img src="img/layout-radial-animated.gif" width="100%" alt="Radial"><br><b>Radial</b> <sup>animated</sup><br>A circular spectrum round the clock, CPU and GPU on the sides.<br><code>layout = radial</code></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-stereo-animated.gif" width="100%" alt="Stereo"><br><b>Stereo</b> <sup>animated</sup><br>Two circles: the left channel in blue, the right one in pink, the figures between them.<br><code>layout = stereo</code></td>
+<td width="50%" valign="top"><img src="img/layout-bands-animated.gif" width="100%" alt="Bands"><br><b>Bands</b> <sup>animated</sup><br>Three rows: the bass in orange, the mids in magenta, the highs in cyan.<br><code>layout = bands</code></td>
+</tr>
+</table>
+
+Choose the input or output to listen to (`audio_device`), the left, the right or both channels, and the gain and the compressor (`spectrum_gain`, `spectrum_compress`): [the options guide](./OPTIONS_GUIDE.md#the-spectrum-in-a-layout).
 
 ### Elegant and calm
 
@@ -337,6 +362,7 @@ Texts with live values (`{cpu}`, `{gpu_temp}`, `{song}`, `{weather_temp}` …), 
 
 ## What's new
 
+**3.0.0 — the music spectrum in your layouts.** A new `spectrum` element: a row, a column or a circle, left or right channel, bass, mids or highs, mirrored, with your own colours and gradients; four new designs (`pulse`, `radial`, `stereo`, `bands`); gain, compressor and the audio device to listen to; and flowing colours on the classic screens too (`dash_flow`, `tiles_flow`).<br>
 **2.25.0 — eight more screens and bars that flow.** `swiss`, `dusk`, `aurora`, `carbon`, `eclipse`, `ledger`, `haiku`, `peach`; `color2` and `flow` give bars and rings a gradient that travels (`bar_animation = false` keeps them still).<br>
 **2.24.0 — nine screens in a thin font.** `atelier`, `noir`, `pearl`, `volt`, `blaze`, `studio`, `board`, `mineral`, `cluster`; free layouts can use `font=smooth weight=light`.<br>
 **2.23.0 — five screens.** `halo`, `gauges`, `terminal`, `horizon`, `ribbon`; *Copy a built-in design* in the builder.<br>

@@ -1,0 +1,10 @@
+# stereo (portrait)
+rect  x=0 y=0 w=100 h=100 color=#080A10
+spectrum x=50 y=13 anchor=c w=96 h=22 shape=circle style=bars channel=left bars=48 gap=30 inner=50 color=#00E0FF color2=#2A6BFF flow=7
+spectrum x=50 y=87 anchor=c w=96 h=22 shape=circle style=bars channel=right bars=48 gap=30 inner=50 color=#FF6AD8 color2=#FFB84A flow=7
+text  x=50 y=13 anchor=c size=4 font=smooth weight=medium color=#BFEFFF text="LEFT"
+text  x=50 y=87 anchor=c size=4 font=smooth weight=medium color=#FFD0F0 text="RIGHT"
+text  x=50 y=41 anchor=c size=12 font=smooth weight=light color=#FFFFFF text="{time_short}"
+text  x=50 y=48 anchor=c size=3 font=smooth weight=regular color=#9AA8C8 w=90 text="{date}"
+text  x=50 y=54 anchor=c size=3 font=smooth weight=regular color=#7C88A8 w=90 text="CPU {cpu}   GPU {gpu}"
+text  x=50 y=62 anchor=c size=3 font=smooth weight=regular color=#9AA8C8 w=90 text="{song}"

@@ -1,0 +1,11 @@
+# radial
+rect  x=0 y=0 w=100 h=100 color=#070A12
+spectrum x=50 y=50 anchor=c w=40 h=96 shape=circle style=bars bars=72 gap=35 inner=60 rot=0 color=#00D4FF color2=#FF4FD8 flow=6
+text  x=50 y=47 anchor=c size=9 font=smooth weight=light color=#FFFFFF text="{time_short}"
+text  x=4 y=28 anchor=tl size=3 font=smooth weight=medium color=#7CE8FF text="PROCESSOR"
+text  x=4 y=40 anchor=tl size=9 font=smooth weight=light color=#FFFFFF text="{cpu}"
+text  x=4 y=62 anchor=tl size=3 font=smooth weight=regular color=#9AA8C8 text="{cpu_temp}  ·  {cpu_power}"
+text  x=96 y=28 anchor=tr size=3 font=smooth weight=medium color=#FF9AE8 text="GRAPHICS"
+text  x=96 y=40 anchor=tr size=9 font=smooth weight=light color=#FFFFFF text="{gpu}"
+text  x=96 y=62 anchor=tr size=3 font=smooth weight=regular color=#9AA8C8 text="{gpu_temp}  ·  {gpu_power}"
+text  x=50 y=95 anchor=b size=3 font=smooth weight=regular color=#9AA8C8 w=30 text="{song}"

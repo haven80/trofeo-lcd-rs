@@ -443,6 +443,7 @@ impl Builder {
                     Kind::Ring => tr(l, "Ring", "Anello"),
                     Kind::Rect => tr(l, "Rectangle", "Rettangolo"),
                     Kind::Image => tr(l, "Picture", "Immagine"),
+                    Kind::Spectrum => tr(l, "Spectrum", "Spettro"),
                 };
                 if ui.button(label).clicked() {
                     let mut e = Element::new(k);
@@ -594,6 +595,7 @@ impl Builder {
                     Kind::Bar | Kind::Ring => format!("{}  {}", e.kind.name(), e.value),
                     Kind::Image => format!("image  {}", e.file),
                     Kind::Rect => "rect".to_string(),
+                    Kind::Spectrum => format!("spectrum  {} {}", e.shape.name(), e.channel.name()),
                 };
                 let lock = if self.locked.get(i).copied().unwrap_or(false) { "\u{1F512} " } else { "" };
                 if ui.selectable_label(self.sel == Some(i), format!("{lock}{summary}")).clicked() {
@@ -734,6 +736,104 @@ impl Builder {
                         ui.horizontal(|ui| {
                             let mut on = e.color2.is_some();
                             if ui.checkbox(&mut on, "").on_hover_text(tr(l, "The filled part runs from the color to this one", "La parte piena va dal colore a questo")).changed() {
+                                e.color2 = on.then(|| e.color.unwrap_or((0x00, 0xD4, 0xFF)));
+                                if !on {
+                                    e.flow = 0.0;
+                                }
+                            }
+                            if let Some(c) = e.color2.as_mut() {
+                                color_button(ui, c);
+                            }
+                        });
+                        ui.end_row();
+                        if e.color2.is_some() {
+                            ui.label(tr(l, "Flow (s per loop)", "Scorrimento (s a giro)"));
+                            ui.add(egui::Slider::new(&mut e.flow, 0.0..=20.0).custom_formatter(|v, _| if v <= 0.0 { "still".to_string() } else { format!("{v:.1}") }));
+                            ui.end_row();
+                        }
+                    }
+                    if e.kind == Kind::Spectrum {
+                        use free::{SpecBand, SpecChannel, SpecShape, SpecStyle};
+                        ui.label(tr(l, "Shape", "Forma"));
+                        ui.horizontal(|ui| {
+                            let shape_name = |s: SpecShape| match s {
+                                SpecShape::Row => tr(l, "row", "riga"),
+                                SpecShape::Column => tr(l, "column", "colonna"),
+                                SpecShape::Circle => tr(l, "circle", "cerchio"),
+                            };
+                            egui::ComboBox::from_id_salt("builder_shape").selected_text(shape_name(e.shape)).width(90.0).show_ui(ui, |ui| {
+                                for v in SpecShape::ALL {
+                                    ui.selectable_value(&mut e.shape, *v, shape_name(*v));
+                                }
+                            });
+                            egui::ComboBox::from_id_salt("builder_sstyle").selected_text(e.style.name()).width(90.0).show_ui(ui, |ui| {
+                                for v in SpecStyle::ALL {
+                                    ui.selectable_value(&mut e.style, *v, v.name());
+                                }
+                            });
+                        });
+                        ui.end_row();
+                        ui.label(tr(l, "Sound", "Suono"));
+                        ui.horizontal(|ui| {
+                            let ch_name = |c: SpecChannel| match c {
+                                SpecChannel::Mix => tr(l, "L + R", "S + D"),
+                                SpecChannel::Left => tr(l, "left", "sinistro"),
+                                SpecChannel::Right => tr(l, "right", "destro"),
+                            };
+                            egui::ComboBox::from_id_salt("builder_channel").selected_text(ch_name(e.channel)).width(90.0).show_ui(ui, |ui| {
+                                for v in SpecChannel::ALL {
+                                    ui.selectable_value(&mut e.channel, *v, ch_name(*v));
+                                }
+                            });
+                            let band_name = |b: SpecBand| match b {
+                                SpecBand::All => tr(l, "all", "tutto"),
+                                SpecBand::Bass => tr(l, "bass", "bassi"),
+                                SpecBand::Mid => tr(l, "mid", "medi"),
+                                SpecBand::Treble => tr(l, "treble", "alti"),
+                            };
+                            egui::ComboBox::from_id_salt("builder_band").selected_text(band_name(e.band)).width(90.0).show_ui(ui, |ui| {
+                                for v in SpecBand::ALL {
+                                    ui.selectable_value(&mut e.band, *v, band_name(*v));
+                                }
+                            });
+                        });
+                        ui.end_row();
+                        ui.label(tr(l, "Bars", "Barre"));
+                        ui.add(egui::Slider::new(&mut e.bars, 4..=96));
+                        ui.end_row();
+                        ui.label(tr(l, "Space between", "Spazio tra le barre"));
+                        ui.add(egui::Slider::new(&mut e.gap, 0.0..=80.0).suffix("%"));
+                        ui.end_row();
+                        ui.label(tr(l, "Mirrored", "Speculare"));
+                        ui.horizontal(|ui| {
+                            ui.checkbox(&mut e.sym, tr(l, "both halves", "due metà")).on_hover_text(tr(l, "Low sounds in the middle, high ones at the edges", "Bassi al centro, alti ai bordi"));
+                            ui.checkbox(&mut e.flip, tr(l, "other way", "al contrario")).on_hover_text(tr(l, "Down, to the left or inwards", "Verso il basso, a sinistra o verso l'interno"));
+                        });
+                        ui.end_row();
+                        if e.shape == SpecShape::Circle {
+                            ui.label(tr(l, "Hole in the middle", "Buco al centro"));
+                            ui.add(egui::Slider::new(&mut e.inner, 0.0..=95.0).suffix("%"));
+                            ui.end_row();
+                            ui.label(tr(l, "Start at", "Parte da"));
+                            ui.add(egui::Slider::new(&mut e.rot, 0.0..=360.0).suffix("\u{b0}"));
+                            ui.end_row();
+                        }
+                        ui.label(tr(l, "Turns hot at", "Diventa caldo da"));
+                        ui.horizontal(|ui| {
+                            let mut on = e.hot.is_some();
+                            if ui.checkbox(&mut on, "").changed() {
+                                e.hot = on.then_some(85.0);
+                            }
+                            if let Some(h) = e.hot.as_mut() {
+                                ui.add(egui::DragValue::new(h).speed(1.0).suffix("%").range(1.0..=100.0));
+                                color_button(ui, &mut e.hot_color);
+                            }
+                        });
+                        ui.end_row();
+                        ui.label(tr(l, "Gradient to", "Gradiente verso"));
+                        ui.horizontal(|ui| {
+                            let mut on = e.color2.is_some();
+                            if ui.checkbox(&mut on, "").on_hover_text(tr(l, "From the first bar's color to this one along the spectrum", "Dal colore della prima barra a questo lungo lo spettro")).changed() {
                                 e.color2 = on.then(|| e.color.unwrap_or((0x00, 0xD4, 0xFF)));
                                 if !on {
                                     e.flow = 0.0;

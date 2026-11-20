@@ -2,7 +2,7 @@
 
 [← Back to the README](../README.md) · [All the docs](./README.md)
 
-Twenty-two new designs come with the program, next to the classic screens that were always there: `layout = <name>` and nothing else. Each has a version for portrait panels (chosen by itself). In the settings editor, *Screens → Layout builder → Copy a built-in design* makes a file of yours to change; a file `layouts/<name>.layout` with the same name takes the place of the built-in one. Details of the file format: [the options guide](../OPTIONS_GUIDE.md#free-layouts--design-your-own-screen).
+Twenty-six new designs come with the program, next to the classic screens that were always there: `layout = <name>` and nothing else. Each has a version for portrait panels (chosen by itself). In the settings editor, *Screens → Layout builder → Copy a built-in design* makes a file of yours to change; a file `layouts/<name>.layout` with the same name takes the place of the built-in one. Details of the file format: [the options guide](../OPTIONS_GUIDE.md#free-layouts--design-your-own-screen).
 
 ## Flowing bars
 
@@ -52,6 +52,46 @@ A navy ledger with gold lines, one row per device. Its bars (or rings) have a gr
 <img src="../img/layout-ledger-animated.gif" width="100%" alt="Ledger">
 
 <img src="../img/layout-ledger-portrait.png" height="420" alt="Ledger, portrait">
+
+## Music spectrum
+
+A spectrum you place yourself, with the left or right channel, the bass, mids or highs, as a row, a column or a circle. Details and every key: [the spectrum in a layout](../OPTIONS_GUIDE.md#the-spectrum-in-a-layout). Without sound the picture is still.
+### Pulse
+
+A mirrored row of 80 bars under the clock: the low sounds in the middle, the highs at the sides, the colour flows from cyan to pink.
+
+`layout = pulse`
+
+<img src="../img/layout-pulse-animated.gif" width="100%" alt="Pulse">
+
+<img src="../img/layout-pulse-portrait.png" height="420" alt="Pulse, portrait">
+### Radial
+
+A circular spectrum round the clock, CPU and GPU on the sides.
+
+`layout = radial`
+
+<img src="../img/layout-radial-animated.gif" width="100%" alt="Radial">
+
+<img src="../img/layout-radial-portrait.png" height="420" alt="Radial, portrait">
+### Stereo
+
+Two circles, the left channel in blue and the right one in pink, with the figures between them. The two sides are measured with the same reference, so the louder side looks louder.
+
+`layout = stereo`
+
+<img src="../img/layout-stereo-animated.gif" width="100%" alt="Stereo">
+
+<img src="../img/layout-stereo-portrait.png" height="420" alt="Stereo, portrait">
+### Bands
+
+Three rows of bars: the bass in orange, the mids in magenta, the highs in cyan.
+
+`layout = bands`
+
+<img src="../img/layout-bands-animated.gif" width="100%" alt="Bands">
+
+<img src="../img/layout-bands-portrait.png" height="420" alt="Bands, portrait">
 
 ## Elegant and calm
 
@@ -343,5 +383,7 @@ When a game starts, the screen changes by itself (`gaming_layout`). Nine designs
 
 - **Copy and change**: layout builder → *Copy a built-in design*.
 - **Stop the movement**: `bar_animation = false`.
+- **Add a spectrum to your own screen**: layout builder → *Add → Spectrum*, or one line `spectrum x=0 y=60 w=100 h=40 shape=row`.
+- **Flowing colours on the classic screens**: `dash_flow = 6` (orbit, deck, console, cards) and `tiles_flow = 6` (tiles), seconds per loop.
 - **Another font**: the thin smooth font is chosen in the layout itself (`font=smooth weight=light`); the pixel designs use `font=pixel`.
 - **Share it**: post your look in [the gallery](https://github.com/haven80/trofeo-lcd-rs/issues?q=is%3Aissue+label%3Agallery).

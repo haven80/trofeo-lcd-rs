@@ -304,6 +304,34 @@ impl Colors<'_> {
 }
 
 // ---------------------------------------------------------------------------
+// The live feed for the free layouts' `spectrum` element (3.0.0)
+// ---------------------------------------------------------------------------
+
+/// The bars of the moment for the three sounds a free layout can ask for: both channels
+/// mixed, the left one and the right one (`NUM_BARS` heights 0-1 each), and their peak caps.
+#[derive(Clone, Default)]
+pub struct Feed {
+    pub mix: Vec<f32>,
+    pub left: Vec<f32>,
+    pub right: Vec<f32>,
+    pub mix_peaks: Vec<f32>,
+    pub left_peaks: Vec<f32>,
+    pub right_peaks: Vec<f32>,
+}
+
+static FEED: std::sync::Mutex<Option<Feed>> = std::sync::Mutex::new(None);
+
+/// Put the bars of this frame where the free layouts can read them.
+pub fn set_feed(f: Option<Feed>) {
+    *FEED.lock().unwrap_or_else(|e| e.into_inner()) = f;
+}
+
+/// The bars of this frame (None when nothing has been put there).
+pub fn feed() -> Option<Feed> {
+    FEED.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+// ---------------------------------------------------------------------------
 // Peak caps
 // ---------------------------------------------------------------------------
 

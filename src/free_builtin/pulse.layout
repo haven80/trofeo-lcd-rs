@@ -1,0 +1,9 @@
+# pulse
+rect  x=0 y=0 w=100 h=100 color=#060912
+text  x=3 y=26 anchor=l size=17 font=smooth weight=light color=#FFFFFF text="{time_short}"
+text  x=3 y=50 anchor=l size=3 font=smooth weight=regular color=#9AA8C8 text="{date}"
+text  x=60 y=12 anchor=tl size=4 font=smooth weight=regular color=#9AE8FF text="CPU {cpu}   {cpu_temp}"
+text  x=60 y=25 anchor=tl size=4 font=smooth weight=regular color=#FFB0E8 text="GPU {gpu}   {gpu_temp}"
+text  x=97 y=12 anchor=tr size=3 font=smooth weight=regular color=#9AA8C8 w=34 text="{song}"
+spectrum x=0 y=58 w=100 h=40 sym=true style=bars bars=80 gap=35 color=#00D4FF color2=#FF4FD8 flow=8
+rect  x=0 y=98.2 w=100 h=0.6 color=#1B2440

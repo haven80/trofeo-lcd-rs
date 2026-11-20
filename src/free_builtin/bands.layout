@@ -1,0 +1,12 @@
+# bands
+rect  x=0 y=0 w=100 h=100 color=#07090F
+text  x=3 y=24 anchor=l size=11 font=smooth weight=light color=#FFFFFF text="{time_short}"
+text  x=3 y=46 anchor=l size=3 font=smooth weight=regular color=#9AA8C8 w=16 text="{date}"
+text  x=3 y=62 anchor=l size=3 font=smooth weight=regular color=#9AA8C8 text="CPU {cpu}"
+text  x=3 y=72 anchor=l size=3 font=smooth weight=regular color=#9AA8C8 text="GPU {gpu}"
+text  x=22 y=5 anchor=tl size=3 font=smooth weight=medium color=#FFB07A text="BASS"
+spectrum x=22 y=12 w=76 h=20 style=bars band=bass bars=56 gap=30 color=#FF8A3D color2=#FF3D6E flow=5
+text  x=22 y=37 anchor=tl size=3 font=smooth weight=medium color=#FFA0EA text="MID"
+spectrum x=22 y=44 w=76 h=20 style=bars band=mid bars=56 gap=30 color=#FF4FD8 color2=#8A4FFF flow=5
+text  x=22 y=69 anchor=tl size=3 font=smooth weight=medium color=#9AEBFF text="TREBLE"
+spectrum x=22 y=76 w=76 h=20 style=bars band=treble bars=56 gap=30 color=#00E0FF color2=#3D7BFF flow=5

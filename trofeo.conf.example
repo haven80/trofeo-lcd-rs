@@ -97,6 +97,11 @@ language = en
 # and look like silence — lower it if the bars don't react at low volume.
 # silence_threshold = 0.005     # 0.0-1.0 peak amplitude (lower = more sensitive)
 # silence_timeout_ms = 800      # how long it must stay quiet before dropping to idle-fps
+# Which sound to listen to. Empty = what the computer plays (the default output).
+# Windows: part of the name of an output (what it plays is listened to) or of an input
+# (a microphone, a line in), as written in the sound settings. Linux: the name of a
+# PulseAudio/PipeWire source (pactl list short sources). Applies after a restart.
+# audio_device = Speakers
 
 # --- Ticker (news headlines, or any custom feed) -----------------------------
 # One or more sources, comma-separated. Each source can be:
@@ -271,10 +276,11 @@ language = en
 # A screen you designed yourself (the settings editor's Layout builder, or a text file
 # layouts/<name>.layout next to this file) is used by its name, like the others:
 # layout = default, my-screen
-# Twenty-two designs come with the program (no file needed; the layout builder can copy one to change):
+# Twenty-six designs come with the program (no file needed; the layout builder can copy one to change):
 #   swiss | dusk | aurora | carbon | eclipse | ledger | haiku | peach   (dusk, aurora, carbon, eclipse and ledger have flowing bars; see bar_animation)
 #   atelier | noir | pearl | volt | blaze | studio | board | mineral | cluster
 #   halo | gauges | terminal | horizon | ribbon
+#   pulse | radial | stereo | bands   (with a spectrum: rows, circles, left/right, bass/mids/highs)
 # layout = atelier
 # Rotation: several layouts separated by commas, changing every layout_interval seconds.
 # layout = cpu-gpu, temps, music
@@ -305,6 +311,7 @@ language = en
 # tiles_font = smooth                 # smooth | pixel
 # tiles_theme = dark                  # dark | light
 # tiles_bar_color = #00C8FF, #FF0080  # bars and rings: auto | a color | a gradient
+# tiles_flow = 0                      # seconds per loop of a moving gradient on the bars and rings (0 = still; needs bar_animation)
 # tiles_bg = gradient                 # global | color | gradient | effect | image
 # tiles_bg_color = #1B2A4A, #4A1B3A
 # A color of its own for every tile, from the color presets of the animated background;
@@ -374,6 +381,7 @@ language = en
 # cards_opacity = 100                   # opacity of the cards, 0-100; lower it to see the background
 # dash_graph = true                     # the graph of the last minutes
 # dash_history = 90                     # seconds of history in the graphs (20-600)
+# dash_flow = 0                         # seconds per loop of a moving gradient on orbit rings, deck gauges, console bars and cards (0 = still; needs bar_animation)
 # dash_net_max = 25                     # network MB/s that fills a ring / gauge
 # dash_bg = gradient                    # global | color | gradient | effect | image
 # dash_bg_color = #10142A, #241030
@@ -511,6 +519,10 @@ language = en
 # spectrum_gradient = #FF0080, #00FFFF
 # Hue scroll speed of the "rainbow" palette, degrees per second (0 = static).
 # spectrum_rainbow_speed = 30
+# The level of every spectrum (the main one, the music screens, the `spectrum` element of free layouts):
+# spectrum_gain = 0              # -24 to 24 dB (taller or shorter bars)
+# spectrum_compress = 0          # 0-100 compressor: lifts the quiet parts towards the loud ones (0 = off)
+# spectrum_auto_gain = true      # false = the bars are as loud as the music (then the gain matters)
 
 # --- Panel transparency -------------------------------------------------------
 # Background opacity of the panels (layouts and the in-game dashboard): 100 = solid,

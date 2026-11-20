@@ -1,0 +1,11 @@
+# bands (portrait)
+rect  x=0 y=0 w=100 h=100 color=#07090F
+text  x=50 y=5 anchor=t size=13 font=smooth weight=light color=#FFFFFF text="{time_short}"
+text  x=50 y=11.5 anchor=t size=3 font=smooth weight=regular color=#9AA8C8 w=90 text="{date}"
+text  x=8 y=18 anchor=tl size=3 font=smooth weight=medium color=#FFB07A text="BASS"
+spectrum x=6 y=21.5 w=88 h=21 style=bars band=bass bars=40 gap=30 color=#FF8A3D color2=#FF3D6E flow=5
+text  x=8 y=45 anchor=tl size=3 font=smooth weight=medium color=#FFA0EA text="MID"
+spectrum x=6 y=48.5 w=88 h=21 style=bars band=mid bars=40 gap=30 color=#FF4FD8 color2=#8A4FFF flow=5
+text  x=8 y=72 anchor=tl size=3 font=smooth weight=medium color=#9AEBFF text="TREBLE"
+spectrum x=6 y=75.5 w=88 h=21 style=bars band=treble bars=40 gap=30 color=#00E0FF color2=#3D7BFF flow=5
+text  x=50 y=98 anchor=b size=3 font=smooth weight=regular color=#9AA8C8 w=90 text="{song}"

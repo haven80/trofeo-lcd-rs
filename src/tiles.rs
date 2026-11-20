@@ -194,6 +194,8 @@ pub struct Settings {
     pub radius: Option<u32>,
     pub gap: u32,
     pub bar: BarColor,
+    /// Seconds a loop of the moving gradient on the bars and rings takes (`tiles_flow`, 0 = still).
+    pub flow: f32,
     pub bar_by_kind: Vec<Option<BarColor>>,
     pub cpu_watt_max: u32,
     pub gpu_watt_max: u32,
@@ -233,6 +235,7 @@ impl Default for Settings {
             radius: None,
             gap: 14,
             bar: BarColor::Auto,
+            flow: 0.0,
             bar_by_kind: vec![None; Kind::ALL.len()],
             cpu_watt_max: 200,
             gpu_watt_max: 400,
@@ -396,6 +399,12 @@ pub fn parse(file: &ConfigFile) -> anyhow::Result<Settings> {
     }
     if let Some(v) = file.get("tiles_bar_color") {
         s.bar = parse_bar_color("tiles_bar_color", v)?;
+    }
+    if let Some(v) = file.get_f32("tiles_flow").map_err(|e| anyhow::anyhow!(e))? {
+        if !(0.0..=60.0).contains(&v) {
+            anyhow::bail!("tiles_flow: must be between 0 and 60 seconds (got {v})");
+        }
+        s.flow = v;
     }
     for k in Kind::ALL {
         let key = format!("tile_{}_color", k.key());
@@ -1226,8 +1235,44 @@ fn view(spec: TileSpec, d: &WidgetData, s: &Settings, now: &chrono::DateTime<Loc
 
 // ------------------------------------------------------------------ drawing
 
+/// Moving gradients (3.0.0): with `secs` > 0 a gradient is a wave that travels along the bar or
+/// ring, a loop every `secs` seconds. `t` (0..1 along the filled part) is turned into the place
+/// in the gradient to take the colour from. Without it (0) `t` stays as it is.
+pub(crate) fn flow_t(t: f32, secs: f32) -> f32 {
+    if secs <= 0.0 {
+        return t;
+    }
+    let phase = (crate::free_draw::anim_secs() / secs as f64).fract() as f32;
+    0.5 - 0.5 * ((t - phase) * std::f32::consts::TAU).cos()
+}
+
+/// `secs` of a screen when the moving gradients are on (`bar_animation`), else 0.
+pub(crate) fn flow_secs(secs: f32) -> f32 {
+    if opts().bar_animation { secs } else { 0.0 }
+}
+
+fn lighten_rgb(c: Rgb, k: f32) -> Rgb {
+    lerp_rgb(c, (255, 255, 255), k)
+}
+
 fn bar_rgb(s: &Settings, kind: Kind, frac: f32, color_mode: ColorMode) -> Box<dyn Fn(f32) -> Rgb> {
+    let fs = flow_secs(s.flow);
     match s.bar_color(kind) {
+        BarColor::Auto if fs > 0.0 => {
+            let fan = matches!(kind, Kind::CpuFan | Kind::CaseFan | Kind::Pump | Kind::GpuFan | Kind::Fans);
+            let c = if fan { (0x3F, 0xD0, 0xC9) } else { level_color(frac.max(0.15), color_mode) };
+            let c2 = lighten_rgb(c, 0.6);
+            Box::new(move |t| lerp_rgb(c, c2, flow_t(t, fs)))
+        }
+        BarColor::Colors(list) if fs > 0.0 => {
+            let list = list.clone();
+            if list.len() == 1 {
+                let (c, c2) = (list[0], lighten_rgb(list[0], 0.6));
+                Box::new(move |t| lerp_rgb(c, c2, flow_t(t, fs)))
+            } else {
+                Box::new(move |t| gradient_at(&list, flow_t(t, fs)))
+            }
+        }
         BarColor::Auto => {
             // a fan turning fast is not a warning: fans get a calm teal instead of green-to-red
             let fan = matches!(kind, Kind::CpuFan | Kind::CaseFan | Kind::Pump | Kind::GpuFan | Kind::Fans);

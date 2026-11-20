@@ -172,6 +172,8 @@ struct Config {
     idle_fps: f32,
     active_fps: f32,
     silence_threshold: f32,
+    /// The sound to listen to (`audio_device`): None = the default output.
+    audio_device: Option<String>,
     silence_timeout: Duration,
     color_mode: ColorMode,
     /// If `Some`, the EQ bar color follows (by polling) the color of the OpenRGB
@@ -781,6 +783,7 @@ fn parse_args() -> anyhow::Result<Config> {
     if !(0.0..=1.0).contains(&silence_threshold) {
         anyhow::bail!("silence_threshold: must be between 0.0 and 1.0");
     }
+    let audio_device = file.get("audio_device").map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
     let silence_timeout_ms = match silence_timeout_ms_cli {
         Some(v) => v,
         None => file.get_u32("silence_timeout_ms").map_err(|e| anyhow::anyhow!(e))?.map(u64::from).unwrap_or(DEFAULT_SILENCE_TIMEOUT_MS),
@@ -904,6 +907,7 @@ fn parse_args() -> anyhow::Result<Config> {
         idle_fps,
         active_fps,
         silence_threshold,
+        audio_device,
         silence_timeout: Duration::from_millis(silence_timeout_ms),
         color_mode,
         openrgb_device,
@@ -953,7 +957,7 @@ const OVERRIDE_KEYS: &[&str] = &[
     "spectrum_position", "spectrum_width", "spectrum_height", "status_style",
     "background_color", "background_fit", "background_position", "background_offset_x", "background_offset_y",
     "brightness", "deepcool", "fps_monitor", "layout", "layout_spectrum",
-    "layout_hold_on_music", "layout_interval", "bar_animation", "panel_opacity", "text_backdrop",
+    "layout_hold_on_music", "layout_interval", "bar_animation", "spectrum_gain", "spectrum_compress", "spectrum_auto_gain", "panel_opacity", "text_backdrop",
     "spectrum_style", "spectrum_style_interval", "spectrum_palette",
     "spectrum_palette_interval", "spectrum_gradient", "spectrum_rainbow_speed",
     "music_screen", "music_blur", "music_progress", "music_bg", "music_bg_brightness",
@@ -1276,6 +1280,17 @@ fn parse_ui_options(file: &ConfigFile) -> anyhow::Result<UiOptions> {
             Some(v) => anyhow::bail!("screen_fade_ms: must be 0..{} (got {v})", fade::MAX_MS),
         },
         bar_animation: file.get_bool("bar_animation").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(true),
+        spectrum_gain_db: match file.get_f32("spectrum_gain").map_err(|e| anyhow::anyhow!(e))? {
+            None => 0.0,
+            Some(v) if (-24.0..=24.0).contains(&v) => v,
+            Some(v) => anyhow::bail!("spectrum_gain: must be between -24 and 24 dB (got {v})"),
+        },
+        spectrum_compress: match file.get_u32("spectrum_compress").map_err(|e| anyhow::anyhow!(e))? {
+            None => 0,
+            Some(v) if v <= 100 => v,
+            Some(v) => anyhow::bail!("spectrum_compress: must be between 0 and 100 (got {v})"),
+        },
+        spectrum_auto_gain: file.get_bool("spectrum_auto_gain").map_err(|e| anyhow::anyhow!(e))?.unwrap_or(true),
         screen_fade_style: match file.get("screen_fade_style") {
             None => fade::Style::Cross,
             Some(v) => fade::Style::parse(v).ok_or_else(|| anyhow::anyhow!("screen_fade_style: '{}' not valid (cross | black)", v.trim()))?,
@@ -2332,6 +2347,7 @@ fn main() -> anyhow::Result<()> {
     };
     let mut update_notice: Option<(String, Instant)> = None;
 
+    audio::set_device(config.audio_device.clone());
     let audio_ring = audio::spawn_capture()?;
     #[cfg(not(any(windows, target_os = "linux")))]
     println!(
@@ -2411,6 +2427,12 @@ fn main() -> anyhow::Result<()> {
     let mut peak_tracker = spectrum::PeakTracker::new(NUM_BARS);
     let mut last_peak_update = Instant::now();
     let mut running_max: f32 = 1e-6;
+    // The left and right channels for the `spectrum` element of a free layout (3.0.0).
+    let mut bars_left = vec![0f32; NUM_BARS];
+    let mut bars_right = vec![0f32; NUM_BARS];
+    let mut peaks_left = spectrum::PeakTracker::new(NUM_BARS);
+    let mut peaks_right = spectrum::PeakTracker::new(NUM_BARS);
+    let mut running_max_lr: f32 = 1e-6;
 
     // The framebuffer is allocated ONCE outside the loop and then reused every
     // frame (only `clear()`-ed, not a ~2.6MB Vec reallocation 15x/second) —
@@ -2604,7 +2626,15 @@ fn main() -> anyhow::Result<()> {
         );
         // One of the new designs of the music screen (`music_layout`), drawn by `tiles/music.rs`.
         let music_style = music_screen_on && opts().music.layout != tiles::music::Layout::Classic;
-        let is_idle = !music_screen_on && (!ui_show.spectrum || last_sound.elapsed() >= config.silence_timeout);
+        // A free layout with a `spectrum` element is drawn while the music plays, too.
+        let free_active = active_def
+            .filter(|_| !(gaming_active && ui_show.dashboard))
+            .and_then(|d| d.name.strip_prefix(layouts::FREE_PREFIX));
+        let portrait = fb.height() > fb.width();
+        let free_spectrum = free_active.is_some_and(|n| free_screen.has_spectrum(n, portrait));
+        let free_stereo = free_spectrum && free_active.is_some_and(|n| free_screen.has_stereo_spectrum(n, portrait));
+        let sound_now = last_sound.elapsed() < config.silence_timeout;
+        let is_idle = !music_screen_on && (free_spectrum || !ui_show.spectrum || !sound_now);
         // The pixel game lives on the default screen only (not on a layout panel, the
         // music screen or the gaming dashboard) and needs the clock to be shown.
         let gaming_now = gaming_active;
@@ -2620,6 +2650,9 @@ fn main() -> anyhow::Result<()> {
         let target_fps = if is_idle && game_on {
             // An animation needs a smooth frame rate even when nothing else moves.
             idle_fps_effective.max(config.active_fps)
+        } else if free_spectrum && sound_now {
+            // a spectrum on a free layout moves with the music
+            config.active_fps
         } else if is_idle {
             idle_fps_effective
         } else {
@@ -2667,6 +2700,8 @@ fn main() -> anyhow::Result<()> {
             (true, _) if !opts().tiles.fill_palettes.is_empty() => target_fps.max(5.0),
             _ => target_fps,
         };
+        // moving gradients on the tiles (`tiles_flow`)
+        let target_fps = if tiles_wanted && tiles::flow_secs(opts().tiles.flow) > 0.0 { target_fps.max(20.0) } else { target_fps };
         // Fade between screens (`screen_fade_ms`, off by default): which screen is this frame?
         // A different one than the last frame starts the fade, drawn at a steady pace.
         let fade_ms = opts().screen_fade_ms;
@@ -2683,7 +2718,8 @@ fn main() -> anyhow::Result<()> {
         let target_fps = if screen_fade.active(Instant::now()) { target_fps.max(config.active_fps) } else { target_fps };
         let target_frame_time = Duration::from_secs_f32(1.0 / target_fps);
 
-        let bars = compute_bars(&samples, &hann, fft.as_ref(), &bar_bins, &mut running_max);
+        let shape = Shape::from_options(&opts());
+        let bars = compute_bars(&samples, &hann, fft.as_ref(), &bar_bins, &mut running_max, shape);
         for (h, &target) in bar_heights.iter_mut().zip(bars.iter()) {
             if target > *h {
                 *h = target; // attack cepat
@@ -2692,8 +2728,33 @@ fn main() -> anyhow::Result<()> {
             }
         }
         let peak_now = Instant::now();
-        peak_tracker.update(&bar_heights, (peak_now - last_peak_update).as_secs_f32().min(0.25));
+        let peak_dt = (peak_now - last_peak_update).as_secs_f32().min(0.25);
+        peak_tracker.update(&bar_heights, peak_dt);
         last_peak_update = peak_now;
+        // The bars of the `spectrum` elements of a free layout: both channels mixed, and (only
+        // when something asks for one channel) the left and the right one.
+        if free_spectrum {
+            if free_stereo {
+                let (ls, rs) = audio::take_latest_stereo(FFT_SIZE);
+                let (l, r) = compute_bars_pair(&ls, &rs, &hann, fft.as_ref(), &bar_bins, &mut running_max_lr, shape);
+                for (h, &t) in bars_left.iter_mut().zip(l.iter()) {
+                    *h = if t > *h { t } else { *h * 0.75 + t * 0.25 };
+                }
+                for (h, &t) in bars_right.iter_mut().zip(r.iter()) {
+                    *h = if t > *h { t } else { *h * 0.75 + t * 0.25 };
+                }
+                peaks_left.update(&bars_left, peak_dt);
+                peaks_right.update(&bars_right, peak_dt);
+            }
+            spectrum::set_feed(Some(spectrum::Feed {
+                mix: bar_heights.clone(),
+                left: bars_left.clone(),
+                right: bars_right.clone(),
+                mix_peaks: peak_tracker.peaks().to_vec(),
+                left_peaks: peaks_left.peaks().to_vec(),
+                right_peaks: peaks_right.peaks().to_vec(),
+            }));
+        }
 
         // 2) Refresh system info only as often as needed (not every frame).
         // Note: `System::uptime()` does NOT follow this rule — it's a
@@ -3192,7 +3253,11 @@ fn render_preview(config: &Config, req: &PreviewReq) -> anyhow::Result<Framebuff
     ACTIVE_ITEMS.store(layouts_list.get(idx).is_some_and(|(d, _)| d.name == "default2"), Relaxed);
     let music_on = req.state == PreviewState::Music && o.music_screen;
     let music_style = music_on && o.music.layout != tiles::music::Layout::Classic;
-    let is_idle = !music_on && (req.state != PreviewState::Playing || !ui_show.spectrum);
+    // a free layout with a spectrum is drawn whatever the state, with sample music in it
+    let free_spectrum = active_def
+        .and_then(|d| d.name.strip_prefix(layouts::FREE_PREFIX))
+        .is_some_and(|n| free_draw::FreeScreen::new().has_spectrum(n, fb.height() > fb.width()));
+    let is_idle = !music_on && (free_spectrum || req.state != PreviewState::Playing || !ui_show.spectrum);
     let game_wanted = o.pixel_game && ui_show.clock && !music_on && !gaming_state && layouts_list.get(idx).map_or(true, |(d, _)| d.standard);
     GAME_STRIP.store(game_wanted, Relaxed);
     let game_on = game_wanted && default_areas(&fb).1.is_some();
@@ -3275,6 +3340,32 @@ fn render_preview(config: &Config, req: &PreviewReq) -> anyhow::Result<Framebuff
         .collect();
     let mut peaks = spectrum::PeakTracker::new(NUM_BARS);
     peaks.update(&bars, 0.1);
+    if free_spectrum {
+        // sample music for the `spectrum` elements of a free layout: the left channel has more
+        // low sounds, the right one more high ones
+        let t = req.secs as f32;
+        let side = |tilt: f32, shift: f32| -> Vec<f32> {
+            (0..NUM_BARS)
+                .map(|i| {
+                    let x = i as f32 / NUM_BARS as f32;
+                    let a = ((x * 9.0 + t * 1.3 + shift).sin() * 0.5 + 0.5) * (1.0 - x * 0.45 + tilt * (x - 0.5));
+                    (0.10 + 0.8 * a).clamp(0.0, 1.0)
+                })
+                .collect()
+        };
+        let (l, r) = (side(-0.7, 0.0), side(0.7, 1.7));
+        let (mut pl, mut pr) = (spectrum::PeakTracker::new(NUM_BARS), spectrum::PeakTracker::new(NUM_BARS));
+        pl.update(&l, 0.1);
+        pr.update(&r, 0.1);
+        spectrum::set_feed(Some(spectrum::Feed {
+            mix: bars.clone(),
+            left: l,
+            right: r,
+            mix_peaks: peaks.peaks().to_vec(),
+            left_peaks: pl.peaks().to_vec(),
+            right_peaks: pr.peaks().to_vec(),
+        }));
+    }
 
     if music_style {
         let area = if composite {
@@ -3442,15 +3533,9 @@ fn precompute_bar_bins(fft_size: usize) -> Vec<(usize, usize)> {
 }
 
 /// Windowing + FFT + logarithmic bucketing into `NUM_BARS` (using `bar_bins`,
-/// already computed once up front via `precompute_bar_bins`), normalized
-/// 0..1 using auto-gain (`running_max` decays slowly, used as the reference).
-fn compute_bars(
-    samples: &[f32],
-    hann: &[f32],
-    fft: &dyn rustfft::Fft<f32>,
-    bar_bins: &[(usize, usize)],
-    running_max: &mut f32,
-) -> Vec<f32> {
+/// already computed once up front via `precompute_bar_bins`), not yet scaled: the loudest of
+/// each bar's bins. Returns the bars and the loudest of them.
+fn raw_bars(samples: &[f32], hann: &[f32], fft: &dyn rustfft::Fft<f32>, bar_bins: &[(usize, usize)]) -> (Vec<f32>, f32) {
     let mut buf: Vec<Complex32> = samples
         .iter()
         .zip(hann.iter())
@@ -3474,20 +3559,92 @@ fn compute_bars(
         *bar = mag;
         frame_max = frame_max.max(mag);
     }
+    (bars, frame_max)
+}
 
-    // Auto-gain: raise the reference quickly when it's louder, lower it slowly
-    // as it gets quieter, so the bars stay proportional-looking at any volume.
+/// Auto-gain: raise the reference quickly when it's louder, lower it slowly as it gets
+/// quieter, so the bars stay proportional-looking at any volume.
+fn auto_reference(frame_max: f32, running_max: &mut f32) -> f32 {
     *running_max = if frame_max > *running_max {
         frame_max
     } else {
         *running_max * 0.98
     };
-    let reference = running_max.max(1e-6);
+    running_max.max(1e-6)
+}
 
+/// What the user sets for the level of the spectrum (`spectrum_gain`, `spectrum_compress`,
+/// `spectrum_auto_gain`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Shape {
+    /// Multiplier (from dB).
+    gain: f32,
+    /// 0-1: how much the quiet parts are lifted towards the loud ones.
+    compress: f32,
+    /// The reference follows the volume (the default); off = a fixed reference, so the bars
+    /// really are as loud as the music.
+    auto: bool,
+}
+
+impl Shape {
+    /// The reference of a fixed level (a loud bar of a full-scale song).
+    const FIXED_REFERENCE: f32 = 60.0;
+
+    fn from_options(o: &UiOptions) -> Shape {
+        Shape { gain: 10f32.powf(o.spectrum_gain_db / 20.0), compress: o.spectrum_compress as f32 / 100.0, auto: o.spectrum_auto_gain }
+    }
+
+    /// A bar (`raw` / reference) 0-1: with the gain, then the compressor.
+    fn apply(self, ratio: f32) -> f32 {
+        let v = (ratio * self.gain).clamp(0.0, 1.0);
+        if self.compress > 0.0 {
+            v.powf(1.0 - 0.75 * self.compress)
+        } else {
+            v
+        }
+    }
+
+    fn reference(self, frame_max: f32, running_max: &mut f32) -> f32 {
+        let auto = auto_reference(frame_max, running_max);
+        if self.auto { auto } else { Self::FIXED_REFERENCE }
+    }
+}
+
+/// Normalized 0..1 using auto-gain (`running_max` decays slowly, used as the reference).
+fn compute_bars(
+    samples: &[f32],
+    hann: &[f32],
+    fft: &dyn rustfft::Fft<f32>,
+    bar_bins: &[(usize, usize)],
+    running_max: &mut f32,
+    shape: Shape,
+) -> Vec<f32> {
+    let (mut bars, frame_max) = raw_bars(samples, hann, fft, bar_bins);
+    let reference = shape.reference(frame_max, running_max);
     for bar in bars.iter_mut() {
-        *bar = (*bar / reference).clamp(0.0, 1.0);
+        *bar = shape.apply(*bar / reference);
     }
     bars
+}
+
+/// The left and the right channel with one reference between them, so that a louder side
+/// shows louder than the other one.
+fn compute_bars_pair(
+    left: &[f32],
+    right: &[f32],
+    hann: &[f32],
+    fft: &dyn rustfft::Fft<f32>,
+    bar_bins: &[(usize, usize)],
+    running_max: &mut f32,
+    shape: Shape,
+) -> (Vec<f32>, Vec<f32>) {
+    let (mut l, lm) = raw_bars(left, hann, fft, bar_bins);
+    let (mut r, rm) = raw_bars(right, hann, fft, bar_bins);
+    let reference = shape.reference(lm.max(rm), running_max);
+    for bar in l.iter_mut().chain(r.iter_mut()) {
+        *bar = shape.apply(*bar / reference);
+    }
+    (l, r)
 }
 
 /// Portrait canvas (462x1920)? Detected from the fb dimensions, so all drawing
@@ -3541,6 +3698,11 @@ struct UiOptions {
     screen_fade_ms: u32,
     /// Moving gradients on the bars and rings of free layouts that have them (`bar_animation`).
     bar_animation: bool,
+    /// Gain of the spectrum in dB (`spectrum_gain`), the compressor 0-100 (`spectrum_compress`)
+    /// and whether the level follows the volume by itself (`spectrum_auto_gain`).
+    spectrum_gain_db: f32,
+    spectrum_compress: u32,
+    spectrum_auto_gain: bool,
     screen_fade_style: fade::Style,
     clock_time_size: u32,
     clock_date_size: u32,
@@ -3659,6 +3821,9 @@ impl Default for UiOptions {
             clock_ampm: true,
             screen_fade_ms: 0,
             bar_animation: true,
+            spectrum_gain_db: 0.0,
+            spectrum_compress: 0,
+            spectrum_auto_gain: true,
             screen_fade_style: fade::Style::Cross,
             alerts: Default::default(),
             clock_time_size: 20,
@@ -5286,6 +5451,15 @@ mod layout_tests {
         assert!(parse_ui_options(&ConfigFile::parse("screen_fade_ms = 5001\n").unwrap()).is_err());
         assert!(parse_ui_options(&ConfigFile::parse("screen_fade_style = wipe\n").unwrap()).is_err());
         assert!(is_override_key("screen_fade_ms") && is_override_key("screen_fade_style"));
+        // the level of the spectrum: gain in dB, the compressor and the auto gain
+        let o = parse_ui_options(&ConfigFile::parse("").unwrap()).unwrap();
+        assert_eq!((o.spectrum_gain_db, o.spectrum_compress, o.spectrum_auto_gain), (0.0, 0, true));
+        let o = parse_ui_options(&ConfigFile::parse("spectrum_gain = 6\nspectrum_compress = 40\nspectrum_auto_gain = false\n").unwrap()).unwrap();
+        assert_eq!((o.spectrum_gain_db, o.spectrum_compress, o.spectrum_auto_gain), (6.0, 40, false));
+        for bad in ["spectrum_gain = 30", "spectrum_gain = -25", "spectrum_compress = 101", "spectrum_auto_gain = sometimes"] {
+            assert!(parse_ui_options(&ConfigFile::parse(&format!("{bad}\n")).unwrap()).is_err(), "{bad}");
+        }
+        assert!(is_override_key("spectrum_gain") && is_override_key("spectrum_compress") && is_override_key("spectrum_auto_gain"));
         // moving gradients of the free layouts: on unless switched off
         assert!(parse_ui_options(&ConfigFile::parse("").unwrap()).unwrap().bar_animation);
         assert!(!parse_ui_options(&ConfigFile::parse("bar_animation = false\n").unwrap()).unwrap().bar_animation);
@@ -5578,10 +5752,64 @@ mod layout_tests {
         }
         // every key of the editor is one the program reads from the config file
         let from_cli_or_file = |k: &str| is_override_key(k) || ["orientation", "flip", "panel_size", "background", "background_dim", "ffmpeg", "language",
-            "hid_mount", "hid_header", "hid_resend_ms", "color", "silence_threshold", "silence_timeout_ms", "weather_city", "ticker_source", "ticker_refresh_min", "gpu_usage_source", "fps_source", "fps_driver_divisor", "update_check", "update_check_hours", "update_notice_secs", "start_in_tray", "margin", "margin_top", "margin_bottom", "margin_left", "margin_right"].contains(&k);
+            "hid_mount", "hid_header", "hid_resend_ms", "color", "silence_threshold", "audio_device", "silence_timeout_ms", "weather_city", "ticker_source", "ticker_refresh_min", "gpu_usage_source", "fps_source", "fps_driver_divisor", "update_check", "update_check_hours", "update_notice_secs", "start_in_tray", "margin", "margin_top", "margin_bottom", "margin_left", "margin_right"].contains(&k);
         for f in fields() {
             assert!(from_cli_or_file(&f.key), "{} is not a key of the program", f.key);
         }
+    }
+
+    #[test]
+    fn the_gain_and_the_compressor_shape_the_bars() {
+        let flat = Shape { gain: 1.0, compress: 0.0, auto: true };
+        assert_eq!(flat.apply(0.5), 0.5);
+        assert_eq!(flat.apply(1.7), 1.0, "never above the top");
+        let plus6 = Shape { gain: 10f32.powf(6.0 / 20.0), ..flat };
+        assert!(plus6.apply(0.3) > 0.55 && plus6.apply(0.3) < 0.65, "+6 dB doubles");
+        assert_eq!(plus6.apply(0.9), 1.0);
+        let comp = Shape { compress: 1.0, ..flat };
+        assert!(comp.apply(0.1) > 0.4, "quiet parts are lifted");
+        assert_eq!(comp.apply(1.0), 1.0);
+        assert_eq!(comp.apply(0.0), 0.0);
+        let half = Shape { compress: 0.5, ..flat };
+        assert!(half.apply(0.1) > flat.apply(0.1) && half.apply(0.1) < comp.apply(0.1));
+        // a fixed reference ignores the running maximum; auto follows it
+        let mut run = 1e-6;
+        let fixed = Shape { auto: false, ..flat };
+        assert_eq!(fixed.reference(10.0, &mut run), Shape::FIXED_REFERENCE);
+        let mut run = 1e-6;
+        assert_eq!(flat.reference(10.0, &mut run), 10.0);
+    }
+
+    #[test]
+    fn the_left_and_the_right_channel_share_one_reference() {
+        let mut planner = FftPlanner::<f32>::new();
+        let fft = planner.plan_fft_forward(FFT_SIZE);
+        let hann = hann_window(FFT_SIZE);
+        let bins = precompute_bar_bins(FFT_SIZE);
+        // a tone on the left only, a quiet one on the right
+        let tone = |amp: f32| -> Vec<f32> { (0..FFT_SIZE).map(|i| amp * (2.0 * std::f32::consts::PI * 440.0 * i as f32 / audio::SAMPLE_RATE as f32).sin()).collect() };
+        let mut run = 1e-6;
+        let shape = Shape { gain: 1.0, compress: 0.0, auto: true };
+        let (l, r) = compute_bars_pair(&tone(0.8), &tone(0.1), &hann, fft.as_ref(), &bins, &mut run, shape);
+        let (lm, rm) = (l.iter().cloned().fold(0.0, f32::max), r.iter().cloned().fold(0.0, f32::max));
+        assert!(lm > 0.95, "the louder side fills the height: {lm}");
+        assert!(rm < lm * 0.3 && rm > 0.0, "the quiet side is much lower: {rm}");
+        // silence on both: nothing
+        let mut run = 1e-6;
+        let (l, r) = compute_bars_pair(&vec![0.0; FFT_SIZE], &vec![0.0; FFT_SIZE], &hann, fft.as_ref(), &bins, &mut run, shape);
+        assert!(l.iter().chain(r.iter()).all(|v| *v == 0.0));
+    }
+
+    #[test]
+    fn the_new_screen_options_are_read() {
+        let o = tiles::parse(&ConfigFile::parse("tiles_flow = 5\n").unwrap()).unwrap();
+        assert_eq!(o.flow, 5.0);
+        assert!(tiles::parse(&ConfigFile::parse("tiles_flow = 61\n").unwrap()).is_err());
+        let o = tiles::dash::parse(&ConfigFile::parse("dash_flow = 7.5\n").unwrap()).unwrap();
+        assert_eq!(o.flow, 7.5);
+        assert_eq!(tiles::dash::parse(&ConfigFile::parse("").unwrap()).unwrap().flow, 0.0);
+        assert!(tiles::dash::parse(&ConfigFile::parse("dash_flow = -1\n").unwrap()).is_err());
+        assert!(is_override_key("tiles_flow") && is_override_key("dash_flow"));
     }
 
     #[test]

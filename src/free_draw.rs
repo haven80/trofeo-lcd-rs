@@ -9,6 +9,8 @@ use std::time::SystemTime;
 
 use trofeo_lcd::free::{self, Element, Free, Kind};
 
+mod spectrum_el;
+
 /// The screens of the free layouts: the files read so far and the images loaded for them.
 pub struct FreeScreen {
     files: HashMap<String, Cached>,
@@ -179,6 +181,11 @@ impl FreeScreen {
                     put_text(fb, area, cx - tw / 2.0, cy - th / 2.0, &text, e.color.unwrap_or(text_color), scale);
                 }
             }
+            Kind::Spectrum => {
+                let feed = spectrum::feed();
+                let (vals, peaks) = spectrum_el::bars_of(e, feed.as_ref());
+                spectrum_el::draw(fb, area, e, &vals, &peaks);
+            }
             Kind::Image => {
                 if w_px < 1.0 || h_px < 1.0 {
                     return;
@@ -276,7 +283,7 @@ pub fn set_preview_secs(secs: Option<f64>) {
     *PREVIEW_SECS.lock().unwrap_or_else(|e| e.into_inner()) = secs;
 }
 
-fn anim_secs() -> f64 {
+pub(crate) fn anim_secs() -> f64 {
     if let Some(s) = *PREVIEW_SECS.lock().unwrap_or_else(|e| e.into_inner()) {
         return s;
     }
@@ -310,6 +317,18 @@ impl FreeScreen {
             Ok(l) if l.animated() => 20.0,
             _ => 0.0,
         }
+    }
+}
+
+impl FreeScreen {
+    /// Does the layout `name` have a spectrum in it? Then it follows the music.
+    pub fn has_spectrum(&mut self, name: &str, portrait: bool) -> bool {
+        self.layout(name, portrait).is_ok_and(|l| l.has_spectrum())
+    }
+
+    /// Does a spectrum in it listen to the left or the right channel only?
+    pub fn has_stereo_spectrum(&mut self, name: &str, portrait: bool) -> bool {
+        self.layout(name, portrait).is_ok_and(|l| l.has_stereo_spectrum())
     }
 }
 

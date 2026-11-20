@@ -4,10 +4,9 @@ name: Release
 # publishes them as downloadable assets on the GitHub Release for the tag
 # that triggered the run.
 #
-# Trigger: publishing a Release on GitHub (Releases -> Draft a new release -> Publish).
-# The build starts by itself and attaches the zip to that same Release.
-# It can also be started by hand: Actions -> Release -> Run workflow, writing the tag
-# of a Release that already exists (for example v2.25.0).
+# Trigger: push a tag like "v1.0.22" (matches Cargo.toml's `version`).
+#   git tag v1.0.22
+#   git push origin v1.0.22
 #
 # Building here (instead of shipping a locally-built exe) means anyone can
 # see, in the run's log, that the published binary was compiled straight
@@ -18,16 +17,10 @@ name: Release
 # (see the note in README.md).
 
 on:
-  release:
-    types: [published]
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Tag of an existing Release (e.g. v2.25.0)"
-        required: true
-
-env:
-  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -38,8 +31,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-        with:
-          ref: ${{ env.TAG }}
 
       - name: Install Rust (stable, MSVC)
         uses: dtolnay/rust-toolchain@stable
@@ -56,7 +47,7 @@ jobs:
         shell: bash
         run: |
           set -eu
-          ver="${TAG#v}"
+          ver="${GITHUB_REF_NAME#v}"
           out="trofeo-lcd-${ver}-windows"
           mkdir -p "$out"
           cp target/release/trofeo_lcd.exe "$out/"
@@ -65,13 +56,11 @@ jobs:
           cp README.md NOTICE.md LICENSE OPTIONS_GUIDE.md trofeo.conf.example "$out/"
           [ -f GUIDE_SECOND_MONITOR.md ] && cp GUIDE_SECOND_MONITOR.md "$out/"
           [ -d scripts ] && cp -r scripts "$out/"
-          [ -d docs ] && cp -r docs "$out/"
           7z a "${out}.zip" "./${out}/*"
           echo "ASSET_PATH=${out}.zip" >> "$GITHUB_ENV"
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ env.TAG }}
           files: ${{ env.ASSET_PATH }}
           generate_release_notes: true

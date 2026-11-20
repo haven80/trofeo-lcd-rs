@@ -52,10 +52,12 @@ pub enum Kind {
     Ring,
     Rect,
     Image,
+    /// The music spectrum (3.0.0): bars in a row or a column, or around a circle.
+    Spectrum,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 5] = [Kind::Text, Kind::Bar, Kind::Ring, Kind::Rect, Kind::Image];
+    pub const ALL: [Kind; 6] = [Kind::Text, Kind::Bar, Kind::Ring, Kind::Rect, Kind::Image, Kind::Spectrum];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -64,6 +66,7 @@ impl Kind {
             Kind::Ring => "ring",
             Kind::Rect => "rect",
             Kind::Image => "image",
+            Kind::Spectrum => "spectrum",
         }
     }
 
@@ -161,6 +164,39 @@ pub fn metric_max(id: &str) -> f32 {
     METRICS.iter().find(|(m, _, _)| *m == id).map_or(100.0, |(_, _, max)| *max)
 }
 
+
+macro_rules! name_enum {
+    ($(#[$m:meta])* $name:ident { $($var:ident = $text:literal),+ $(,)? }) => {
+        $(#[$m])*
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        pub enum $name { $($var),+ }
+        impl $name {
+            pub const ALL: &'static [$name] = &[$($name::$var),+];
+            pub fn name(self) -> &'static str { match self { $($name::$var => $text),+ } }
+            pub fn parse(s: &str) -> Option<$name> { $name::ALL.iter().copied().find(|v| v.name() == s) }
+            pub const NAMES: &'static str = concat!($($text, " | "),+);
+        }
+    };
+}
+
+name_enum! {
+    /// How the bars of a spectrum are drawn.
+    SpecStyle { Bars = "bars", Led = "led", Peaks = "peaks", Area = "area", Mirror = "mirror" }
+}
+name_enum! {
+    /// Where the bars of a spectrum grow: from the bottom of a row, from the left of a column,
+    /// or outwards from a circle.
+    SpecShape { Row = "row", Column = "column", Circle = "circle" }
+}
+name_enum! {
+    /// Which sound: both channels mixed, or only the left or right one.
+    SpecChannel { Mix = "mix", Left = "left", Right = "right" }
+}
+name_enum! {
+    /// Which part of the frequencies: all, or the low, middle or high third.
+    SpecBand { All = "all", Bass = "bass", Mid = "mid", Treble = "treble" }
+}
+
 pub type Rgb = (u8, u8, u8);
 
 #[derive(Clone, Debug, PartialEq)]
@@ -203,6 +239,24 @@ pub struct Element {
     pub color2: Option<Rgb>,
     /// Bar and ring: seconds a loop of the moving gradient takes (0 = still).
     pub flow: f32,
+    /// Spectrum only: the drawing style, the shape, the channel and the band of frequencies.
+    pub style: SpecStyle,
+    pub shape: SpecShape,
+    pub channel: SpecChannel,
+    pub band: SpecBand,
+    /// Spectrum: how many bars (4-96).
+    pub bars: u32,
+    /// Spectrum: the space between bars, % of the room of a bar (0-80).
+    pub gap: f32,
+    /// Spectrum: mirrored left and right (row), top and bottom (column), or both halves of the
+    /// circle: the low sounds in the middle, the high ones at the edges.
+    pub sym: bool,
+    /// Spectrum: grow the other way (downwards, to the left, inwards).
+    pub flip: bool,
+    /// Spectrum, circle: the hole in the middle, % of the radius (0-95).
+    pub inner: f32,
+    /// Spectrum, circle: where the first bar is, in degrees clockwise from the top.
+    pub rot: f32,
 }
 
 impl Element {
@@ -213,6 +267,7 @@ impl Element {
             Kind::Ring => (24.0, 60.0),
             Kind::Rect => (30.0, 30.0),
             Kind::Image => (20.0, 40.0),
+            Kind::Spectrum => (40.0, 24.0),
         };
         Element {
             kind,
@@ -237,6 +292,16 @@ impl Element {
             weight: None,
             color2: None,
             flow: 0.0,
+            style: SpecStyle::Bars,
+            shape: SpecShape::Row,
+            channel: SpecChannel::Mix,
+            band: SpecBand::All,
+            bars: 32,
+            gap: 25.0,
+            sym: false,
+            flip: false,
+            inner: 40.0,
+            rot: 0.0,
         }
     }
 }
@@ -250,6 +315,16 @@ impl Free {
     /// Does something in it move (a bar or ring with a flowing gradient)?
     pub fn animated(&self) -> bool {
         self.elements.iter().any(|e| matches!(e.kind, Kind::Bar | Kind::Ring) && e.flow > 0.0)
+    }
+
+    /// Is there a spectrum in it (the screen then follows the music)?
+    pub fn has_spectrum(&self) -> bool {
+        self.elements.iter().any(|e| e.kind == Kind::Spectrum)
+    }
+
+    /// Does a spectrum in it listen to one channel (left or right)?
+    pub fn has_stereo_spectrum(&self) -> bool {
+        self.elements.iter().any(|e| e.kind == Kind::Spectrum && e.channel != SpecChannel::Mix)
     }
 }
 
@@ -328,6 +403,14 @@ fn number(key: &str, v: &str, lo: f32, hi: f32) -> Result<f32, String> {
     Ok(n)
 }
 
+fn boolean(key: &str, v: &str) -> Result<bool, String> {
+    match v.to_ascii_lowercase().as_str() {
+        "true" | "yes" | "on" | "1" => Ok(true),
+        "false" | "no" | "off" | "0" => Ok(false),
+        _ => Err(format!("{key}: '{v}' is not true or false")),
+    }
+}
+
 fn color(key: &str, v: &str) -> Result<Rgb, String> {
     crate::schema::parse_color(v).ok_or_else(|| format!("{key}: '{v}' is not a color (#RRGGBB)"))
 }
@@ -335,7 +418,7 @@ fn color(key: &str, v: &str) -> Result<Rgb, String> {
 fn parse_line(line: &str) -> Result<Element, String> {
     let w = words(line)?;
     let kind_word = w.first().map(|s| s.to_ascii_lowercase()).unwrap_or_default();
-    let kind = Kind::parse(&kind_word).ok_or_else(|| format!("'{kind_word}' is not an element (text, bar, ring, rect, image)"))?;
+    let kind = Kind::parse(&kind_word).ok_or_else(|| format!("'{kind_word}' is not an element (text, bar, ring, rect, image, spectrum)"))?;
     let mut e = Element::new(kind);
     if kind == Kind::Text {
         e.text.clear();
@@ -372,6 +455,16 @@ fn parse_line(line: &str) -> Result<Element, String> {
             "file" => e.file = v.to_string(),
             "color2" => e.color2 = Some(color(&k, v)?),
             "flow" => e.flow = number(&k, v, 0.0, 600.0)?,
+            "style" => e.style = SpecStyle::parse(&v.to_ascii_lowercase()).ok_or_else(|| format!("style: '{v}' is not one of {}", SpecStyle::NAMES.trim_end_matches(" | ")))?,
+            "shape" => e.shape = SpecShape::parse(&v.to_ascii_lowercase()).ok_or_else(|| format!("shape: '{v}' is not one of {}", SpecShape::NAMES.trim_end_matches(" | ")))?,
+            "channel" => e.channel = SpecChannel::parse(&v.to_ascii_lowercase()).ok_or_else(|| format!("channel: '{v}' is not one of {}", SpecChannel::NAMES.trim_end_matches(" | ")))?,
+            "band" => e.band = SpecBand::parse(&v.to_ascii_lowercase()).ok_or_else(|| format!("band: '{v}' is not one of {}", SpecBand::NAMES.trim_end_matches(" | ")))?,
+            "bars" => e.bars = number(&k, v, 4.0, 96.0)? as u32,
+            "gap" => e.gap = number(&k, v, 0.0, 80.0)?,
+            "sym" => e.sym = boolean(&k, v)?,
+            "flip" => e.flip = boolean(&k, v)?,
+            "inner" => e.inner = number(&k, v, 0.0, 95.0)?,
+            "rot" => e.rot = number(&k, v, 0.0, 360.0)?,
             "font" => {
                 e.font = Some(match v.to_ascii_lowercase().as_str() {
                     "pixel" => crate::TextFont::Pixel,
@@ -459,7 +552,44 @@ pub fn render_element(e: &Element) -> String {
             s.push_str(&format!(" back={}", fmt_color(e.back)));
         }
     }
-    if matches!(e.kind, Kind::Bar | Kind::Ring) {
+    if e.kind == Kind::Spectrum {
+        if e.style != d.style {
+            s.push_str(&format!(" style={}", e.style.name()));
+        }
+        if e.shape != d.shape {
+            s.push_str(&format!(" shape={}", e.shape.name()));
+        }
+        if e.channel != d.channel {
+            s.push_str(&format!(" channel={}", e.channel.name()));
+        }
+        if e.band != d.band {
+            s.push_str(&format!(" band={}", e.band.name()));
+        }
+        if e.bars != d.bars {
+            s.push_str(&format!(" bars={}", e.bars));
+        }
+        if e.gap != d.gap {
+            s.push_str(&format!(" gap={}", fmt_num(e.gap)));
+        }
+        if e.sym {
+            s.push_str(" sym=true");
+        }
+        if e.flip {
+            s.push_str(" flip=true");
+        }
+        if e.shape == SpecShape::Circle {
+            if e.inner != d.inner {
+                s.push_str(&format!(" inner={}", fmt_num(e.inner)));
+            }
+            if e.rot != d.rot {
+                s.push_str(&format!(" rot={}", fmt_num(e.rot)));
+            }
+        }
+        if let Some(h) = e.hot {
+            s.push_str(&format!(" hot={} hot_color={}", fmt_num(h), fmt_color(e.hot_color)));
+        }
+    }
+    if matches!(e.kind, Kind::Bar | Kind::Ring | Kind::Spectrum) {
         if let Some(c) = e.color2 {
             s.push_str(&format!(" color2={}", fmt_color(c)));
         }
@@ -531,6 +661,10 @@ pub const BUILTIN: &[(&str, &str, &str, &str)] = &[
     ("ledger", "Ledger: a navy ledger with gold lines, one row per device, flowing bars", "Ledger: registro blu con filetti oro, una riga per dispositivo, barre che scorrono", include_str!("free_builtin/ledger.layout")),
     ("haiku", "Haiku: a huge light clock, lots of space, one line of readings", "Haiku: orologio enorme e leggero, molto spazio, una riga di valori", include_str!("free_builtin/haiku.layout")),
     ("peach", "Peach: a warm light page with three gradient rings", "Peach: pagina chiara e calda con tre anelli sfumati", include_str!("free_builtin/peach.layout")),
+    ("pulse", "Pulse: a big clock over a wide mirrored spectrum", "Pulse: un grande orologio sopra uno spettro speculare a tutta larghezza", include_str!("free_builtin/pulse.layout")),
+    ("radial", "Radial: the spectrum in a ring around the clock", "Radial: lo spettro in un anello attorno all'orologio", include_str!("free_builtin/radial.layout")),
+    ("stereo", "Stereo: two rings, the left and the right channel, the clock between", "Stereo: due anelli, canale sinistro e destro, l'orologio in mezzo", include_str!("free_builtin/stereo.layout")),
+    ("bands", "Bands: bass, mid and treble, each in a row of its own", "Bands: bassi, medi e alti, ognuno in una riga", include_str!("free_builtin/bands.layout")),
 ];
 
 /// The same designs for a tall, narrow panel (a portrait screen), `(name, file text)`.
@@ -557,6 +691,10 @@ pub const BUILTIN_PORTRAIT: &[(&str, &str)] = &[
     ("ledger", include_str!("free_builtin/ledger.portrait.layout")),
     ("haiku", include_str!("free_builtin/haiku.portrait.layout")),
     ("peach", include_str!("free_builtin/peach.portrait.layout")),
+    ("pulse", include_str!("free_builtin/pulse.portrait.layout")),
+    ("radial", include_str!("free_builtin/radial.portrait.layout")),
+    ("stereo", include_str!("free_builtin/stereo.portrait.layout")),
+    ("bands", include_str!("free_builtin/bands.portrait.layout")),
 ];
 
 /// The text of a built-in design.
@@ -734,13 +872,13 @@ mod tests {
             valid_name(name).unwrap();
             assert!(!en.is_empty() && !it.is_empty());
             let f = load_builtin(name).unwrap_or_else(|e| panic!("{e}"));
-            assert!(f.elements.len() >= 8 || ["blaze", "volt"].contains(name), "{name}");
+            assert!(f.elements.len() >= 8 || ["blaze", "volt", "pulse", "radial", "stereo", "bands"].contains(name), "{name}");
             // what is written out is read back the same
             assert_eq!(parse(&render(name, &f)).unwrap(), f, "{name}");
         }
         for (name, _, _, _) in BUILTIN {
             let f = load_builtin_for(name, true).unwrap_or_else(|e| panic!("{e}"));
-            assert!(f.elements.len() >= 8 || ["blaze", "volt"].contains(name), "{name} (portrait)");
+            assert!(f.elements.len() >= 8 || ["blaze", "volt", "pulse", "radial", "stereo", "bands"].contains(name), "{name} (portrait)");
             assert_ne!(f, load_builtin(name).unwrap(), "{name}");
         }
         assert_eq!(BUILTIN_PORTRAIT.len(), BUILTIN.len());
@@ -780,6 +918,29 @@ mod tests {
         }
         for name in ["swiss", "haiku", "peach", "atelier", "studio", "board"] {
             assert!(!load_builtin(name).unwrap().animated(), "{name}");
+        }
+    }
+
+    #[test]
+    fn a_spectrum_is_read_and_written_with_all_its_options() {
+        let f = parse(
+            "spectrum x=2 y=3 w=40 h=20 shape=circle style=led channel=left band=bass bars=24 gap=10 sym=true flip=true inner=30 rot=90 hot=80 hot_color=#FF0000 color=#00FF00 color2=#0000FF flow=3\nspectrum x=1 y=1",
+        )
+        .unwrap();
+        let e = &f.elements[0];
+        assert_eq!((e.kind, e.shape, e.style, e.channel, e.band), (Kind::Spectrum, SpecShape::Circle, SpecStyle::Led, SpecChannel::Left, SpecBand::Bass));
+        assert_eq!((e.bars, e.gap, e.sym, e.flip, e.inner, e.rot, e.hot), (24, 10.0, true, true, 30.0, 90.0, Some(80.0)));
+        assert_eq!((e.color, e.color2, e.flow), (Some((0, 255, 0)), Some((0, 0, 255)), 3.0));
+        // the second one is all defaults and is written without any option
+        let d = &f.elements[1];
+        assert_eq!((d.shape, d.style, d.channel, d.band, d.bars), (SpecShape::Row, SpecStyle::Bars, SpecChannel::Mix, SpecBand::All, 32));
+        assert_eq!(render_element(d), "spectrum x=1 y=1 w=40 h=24");
+        assert_eq!(parse(&render("x", &f)).unwrap(), f);
+        assert!(f.has_spectrum() && f.has_stereo_spectrum());
+        assert!(!parse("spectrum x=1 y=1").unwrap().has_stereo_spectrum());
+        assert!(!parse("bar x=1 y=1 value=cpu").unwrap().has_spectrum());
+        for bad in ["shape=ring", "style=wave", "channel=center", "band=sub", "bars=2", "bars=200", "gap=90", "sym=maybe", "inner=99"] {
+            assert!(parse(&format!("spectrum x=1 y=1 {bad}")).is_err(), "{bad}");
         }
     }
 }

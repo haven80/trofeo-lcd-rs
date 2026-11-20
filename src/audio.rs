@@ -60,6 +60,58 @@ pub fn take_latest(ring: &SharedRing, n: usize) -> Vec<f32> {
     out
 }
 
+/// The left and right channels, kept next to the mono ring (the mono ring is what the
+/// main spectrum uses). Filled by the same capture threads; read by the free layouts'
+/// `spectrum` element (`channel = left | right`). When a source is mono, both are equal.
+struct Stereo {
+    left: VecDeque<f32>,
+    right: VecDeque<f32>,
+}
+
+static STEREO: Mutex<Stereo> = Mutex::new(Stereo { left: VecDeque::new(), right: VecDeque::new() });
+
+/// Append left/right sample pairs (same length), keeping about half a second of each.
+fn push_stereo_samples(pairs: impl Iterator<Item = (f32, f32)>) {
+    let Ok(mut st) = STEREO.lock() else { return };
+    for (l, r) in pairs {
+        if st.left.len() >= RING_CAPACITY {
+            st.left.pop_front();
+            st.right.pop_front();
+        }
+        st.left.push_back(l);
+        st.right.push_back(r);
+    }
+}
+
+/// The latest `n` samples of the left and right channels, zero-padded at the front like
+/// [`take_latest`].
+pub fn take_latest_stereo(n: usize) -> (Vec<f32>, Vec<f32>) {
+    let mut l = vec![0f32; n];
+    let mut r = vec![0f32; n];
+    let Ok(st) = STEREO.lock() else { return (l, r) };
+    let have = st.left.len().min(st.right.len());
+    let take = have.min(n);
+    let skip = have - take;
+    for (i, (a, b)) in st.left.iter().zip(st.right.iter()).skip(skip).enumerate() {
+        l[n - take + i] = *a;
+        r[n - take + i] = *b;
+    }
+    (l, r)
+}
+
+/// Which sound to listen to (`audio_device`): None = what the computer plays (the default
+/// output). On Windows a part of the name of an output (its sound is listened to: loopback) or
+/// of an input (a microphone, a line in); on Linux the name of a PulseAudio/PipeWire source.
+static DEVICE: Mutex<Option<String>> = Mutex::new(None);
+
+pub fn set_device(name: Option<String>) {
+    *DEVICE.lock().unwrap_or_else(|e| e.into_inner()) = name.filter(|n| !n.trim().is_empty());
+}
+
+fn device_name() -> Option<String> {
+    DEVICE.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
 /// Start the audio capture thread in the background, returning a handle to
 /// the ring buffer that keeps getting filled.
 pub fn spawn_capture() -> anyhow::Result<SharedRing> {
@@ -106,7 +158,7 @@ pub fn spawn_capture() -> anyhow::Result<SharedRing> {
 
 #[cfg(windows)]
 mod windows_loopback {
-    use super::{push_mono_samples, SharedRing, SAMPLE_RATE};
+    use super::{push_mono_samples, push_stereo_samples, SharedRing, SAMPLE_RATE};
     use std::time::{Duration, Instant};
     use wasapi::*;
 
@@ -139,7 +191,31 @@ mod windows_loopback {
         let enumerator = DeviceEnumerator::new()?;
         // IMPORTANT: grab the Render (output/speaker) device here, NOT Capture —
         // this is what makes WASAPI treat it as a loopback request.
-        let device = enumerator.get_default_device(&Direction::Render)?;
+        // `audio_device`: an output (listened to as loopback) or an input whose name contains
+        // the text; without it (or when it is not found) the default output.
+        let wanted = super::device_name();
+        let mut chosen = None;
+        if let Some(w) = wanted.as_deref() {
+            let w = w.to_lowercase();
+            'find: for dir in [Direction::Render, Direction::Capture] {
+                if let Ok(list) = enumerator.get_device_collection(&dir) {
+                    for d in list.into_iter().flatten() {
+                        if d.get_friendlyname().is_ok_and(|n| n.to_lowercase().contains(&w)) {
+                            chosen = Some(d);
+                            break 'find;
+                        }
+                    }
+                }
+            }
+            if chosen.is_none() {
+                eprintln!("audio_device = {w:?}: no sound device has that name; listening to the default output instead");
+            }
+        }
+        let following_default = chosen.is_none();
+        let device = match chosen {
+            Some(d) => d,
+            None => enumerator.get_default_device(&Direction::Render)?,
+        };
         // Remember *which* device we actually opened, so the loop below can
         // notice if the user picks a different default output device later
         // (see the `DEVICE_CHECK_INTERVAL` comment further down for why this
@@ -189,6 +265,7 @@ mod windows_loopback {
         // called once per poll, which is much cheaper on the CPU (repeated
         // mutex lock/unlock isn't free even when uncontended).
         let mut mono_batch: Vec<f32> = Vec::with_capacity(256);
+        let mut stereo_batch: Vec<(f32, f32)> = Vec::with_capacity(256);
 
         // How long reads have been failing *continuously*. A brief hiccup
         // (a frame or two) is normal and stays silent about it; but once the
@@ -238,7 +315,7 @@ mod windows_loopback {
 
             if last_device_check.elapsed() >= DEVICE_CHECK_INTERVAL {
                 last_device_check = Instant::now();
-                if let Ok(current_default) = enumerator.get_default_device(&Direction::Render) {
+                if let Some(current_default) = following_default.then(|| enumerator.get_default_device(&Direction::Render).ok()).flatten() {
                     if let Ok(current_id) = current_default.get_id() {
                         if !current_id.is_empty() && current_id != opened_device_id {
                             anyhow::bail!(
@@ -253,6 +330,7 @@ mod windows_loopback {
             // collecting them first into a local buffer (without locking the
             // mutex at all yet).
             mono_batch.clear();
+            stereo_batch.clear();
             while byte_queue.len() >= blockalign {
                 let mut frame_bytes = [0u8; 32]; // enough for a few float32 channels
                 let frame_len = blockalign.min(frame_bytes.len());
@@ -261,6 +339,7 @@ mod windows_loopback {
                 }
                 let bytes_per_sample = 4usize;
                 let mut sum = 0f32;
+                let mut lr = [0f32; 2];
                 for ch in 0..channels {
                     let start = ch * bytes_per_sample;
                     if start + 4 <= frame_len {
@@ -271,14 +350,22 @@ mod windows_loopback {
                             frame_bytes[start + 3],
                         ]);
                         sum += v;
+                        if ch < 2 {
+                            lr[ch] = v;
+                        }
                     }
                 }
+                if channels < 2 {
+                    lr[1] = lr[0];
+                }
                 mono_batch.push(sum / channels as f32);
+                stereo_batch.push((lr[0], lr[1]));
             }
 
             // Lock the mutex ONCE for this whole batch from this poll.
             if !mono_batch.is_empty() {
                 push_mono_samples(ring, mono_batch.iter().copied());
+                push_stereo_samples(stereo_batch.drain(..));
             }
 
             std::thread::sleep(poll_interval);
@@ -294,7 +381,7 @@ mod windows_loopback {
 /// (microphone).
 #[cfg(target_os = "linux")]
 mod linux_loopback {
-    use super::{push_mono_samples, SharedRing, SAMPLE_RATE};
+    use super::{push_mono_samples, push_stereo_samples, SharedRing, SAMPLE_RATE};
     use libpulse_binding::sample::{Format, Spec};
     use libpulse_binding::stream::Direction;
     use libpulse_simple_binding::Simple;
@@ -309,11 +396,15 @@ mod linux_loopback {
             anyhow::bail!("Invalid PulseAudio sample spec (channel/rate/format)");
         }
 
+        // `audio_device`: the name of a source (`pactl list short sources`: an input such as a
+        // microphone, or "<output>.monitor" for what an output plays); by default the monitor
+        // of the default output.
+        let device = super::device_name();
         let simple = Simple::new(
             None,                      // default server
             "trofeo-lcd",              // application name
             Direction::Record,         // direction: record...
-            Some("@DEFAULT_MONITOR@"), // ...from the default sink's monitor (loopback)
+            Some(device.as_deref().unwrap_or("@DEFAULT_MONITOR@")), // ...from the default sink's monitor (loopback)
             "system audio (EQ visualizer)",
             &spec,
             None, // default channel map
@@ -336,6 +427,7 @@ mod linux_loopback {
         const FRAME_BYTES: usize = BYTES_PER_SAMPLE * CHANNELS;
         let mut byte_buf = vec![0u8; FRAME_BYTES * 512];
         let mut mono_batch: Vec<f32> = Vec::with_capacity(512);
+        let mut stereo_batch: Vec<(f32, f32)> = Vec::with_capacity(512);
 
         loop {
             // `read()` blocks — the server handles pacing (same as
@@ -348,13 +440,16 @@ mod linux_loopback {
             }
 
             mono_batch.clear();
+            stereo_batch.clear();
             for frame in byte_buf.chunks_exact(FRAME_BYTES) {
                 let l = f32::from_ne_bytes([frame[0], frame[1], frame[2], frame[3]]);
                 let r = f32::from_ne_bytes([frame[4], frame[5], frame[6], frame[7]]);
                 mono_batch.push((l + r) * 0.5);
+                stereo_batch.push((l, r));
             }
             if !mono_batch.is_empty() {
                 push_mono_samples(&ring, mono_batch.iter().copied());
+                push_stereo_samples(stereo_batch.drain(..));
             }
         }
     }
@@ -365,7 +460,7 @@ mod linux_loopback {
 /// real path, see `linux_loopback` above.
 #[cfg(not(any(windows, target_os = "linux")))]
 mod fallback {
-    use super::{push_mono_samples, SharedRing, SAMPLE_RATE};
+    use super::{push_mono_samples, push_stereo_samples, SharedRing, SAMPLE_RATE};
     use std::f32::consts::PI;
     use std::thread::sleep;
     use std::time::Duration;
@@ -382,9 +477,48 @@ mod fallback {
                     + 0.2 * (2.0 * PI * 880.0 * t).sin()
                     + 0.1 * (2.0 * PI * 3000.0 * t).sin()
             });
+            // left = the low tone louder, right = the high tones louder (so a split shows)
+            let lr: Vec<(f32, f32)> = (0..chunk)
+                .map(|i| {
+                    let t = phase + i as f32 / SAMPLE_RATE as f32;
+                    let lo = 0.3 * (2.0 * PI * 220.0 * t).sin();
+                    let hi = 0.2 * (2.0 * PI * 880.0 * t).sin() + 0.1 * (2.0 * PI * 3000.0 * t).sin();
+                    (lo + 0.4 * hi, 0.4 * lo + hi)
+                })
+                .collect();
             push_mono_samples(&ring, samples);
+            push_stereo_samples(lr.into_iter());
             phase += dt;
             sleep(Duration::from_secs_f32(dt));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_two_channels_are_kept_apart_and_the_latest_come_out() {
+        // (the ring is shared by the whole program: this test is the only one that writes it)
+        push_stereo_samples((0..10).map(|i| (i as f32, -(i as f32))));
+        let (l, r) = take_latest_stereo(4);
+        assert_eq!(l, vec![6.0, 7.0, 8.0, 9.0]);
+        assert_eq!(r, vec![-6.0, -7.0, -8.0, -9.0]);
+        // more than there is: zeros first
+        let (l, _) = take_latest_stereo(RING_CAPACITY + 5);
+        assert_eq!(l.len(), RING_CAPACITY + 5);
+        assert_eq!(l[0], 0.0);
+        assert_eq!(*l.last().unwrap(), 9.0);
+    }
+
+    #[test]
+    fn an_empty_device_name_means_the_default_output() {
+        set_device(Some("  ".into()));
+        assert_eq!(device_name(), None);
+        set_device(Some("Speakers".into()));
+        assert_eq!(device_name().as_deref(), Some("Speakers"));
+        set_device(None);
+        assert_eq!(device_name(), None);
     }
 }

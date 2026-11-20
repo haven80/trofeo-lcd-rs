@@ -487,7 +487,7 @@ font = smooth
 The EQ spectrum (shown while music plays) can be drawn in several styles and
 with several color palettes. All keys apply live (no restart) and are also CLI
 flags (`--spectrum-style led`, ...). With none of them set, the spectrum looks
-exactly as it always did.
+exactly as it always did. To put a spectrum in your own screen (as a row, a column or a circle, left or right channel, bass or highs) see [The spectrum in a layout](#the-spectrum-in-a-layout); the gain, the compressor and the audio device are there too.
 
 | Key | CLI | Values | Default |
 |---|---|---|---|
@@ -1247,6 +1247,7 @@ ring  x=80 y=62 w=30 h=70 anchor=c value=gpu text="{gpu}"
 - `bar`: `w`, `h`, `value=` one of `cpu gpu ram cpu_temp gpu_temp gpu_hotspot cpu_power gpu_power cpu_mhz fps`, `min` (0) and `max` (the usual maximum of the value), `color` (default: by level), `back` (the track), `color2` (a second color: the filled part runs from `color` to it) and `flow` (seconds per loop of a gradient that flows along; 0 = still), `hot=` and `hot_color=` (from that value up the bar takes that color).
 - `ring`: like `bar` (`w`, `h` give the size, the ring is a circle in it), plus `thick` (% of the radius) and `text` (shown in the middle, sized to fit).
 - `rect`: `w`, `h`, `color`, `opacity` (0-100).
+- `spectrum`: the music spectrum, as a row, a column or a circle, with its own colours, the left or the right channel, or only the bass, the mids or the highs. See [The spectrum in a layout](#the-spectrum-in-a-layout).
 - `image`: `file="C:\Pictures\logo.png"` (a path, or relative to the folder of the configuration file), `w`, `h` (the picture is fitted in), `opacity`. PNG, JPEG, GIF (first frame), BMP, WebP.
 - A mistake is written on the screen with its line number (and in the console), and the rest of your settings keep working. The file is looked at again once a second, so what you save appears at once without a restart.
 
@@ -1254,9 +1255,58 @@ ring  x=80 y=62 w=30 h=70 anchor=c value=gpu text="{gpu}"
 
 The free layout is a screen like *tiles* or *frame*: it is shown when idle, and the gaming and music screens still take over when they start.
 
+### The spectrum in a layout
+
+A `spectrum` element draws the audio spectrum anywhere in a free layout, as many times as you like, each with its own look. Nothing changes until you add one. A layout that has a spectrum is drawn at the active frame rate while sound plays (and a still picture when it is silent), and the gaming and music screens still take over when they start.
+
+```ini
+# a row of bars across the bottom, mirrored: the low sounds in the middle
+spectrum x=0 y=58 w=100 h=40 sym=true style=bars bars=80 gap=35 color=#00D4FF color2=#FF4FD8 flow=8
+# a circle, left channel only
+spectrum x=15 y=50 anchor=c w=24 h=92 shape=circle channel=left bars=48 inner=50 color=#00E0FF color2=#2A6BFF
+# only the bass, as a column on the right
+spectrum x=96 y=4 anchor=tr w=5 h=60 shape=column band=bass bars=16
+```
+
+| Key | Values | Default |
+|---|---|---|
+| `shape` | `row` (bars side by side), `column` (bars one above the other, growing to the right), `circle` (bars round a ring) | `row` |
+| `style` | `bars`, `led` (separate segments), `peaks` (bars with a cap that falls slowly), `area` (a filled wave), `mirror` (growing both ways from a centre line) | `bars` |
+| `channel` | `mix` (left + right), `left`, `right` | `mix` |
+| `band` | `all`, `bass`, `mid`, `treble` (a third of the spectrum each, the bars of that third are stretched over the element) | `all` |
+| `bars` | number of bars, `4`-`96` | `32` |
+| `gap` | the space between bars, % of a bar, `0`-`80` | `25` |
+| `sym` | `true` = mirrored: the low sounds in the middle of a row or column (at the start and the end of a circle), the high ones at the two ends | `false` |
+| `flip` | `true` = grows the other way (down in a row, left in a column, inward in a circle) | `false` |
+| `inner` | the hole of a circle, % of the radius, `0`-`95` | `40` |
+| `rot` | where a circle starts, in degrees, `0`-`360` | `0` |
+| `color` | the colour of the bars; without it the bars take the classic colours by level (green, yellow, red) | by level |
+| `color2` | a second colour: the colour runs along the bars from `color` to `color2` | none |
+| `flow` | seconds per loop of a gradient that travels along the bars (0 = still) | `0` |
+| `hot`, `hot_color` | from that level (%) up, a bar takes `hot_color` | none |
+
+Left and right on one screen: use two elements, one with `channel=left` and one with `channel=right` (the `stereo` design does it with two circles, and mirrors the second one). Bass, mid and treble: three elements with `band=` (the `bands` design). The left and the right channel are measured with the same reference, so the louder side really looks louder.
+
+The look of the sound itself is set in the settings editor (*Screens*) or in the configuration, and applies live. It is the same for the spectrum of the standard screen and for the ones in your layouts:
+
+| Key | CLI | Values | Default |
+|---|---|---|---|
+| `spectrum_gain` | `--spectrum-gain` | `-24` to `24` (dB): more or less sensitivity | `0` |
+| `spectrum_compress` | `--spectrum-compress` | `0`-`100`: `0` = as measured, higher = the quiet parts rise and the loud ones are held down, so the bars stay full at a low volume | `0` |
+| `spectrum_auto_gain` | `--spectrum-auto-gain` | `true`/`false`: `true` = the bars adapt to how loud the music is; `false` = a fixed reference, so the volume of your system decides how high they go | `true` |
+| `audio_device` | `--audio-device` | empty = the default output; or a part of the name of the device to listen to | empty |
+
+`audio_device` **needs a restart**. On Windows it is a part of the name of an output device (it is listened to as loopback: what that device plays) or of an input device (a microphone, line-in or a "Stereo Mix"); on Linux it is the name of a PulseAudio / PipeWire source (`pactl list short sources`). If nothing matches, the default output is used.
+
+```ini
+spectrum_gain = 6
+spectrum_compress = 40
+audio_device = Speakers
+```
+
 ### Built-in designs
 
-Twenty-two free layouts come with the program, so `layout = atelier` works with no file:
+Twenty-six free layouts come with the program, so `layout = atelier` works with no file:
 
 | Name | What it shows |
 |---|---|
@@ -1282,6 +1332,10 @@ Twenty-two free layouts come with the program, so `layout = atelier` works with 
 | `terminal` | green-on-black readout, one line per device (CPU, GPU, RAM, network, disk) |
 | `horizon` | a huge clock and three thin lines of load (CPU, GPU, RAM) |
 | `ribbon` | clock, song and weather above a ribbon of readings |
+| `pulse` | a mirrored row of 80 spectrum bars under the clock, the colour flows *(animated, with music)* |
+| `radial` | a circular spectrum round the clock, with CPU and GPU on the sides *(animated, with music)* |
+| `stereo` | two circles, the left channel in blue and the right one in pink, with the figures between them *(animated, with music)* |
+| `bands` | three rows of bars: the bass in orange, the mids in magenta, the highs in cyan *(animated, with music)* |
 
 ![dusk](img/layout-dusk-animated.gif)
 ![aurora](img/layout-aurora-animated.gif)
@@ -1305,10 +1359,14 @@ Twenty-two free layouts come with the program, so `layout = atelier` works with 
 ![terminal](img/layout-terminal.png)
 ![horizon](img/layout-horizon.png)
 ![ribbon](img/layout-ribbon.png)
+![pulse](img/layout-pulse-animated.gif)
+![radial](img/layout-radial-animated.gif)
+![stereo](img/layout-stereo-animated.gif)
+![bands](img/layout-bands-animated.gif)
 
 On a portrait panel the program uses the version drawn for it. To change one, open the layout builder and pick **Copy a built-in design** (the copy is named as you typed in the name box, or `<design>-mine`); or save a file `layouts/atelier.layout` yourself: a file with the same name takes the place of the built-in one. The built-in designs are in the screens list of the settings editor, among the other layouts.
 
-**Moving gradients.** A `bar` or `ring` can have a second colour, `color2=#RRGGBB`: the filled part then runs from `color` to `color2` (a straight run, whatever the value). With `flow=<seconds>` the gradient also flows along the bar or round the ring, one loop in that many seconds (`flow=0` or no `flow`: still). A bar over its `hot` value takes the hot colour as before. `dusk`, `aurora`, `carbon`, `eclipse` and `ledger` use it. In the layout builder: *Gradient to* (the second colour) and *Flow* under the bar or ring. While a screen with a flowing gradient is on, the program draws about 20 frames a second (and nothing more when there is none).
+**Moving gradients.** A `bar` or `ring` can have a second colour, `color2=#RRGGBB`: the filled part then runs from `color` to `color2` (a straight run, whatever the value). With `flow=<seconds>` the gradient also flows along the bar or round the ring, one loop in that many seconds (`flow=0` or no `flow`: still). A bar over its `hot` value takes the hot colour as before. `dusk`, `aurora`, `carbon`, `eclipse` and `ledger` use it, and so do the spectrums of `pulse`, `radial`, `stereo` and `bands`. The classic screens can do it too, see [Flowing colours on the classic screens](#flowing-colours-on-the-classic-screens). In the layout builder: *Gradient to* (the second colour) and *Flow* under the bar or ring. While a screen with a flowing gradient is on, the program draws about 20 frames a second (and nothing more when there is none).
 
 **Font of a text.** In a free layout every `text` and `ring` can say `font=smooth` (the thin anti-aliased Poppins) or `font=pixel`, and with the smooth font `weight=light`, `regular` or `medium`. Without them the text uses the font of the configuration (`font = ...`). This is how `atelier` and the others get their light, elegant figures whatever the global font is. The layout builder has the same choices under *Font*.
 
@@ -1338,7 +1396,7 @@ gaming, cpu, gpu, tiles, deck, cards, orbit, console, steam, frame, weather, new
   off with `hide = dashboard`). Set `layout_spectrum = true` to keep the audio
   spectrum visible on top of a panel layout while music is playing.
 
-**Moving gradients** (`bar_animation`): the free layouts that have a flowing gradient on their bars or rings (`dusk`, `aurora`, `carbon`, `eclipse`, `ledger`, and your own with `flow=`) move; `bar_animation = false` keeps every gradient still, and then the screen is drawn at the usual idle rate. Applies live when the file is saved.
+**Moving gradients** (`bar_animation`): the free layouts that have a flowing gradient on their bars or rings (`dusk`, `aurora`, `carbon`, `eclipse`, `ledger`, and your own with `flow=`) move; `bar_animation = false` keeps every gradient still, and then the screen is drawn at the usual idle rate. It switches off the flow on the classic screens too (`dash_flow`, `tiles_flow`). Applies live when the file is saved.
 
 **Staying put while music plays**: with `layout_hold_on_music = true` the
 rotation freezes on the *first* layout of the list as soon as music starts
@@ -1390,6 +1448,7 @@ layout_interval = 20
 | `tiles_clock_seconds` | `true`/`false` | `false` |
 | `tiles_cpu_watt_max`, `tiles_gpu_watt_max` | what 100% of the watt bar is, `10`-`2000` | `200`, `400` |
 | `tiles_fps_max` | what 100% of the FPS bar is, `30`-`1000` | `240` |
+| `tiles_flow` | colours that flow on the bars and rings, seconds per loop, `0`-`60` ([details](#flowing-colours-on-the-classic-screens)) | `0` |
 | `tiles_bar_color` | `auto` (green-yellow-red by level), a color, or several (a gradient) | `auto` |
 | `tile_<name>_color` | the same, for one tile (`tile_gpu_color`, `tile_cpu_temp_color`, ...) | `auto` |
 | `tiles_bg` | `global` \| `color` \| `gradient` \| `effect` \| `image` | `global` |
@@ -1524,6 +1583,7 @@ the weather and the playing track). `fans` needs [LibreHardwareMonitor](#fans-an
 | `dash_plate_color` | the colour of the panel behind `deck` and `orbit` | by theme (near black / white) |
 | `dash_plate` | opacity of that panel, `0`-`100` (`0` = no panel) | `50` dark, `92` light |
 | `cards_opacity` | opacity of the cards, `0`-`100` | `100` |
+| `dash_flow` | colours that flow on the rings, the gauge, the bar and the cards, seconds per loop, `0`-`60` ([details](#flowing-colours-on-the-classic-screens)) | `0` |
 | `dash_graph` | the graphs of the last minutes | `true` |
 | `dash_history` | seconds of history, `20`-`600` | `90` |
 | `dash_net_max` | network MB/s that fills a ring or gauge, `1`-`1000` | `25` |
@@ -1560,6 +1620,22 @@ dash_plate = 35            # see the aurora through a white veil
 # cards_opacity = 45
 ```
 When the cards are see-through (below 65 on the dark theme) their text turns white, since what is behind them is the dark background.
+
+## Flowing colours on the classic screens
+
+The bars of the classic screens can have a gradient that travels, like the animated designs. It is off until you give it a number of seconds per loop, and `bar_animation = false` (see [Preset layouts](#preset-layouts)) keeps it off whatever you set. Both keys apply live.
+
+| Key | Values | Default |
+|---|---|---|
+| `dash_flow` | seconds per loop for `orbit` (the rings), `deck` (the gauge on top of each column), `console` (the bar on top) and `cards` (the gradient of the cards), `0`-`60` | `0` (still) |
+| `tiles_flow` | seconds per loop for the bars and the rings of `tiles`, `0`-`60` | `0` (still) |
+
+```ini
+layout = orbit
+dash_flow = 6      # one loop every 6 seconds
+```
+
+While such a screen is on, the program draws at least 20 frames a second; with the keys at `0` nothing changes.
 
 ## Digital frame
 

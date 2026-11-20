@@ -4,7 +4,7 @@
 
 | Page | What is in it |
 |---|---|
-| [LAYOUTS.md](./LAYOUTS.md) | The 22 built-in screens, landscape and portrait |
+| [LAYOUTS.md](./LAYOUTS.md) | The 26 built-in screens, landscape and portrait |
 | [FEATURES.md](./FEATURES.md) | The complete list of features |
 | [PANELS.md](./PANELS.md) | Supported panels, the 6.86 screen test, screens that blink |
 | [SENSORS.md](./SENSORS.md) | Which sensors you need and what to install |
