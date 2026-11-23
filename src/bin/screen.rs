@@ -14,6 +14,9 @@ use trofeo_lcd::{hotkey, Framebuffer, LyLcd, Orientation};
 const DEFAULT_ACTIVE_FPS: f32 = 30.0;
 const DEFAULT_IDLE_FPS: f32 = 10.0;
 const DEFAULT_JPEG_QUALITY: u8 = 75;
+/// Resend the last frame after this much silence so the LCD never blanks on a
+/// static screen (0 = disabled, the old behaviour).
+const DEFAULT_KEEPALIVE_MS: u64 = 500;
 /// Minimum interval between two consecutive screenshots (ms) — prevents
 /// saving dozens of files while the hotkey is held down.
 const SNAP_MIN_INTERVAL: Duration = Duration::from_millis(500);
@@ -23,6 +26,8 @@ struct Config {
     active_fps: f32,
     idle_fps: f32,
     quality: u8,
+    /// Resend the last frame after this many ms without a new one (0 = off).
+    keepalive_ms: u64,
     /// Orientation of the captured canvas (portrait = display mounted upright).
     orientation: Orientation,
     /// Size of the panel's picture (landscape).
@@ -50,6 +55,8 @@ fn print_help() {
         \x20     --fps <N>             Target FPS when the screen is changing (default: {DEFAULT_ACTIVE_FPS})\n\
         \x20     --idle-fps <N>        Target polling FPS when the screen is idle (default: {DEFAULT_IDLE_FPS})\n\
         \x20 -q, --quality <1-100>     JPEG compression quality (default: {DEFAULT_JPEG_QUALITY})\n\
+        \x20     --keepalive-ms <N>    Resend the last frame every N ms while the screen is static,\n\
+        \x20                           so the LCD doesn't blank (default: {DEFAULT_KEEPALIVE_MS}, 0 = off)\n\
         \x20     --orientation <O>     'landscape' (default) or 'portrait' (display mounted upright;\n\
         \x20                           virtual monitor must be 462x1920)\n\
         \x20     --panel <MODEL>       trofeo-9.16 (default, 1920x462) or trofeo-11.3 (1920x400)\n\
@@ -73,6 +80,7 @@ fn parse_args() -> Result<Config> {
     let mut active_fps = DEFAULT_ACTIVE_FPS;
     let mut idle_fps = DEFAULT_IDLE_FPS;
     let mut quality = DEFAULT_JPEG_QUALITY;
+    let mut keepalive_cli: Option<u64> = None;
     let mut flip_cli: Option<bool> = None;
     let mut orientation_cli: Option<Orientation> = None;
     let (mut panel_cli, mut panel_size_cli): (Option<String>, Option<String>) = (None, None);
@@ -117,6 +125,11 @@ fn parse_args() -> Result<Config> {
                 quality = raw.parse::<u8>()
                     .map_err(|_| anyhow::anyhow!("--quality: '{raw}' is not a valid number 1-100"))?
                     .clamp(1, 100);
+            }
+            "--keepalive-ms" => {
+                let raw = args.next().ok_or_else(|| anyhow::anyhow!("--keepalive-ms needs a number of milliseconds (0 = off)"))?;
+                keepalive_cli = Some(raw.parse::<u64>()
+                    .map_err(|_| anyhow::anyhow!("--keepalive-ms: '{raw}' is not a valid number"))?);
             }
             "-r" | "--rotate" | "--flip" => {
                 flip_cli = Some(true);
@@ -200,12 +213,21 @@ fn parse_args() -> Result<Config> {
     if brightness > 100 {
         bail!("brightness must be between 0 and 100");
     }
+    let keepalive_ms = match keepalive_cli {
+        Some(v) => v,
+        None => file
+            .get_u32("keepalive_ms")
+            .map_err(|e| anyhow::anyhow!(e))?
+            .map(|v| v as u64)
+            .unwrap_or(DEFAULT_KEEPALIVE_MS),
+    };
 
     Ok(Config {
         display_index,
         active_fps,
         idle_fps,
         quality,
+        keepalive_ms,
         orientation,
         panel,
         flip,
@@ -330,8 +352,9 @@ fn main() -> Result<()> {
         config.panel.width, config.panel.height
     );
     println!(
-        "Settings: Active FPS: {:.1} | Idle FPS: {:.1} | Quality: {}%",
-        config.active_fps, config.idle_fps, config.quality
+        "Settings: Active FPS: {:.1} | Idle FPS: {:.1} | Quality: {}% | Keepalive: {}",
+        config.active_fps, config.idle_fps, config.quality,
+        if config.keepalive_ms == 0 { "off".to_string() } else { format!("{} ms", config.keepalive_ms) }
     );
     println!("Streaming started... Press Ctrl+C to stop.\n");
 
@@ -351,6 +374,9 @@ fn main() -> Result<()> {
     let active_frame_time = Duration::from_secs_f32(1.0 / config.active_fps);
     let idle_frame_time = Duration::from_secs_f32(1.0 / config.idle_fps);
     let mut last_snap = Instant::now() - SNAP_MIN_INTERVAL;
+    let keepalive = Duration::from_millis(config.keepalive_ms);
+    // Time of the last frame successfully sent to the LCD.
+    let mut last_sent = Instant::now();
 
     loop {
         let frame_start = Instant::now();
@@ -379,6 +405,8 @@ fn main() -> Result<()> {
                 if let Err(e) = lcd.send_framebuffer(&hs, &fb, config.quality) {
                     eprintln!("USB warning: Failed to send frame to LCD ({e}), retrying...");
                     std::thread::sleep(Duration::from_millis(200));
+                } else {
+                    last_sent = Instant::now();
                 }
 
                 // Maintain the target active FPS
@@ -388,19 +416,49 @@ fn main() -> Result<()> {
                 }
             }
             Ok(CaptureResult::Timeout) => {
-                // Screen static/idle: nothing to send (saves USB bandwidth & CPU!)
+                // Screen static/idle. `fb` still holds the last composed frame,
+                // so resend it as a keepalive once the LCD has been silent for
+                // `keepalive` — otherwise the panel blanks/blinks on a static screen.
+                if config.keepalive_ms > 0 && last_sent.elapsed() >= keepalive {
+                    if let Err(e) = lcd.send_framebuffer(&hs, &fb, config.quality) {
+                        eprintln!("USB warning: keepalive frame failed ({e})");
+                        std::thread::sleep(Duration::from_millis(200));
+                    } else {
+                        last_sent = Instant::now();
+                    }
+                }
                 let elapsed = frame_start.elapsed();
                 if elapsed < idle_frame_time {
                     std::thread::sleep(idle_frame_time - elapsed);
                 }
             }
             Ok(CaptureResult::NeedsReinit) => {
-                eprintln!("Monitor mode changed or access was lost. Reinitializing capture...");
-                std::thread::sleep(Duration::from_millis(500));
-                if let Ok(new_sess) = DxgiSession::new(Some(display_idx), (config.panel.width, config.panel.height)) {
-                    session = new_sess;
-                    println!("Capture successfully reinitialized.");
-                }
+                eprintln!("Monitor mode changed or access was lost. Reconnecting capture...");
+                // Release the old duplication first: holding it while creating a
+                // new one on the same output can make the new one fail instantly.
+                drop(session);
+                // Let the display finish changing mode before we grab it again
+                // (changing a setting can fire several mode events in a row).
+                std::thread::sleep(Duration::from_millis(1000));
+                // Retry until the display is back. Use the user's original
+                // --display choice (None = auto-detect the panel-sized monitor),
+                // not the old index: the virtual monitor's index can change when
+                // settings are changed.
+                let mut attempt: u32 = 0;
+                session = loop {
+                    match DxgiSession::new(config.display_index, (config.panel.width, config.panel.height)) {
+                        Ok(s) => break s,
+                        Err(e) => {
+                            attempt += 1;
+                            if attempt == 1 || attempt % 10 == 0 {
+                                eprintln!("Capture not ready yet ({e}); retrying...");
+                            }
+                            std::thread::sleep(Duration::from_millis((500 * attempt as u64).min(2000)));
+                        }
+                    }
+                };
+                let (w, h) = session.src_resolution();
+                println!("Capture reconnected: Display [{}] ({w}x{h})", session.display_index());
             }
             Err(e) => {
                 eprintln!("Capture warning: {e}");
