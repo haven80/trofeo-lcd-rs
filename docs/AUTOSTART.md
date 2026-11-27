@@ -45,3 +45,8 @@ script (or `Get-Help .\scripts\install-autostart.ps1 -Full`) for every option.
 a normal program start it. From 2.9.3 the settings editor works around that for the preview, but if it still says
 *"The requested operation requires elevation (os error 740)"* open `trofeo_config.exe` as administrator too.
 Only `trofeo_lcd.exe` is started at logon: the settings editor is opened by hand when you want it.
+
+# Autostart on Linux
+
+Linux autostart configuration is included on install guide.
+[Refer to Linux guide](../LINUX_INSTALL_AUTOSTART_UPDATE.md)
