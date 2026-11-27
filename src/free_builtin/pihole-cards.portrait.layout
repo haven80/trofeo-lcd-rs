@@ -1,0 +1,22 @@
+# pihole-cards (portrait) — four cards one under the other.
+rect  x=5 y=3 w=90 h=22 color=#161B25 opacity=92
+rect  x=5 y=3 w=90 h=0.5 color=#4DA3FF
+text  x=9 y=6.2 size=3 font=smooth weight=medium color=#4DA3FF text="QUERIES"
+text  x=9 y=15.5 anchor=l w=80 size=12 font=smooth weight=light color=#F2F5FA text="{pihole_queries}"
+text  x=9 y=21.5 w=80 size=3 font=smooth weight=medium color=#8A93A3 text="ALLOWED {pihole_allowed}"
+rect  x=5 y=27 w=90 h=22 color=#161B25 opacity=92
+rect  x=5 y=27 w=90 h=0.5 color=#FF4D5E
+text  x=9 y=30.2 size=3 font=smooth weight=medium color=#FF4D5E text="BLOCKED"
+text  x=9 y=39.5 anchor=l w=80 size=12 font=smooth weight=light color=#F2F5FA text="{pihole_blocked}"
+text  x=9 y=45.5 w=80 size=3 font=smooth weight=medium color=#8A93A3 text="CACHED {pihole_cached}"
+rect  x=5 y=51 w=90 h=22 color=#161B25 opacity=92
+rect  x=5 y=51 w=90 h=0.5 color=#FF9A3D
+text  x=9 y=54.2 size=3 font=smooth weight=medium color=#FF9A3D text="SHARE BLOCKED"
+text  x=9 y=63.5 anchor=l w=80 size=12 font=smooth weight=light color=#F2F5FA text="{pihole_percent}"
+text  x=9 y=67.8 w=80 size=3 font=smooth weight=medium color=#8A93A3 text="{pihole_status}"
+rect  x=5 y=75 w=90 h=22 color=#161B25 opacity=92
+rect  x=5 y=75 w=90 h=0.5 color=#FFC845
+text  x=9 y=78.2 size=3 font=smooth weight=medium color=#FFC845 text="ON LISTS"
+text  x=9 y=87.5 anchor=l w=80 size=12 font=smooth weight=light color=#F2F5FA text="{pihole_domains}"
+text  x=9 y=93.5 w=80 size=3 font=smooth weight=medium color=#8A93A3 text="CLIENTS {pihole_clients}"
+bar   x=9 y=71.4 w=82 h=0.9 value=pihole_percent color=#FF9A3D back=#262E3C

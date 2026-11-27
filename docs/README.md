@@ -4,13 +4,14 @@
 
 | Page | What is in it |
 |---|---|
-| [LAYOUTS.md](./LAYOUTS.md) | The 26 built-in screens, landscape and portrait |
+| [LAYOUTS.md](./LAYOUTS.md) | The 33 built-in screens, landscape and portrait |
 | [FEATURES.md](./FEATURES.md) | The complete list of features |
 | [PANELS.md](./PANELS.md) | Supported panels, the 6.86 screen test, screens that blink |
 | [SENSORS.md](./SENSORS.md) | Which sensors you need and what to install |
 | [CONFIGURATION.md](./CONFIGURATION.md) | The configuration cookbook: screens, backgrounds, fonts, tiles, weather, ticker, fans, ... |
 | [COMMAND_LINE.md](./COMMAND_LINE.md) | The flags that only exist on the command line |
 | [AUTOSTART.md](./AUTOSTART.md) | Start the program with Windows |
+| [LINUX_INSTALL_AUTOSTART_UPDATE.md](./LINUX_INSTALL_AUTOSTART_UPDATE.md) | Install on Linux, with autostart and an upgrade / rollback script |
 | [PERFORMANCE.md](./PERFORMANCE.md) | What each feature costs |
 | [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) | Antivirus false positives |
 | [HISTORY.md](./HISTORY.md) | Every version, in detail |

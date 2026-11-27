@@ -1,0 +1,17 @@
+# pihole-console (portrait) — the same readout, in a column.
+rect  x=2 y=1 w=96 h=98 color=#000000 opacity=64
+text  x=6 y=3 size=4 color=#FF4D5E text="PIHOLE>"
+text  x=6 y=7 size=4 color=#FFE0E3 text="{pihole_status}  {time_short}"
+text  x=6 y=14 size=4 color=#FF4D5E text="QUERIES"
+text  x=6 y=19 size=6 color=#FFE0E3 text="{pihole_queries}"
+text  x=6 y=27 size=4 color=#FF4D5E text="BLOCKED"
+text  x=6 y=32 size=6 color=#FFE0E3 text="{pihole_blocked}"
+bar   x=6 y=40 w=88 h=1.4 value=pihole_percent color=#FF4D5E back=#2A0F12
+text  x=94 y=43 anchor=tr size=4 color=#FFE0E3 text="{pihole_percent}"
+text  x=6 y=52 size=4 color=#FF4D5E text="LISTS"
+text  x=6 y=57 size=5 color=#FFE0E3 text="{pihole_domains}"
+text  x=6 y=65 size=4 color=#FF4D5E text="CACHED"
+text  x=6 y=70 size=5 color=#FFE0E3 text="{pihole_cached}"
+text  x=6 y=78 size=4 color=#FF4D5E text="FORWARDED"
+text  x=6 y=83 size=5 color=#FFE0E3 text="{pihole_forwarded}"
+text  x=6 y=91 size=4 color=#FF4D5E text="CLIENTS {pihole_clients}"

@@ -1,7 +1,7 @@
 <h1 align="center">trofeo_lcd</h1>
 
 <p align="center"><b>Beautiful screens for your Thermalright Trofeo Vision LCD.</b><br>
-Twenty-six new designs and all the classic screens, a music spectrum you can put anywhere, bars that flow, your own layouts and themes — a lightweight, open-source alternative to TRCC.</p>
+Thirty-three new designs and all the classic screens, a music spectrum you can put anywhere, your Pi-hole statistics, bars that flow, your own layouts and themes — a lightweight, open-source alternative to TRCC.</p>
 
 <h3 align="center">New designs <sub>(the bars of the animated ones really move)</sub></h3>
 
@@ -80,7 +80,7 @@ Twenty-six new designs and all the classic screens, a music spectrum you can put
 </tr>
 </table>
 
-<p align="center"><sub><b>47 screens</b> (26 new designs, 16 shown here, and 21 classics), plus nine for music and nine for games. Every one has a portrait version. <a href="#the-screens">Details and portrait versions ↓</a></sub></p>
+<p align="center"><sub><b>54 screens</b> (33 new designs, 16 shown here, and 21 classics), plus nine for music and nine for games. Every one has a portrait version. <a href="#the-screens">Details and portrait versions ↓</a></sub></p>
 
 <p align="center">
 <a href="#the-screens">The screens</a> ·
@@ -139,6 +139,29 @@ A spectrum you place yourself: a row, a column or a circle, the left or the righ
 </table>
 
 Choose the input or output to listen to (`audio_device`), the left, the right or both channels, and the gain and the compressor (`spectrum_gain`, `spectrum_compress`): [the options guide](./OPTIONS_GUIDE.md#the-spectrum-in-a-layout).
+
+### Pi-hole
+
+The statistics of your [Pi-hole](https://pi-hole.net) (version 6): queries, blocked, the share blocked and the domains on the block lists, refreshed every 15 seconds. Seven designs, and a `pihole` panel for deck, cards, orbit, console and tiles. The address and the password are only in your configuration file ([how to set it up](./OPTIONS_GUIDE.md#pi-hole)).
+
+<table>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-pihole.png" width="100%" alt="Pi-hole"><br><b>Pihole</b><br>A big ring with the share blocked, the figures in a row.<br><code>layout = pihole</code></td>
+<td width="50%" valign="top"><img src="img/layout-pihole-cards.png" width="100%" alt="Pi-hole cards"><br><b>Pihole cards</b><br>Four cards: queries, blocked, share, domains.<br><code>layout = pihole-cards</code></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-pihole-ring-animated.gif" width="100%" alt="Pi-hole ring"><br><b>Pihole ring</b> <sup>animated</sup><br>One big ring in the middle.<br><code>layout = pihole-ring</code></td>
+<td width="50%" valign="top"><img src="img/layout-pihole-flow-animated.gif" width="100%" alt="Pi-hole flow"><br><b>Pihole flow</b> <sup>animated</sup><br>Three wide bars: blocked, cache, forwarded.<br><code>layout = pihole-flow</code></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-pihole-console.png" width="100%" alt="Pi-hole console"><br><b>Pihole console</b><br>A pixel-font readout.<br><code>layout = pihole-console</code></td>
+<td width="50%" valign="top"><img src="img/layout-pihole-minimal.png" width="100%" alt="Pi-hole minimal"><br><b>Pihole minimal</b><br>The share, huge and light.<br><code>layout = pihole-minimal</code></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="img/layout-pihole-light.png" width="100%" alt="Pi-hole light"><br><b>Pihole light</b><br>A light page with one red accent.<br><code>layout = pihole-light</code></td>
+<td width="50%" valign="top"><img src="img/pihole-panels.png" width="100%" alt="The Pi-hole panel in the classic screens"><br><b>As a panel</b><br>Next to the CPU and the GPU: <code>deck = cpu, gpu, pihole, clock</code>.</td>
+</tr>
+</table>
 
 ### Elegant and calm
 
@@ -362,6 +385,7 @@ Texts with live values (`{cpu}`, `{gpu_temp}`, `{song}`, `{weather_temp}` …), 
 
 ## What's new
 
+**3.1.0 — Pi-hole.** The statistics of a Pi-hole 6 on your screen: seven designs (`pihole`, `pihole-cards`, `pihole-ring`, `pihole-console`, `pihole-minimal`, `pihole-light`, `pihole-flow`), a `pihole` panel in deck, cards, orbit and console and a tile in tiles, and `{pihole_...}` texts and bars in your own layouts. One login, the session is kept and used again; address, password and refresh time are in the configuration (`pihole_url`, `pihole_password`, `pihole_interval`).<br>
 **3.0.0 — the music spectrum in your layouts.** A new `spectrum` element: a row, a column or a circle, left or right channel, bass, mids or highs, mirrored, with your own colours and gradients; four new designs (`pulse`, `radial`, `stereo`, `bands`); gain, compressor and the audio device to listen to; and flowing colours on the classic screens too (`dash_flow`, `tiles_flow`).<br>
 **2.25.0 — eight more screens and bars that flow.** `swiss`, `dusk`, `aurora`, `carbon`, `eclipse`, `ledger`, `haiku`, `peach`; `color2` and `flow` give bars and rings a gradient that travels (`bar_animation = false` keeps them still).<br>
 **2.24.0 — nine screens in a thin font.** `atelier`, `noir`, `pearl`, `volt`, `blaze`, `studio`, `board`, `mineral`, `cluster`; free layouts can use `font=smooth weight=light`.<br>

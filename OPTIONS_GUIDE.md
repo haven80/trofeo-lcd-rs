@@ -1044,6 +1044,87 @@ weather_unit = f
 layout = default, weather:5
 ```
 
+## Pi-hole
+
+The statistics of a [Pi-hole](https://pi-hole.net) (version 6) on your network: the queries of the last 24 hours, how many were blocked, the share blocked, and how many domains are on the block lists. Nothing happens until you give the address; then you can use it in three ways: a **screen of its own** (seven designs), a **panel or tile** next to the CPU and the GPU in the classic screens, or **texts and bars** in your own layouts.
+
+```ini
+pihole_url      = http://192.168.178.10:8080
+pihole_password = your-app-password
+layout          = pihole
+```
+
+| Key | Values | Default |
+|---|---|---|
+| `pihole_url` | the address you open in the browser, for example `http://192.168.1.2:8080` (`http://` is added if missing, a trailing `/admin` is ignored). Empty = no Pi-hole | empty |
+| `pihole_password` | the password, best an **app password** (Pi-hole: *Settings → Web interface / API → Configure app password*). Empty = your Pi-hole has no password | empty |
+| `pihole_interval` | seconds between two refreshes, `5`-`3600` | `15` |
+| `pihole_timeout` | seconds to wait for Pi-hole to answer, `1`-`60` | `5` |
+
+All four **need a restart**. In the settings editor they are in the *Pi-hole* section (the password is shown as dots). A password with a `#` in it must be written in double quotes (`pihole_password = "ab#cd"`; the editor does not accept quotes inside a password).
+
+**How it talks to Pi-hole.** The program logs in once (`POST /api/auth`), keeps the session id and sends it with every refresh (`GET /api/stats/summary`, header `X-FTL-SID`). Only when Pi-hole answers `401` (the session has expired) does it log in again, once, and ask again; it never logs in at every refresh, so the sessions Pi-hole allows are not used up. If the login is refused, or Pi-hole says *too many requests*, it waits at least a minute before trying again. This happens on a thread of its own: a Pi-hole that is slow or switched off never slows the screen. The address and the password are only in your configuration file, not in the program.
+
+**The screens.** `layout = pihole` and the others are [free layouts](#free-layouts--design-your-own-screen) that come with the program (landscape and portrait), so they can be rotated with the other screens (`layout = pihole:10, default`), copied in the layout builder and changed:
+
+| Name | What it shows |
+|---|---|
+| `pihole` | a big ring with the share of blocked queries, queries / blocked / domains on the lists in a row, allowed, cached, forwarded and clients below |
+| `pihole-cards` | four cards: queries, blocked, share blocked (with a bar) and domains on the lists |
+| `pihole-ring` | one big ring in the middle with the share, the queries on the left and the blocked ones on the right *(the colours flow)* |
+| `pihole-console` | a pixel-font readout, one line per figure, a bar for the share |
+| `pihole-minimal` | the share blocked, huge and light, one quiet line under it |
+| `pihole-light` | a light page with the figures in ink and one red accent |
+| `pihole-flow` | three wide bars whose colours flow: blocked, answered from cache, forwarded *(animated)* |
+
+![pihole](img/layout-pihole.png)
+![pihole-cards](img/layout-pihole-cards.png)
+![pihole-ring](img/layout-pihole-ring-animated.gif)
+![pihole-console](img/layout-pihole-console.png)
+![pihole-minimal](img/layout-pihole-minimal.png)
+![pihole-light](img/layout-pihole-light.png)
+![pihole-flow](img/layout-pihole-flow-animated.gif)
+
+**In the classic screens.** `pihole` is a panel of `deck`, `cards`, `orbit` and `console`, and a tile of `tiles`, like `cpu` or `weather`:
+
+```ini
+layout = deck
+deck = cpu, gpu, pihole, clock
+
+layout = tiles
+tiles = clock, cpu | pihole, gpu | ram, net
+```
+
+The big number is the share blocked; the small ones are the queries, the blocked ones and the domains on the lists, and the rings of `orbit` show blocked, answered from cache and forwarded.
+
+![the Pi-hole panel in deck, cards, orbit and console](img/pihole-panels.png)
+
+**In your own layouts.** In the text of a free layout and in the layout builder:
+
+| Text | What it is |
+|---|---|
+| `{pihole_queries}` | queries in the last 24 hours |
+| `{pihole_blocked}`, `{pihole_allowed}` | blocked, and not blocked |
+| `{pihole_percent}` | share blocked, with the `%` |
+| `{pihole_cached}`, `{pihole_forwarded}` | answered from the cache, forwarded upstream |
+| `{pihole_cached_percent}`, `{pihole_forwarded_percent}` | the same as a share of the queries |
+| `{pihole_domains}` | domains on the block lists |
+| `{pihole_clients}` | clients that asked something |
+| `{pihole_status}` | `ONLINE`, `WAIT` (no answer yet), `LOGIN?` (the password was refused) or `OFFLINE` |
+
+Big numbers are shortened (`123K`, `1.06M`). A bar or a ring can show `value=pihole_percent`, `value=pihole_cached_percent` or `value=pihole_forwarded_percent` (0-100):
+
+```ini
+text  x=4 y=20 size=4 color=#FF4D5E text="PI-HOLE  {pihole_status}"
+text  x=4 y=45 size=14 font=smooth weight=light text="{pihole_percent}"
+text  x=4 y=75 size=3 text="{pihole_blocked} of {pihole_queries}   {pihole_domains} domains"
+bar   x=4 y=88 w=60 h=3 value=pihole_percent color=#FF4D5E color2=#FFB84A flow=5
+```
+
+While Pi-hole cannot be reached the last figures stay on the screen and the status says so; before the first answer there is `--`. The pictures made by the settings editor and by `--preview-png` show sample figures.
+
+**If nothing shows up**: `--` and `WAIT` for more than a few seconds mean no answer (check the address from the PC: `http://<address>/api/info/version` should answer; with Docker use the port you published, not 80); `LOGIN?` means the password was refused (an app password is the best choice). Pi-hole 5 has no such API: only version 6 works.
+
 ## Ticker
 
 | Key | CLI | Values | Default | Restart? |
@@ -1243,8 +1324,8 @@ ring  x=80 y=62 w=30 h=70 anchor=c value=gpu text="{gpu}"
 
 - **Positions and sizes are percentages of the screen** (`x`, `y`, `w`, `h`), so the same file fits a landscape and a portrait panel. `x`, `y` is where the `anchor` point of the element goes: `tl` (top left, the default), `t`, `tr`, `l`, `c` (centre), `r`, `bl`, `b`, `br`.
 - **Elements are drawn in the order of the file** (the last one is on top), over the background of the configuration.
-- `text`: `text="..."`, `size` (the scale of the font, 1-80), `color`, `font` (`pixel` or `smooth`) and `weight` (`light`, `regular`, `medium`; for the smooth font); `w` is an optional limit of the width (a longer text is made smaller). Inside the text `{name}` is replaced with a live value: `{cpu}` `{gpu}` `{ram}` `{cpu_temp}` `{gpu_temp}` `{gpu_hotspot}` `{cpu_power}` `{gpu_power}` `{cpu_mhz}` `{cpu_freq}` `{fps}` `{ram_used}` `{ram_free}` `{ram_total}` `{net_down}` `{net_up}` `{disk_read}` `{disk_write}` `{song}` `{time}` `{time_short}` `{date}` `{weather_temp}` `{weather_city}`. A value that is not available on your PC shows `--`.
-- `bar`: `w`, `h`, `value=` one of `cpu gpu ram cpu_temp gpu_temp gpu_hotspot cpu_power gpu_power cpu_mhz fps`, `min` (0) and `max` (the usual maximum of the value), `color` (default: by level), `back` (the track), `color2` (a second color: the filled part runs from `color` to it) and `flow` (seconds per loop of a gradient that flows along; 0 = still), `hot=` and `hot_color=` (from that value up the bar takes that color).
+- `text`: `text="..."`, `size` (the scale of the font, 1-80), `color`, `font` (`pixel` or `smooth`) and `weight` (`light`, `regular`, `medium`; for the smooth font); `w` is an optional limit of the width (a longer text is made smaller). Inside the text `{name}` is replaced with a live value: `{cpu}` `{gpu}` `{ram}` `{cpu_temp}` `{gpu_temp}` `{gpu_hotspot}` `{cpu_power}` `{gpu_power}` `{cpu_mhz}` `{cpu_freq}` `{fps}` `{ram_used}` `{ram_free}` `{ram_total}` `{net_down}` `{net_up}` `{disk_read}` `{disk_write}` `{song}` `{time}` `{time_short}` `{date}` `{weather_temp}` `{weather_city}`, and, with a [Pi-hole](#pi-hole), `{pihole_queries}` `{pihole_blocked}` `{pihole_percent}` `{pihole_domains}` and more. A value that is not available on your PC shows `--`.
+- `bar`: `w`, `h`, `value=` one of `cpu gpu ram cpu_temp gpu_temp gpu_hotspot cpu_power gpu_power cpu_mhz fps pihole_percent pihole_cached_percent pihole_forwarded_percent`, `min` (0) and `max` (the usual maximum of the value), `color` (default: by level), `back` (the track), `color2` (a second color: the filled part runs from `color` to it) and `flow` (seconds per loop of a gradient that flows along; 0 = still), `hot=` and `hot_color=` (from that value up the bar takes that color).
 - `ring`: like `bar` (`w`, `h` give the size, the ring is a circle in it), plus `thick` (% of the radius) and `text` (shown in the middle, sized to fit).
 - `rect`: `w`, `h`, `color`, `opacity` (0-100).
 - `spectrum`: the music spectrum, as a row, a column or a circle, with its own colours, the left or the right channel, or only the bass, the mids or the highs. See [The spectrum in a layout](#the-spectrum-in-a-layout).
@@ -1306,7 +1387,7 @@ audio_device = Speakers
 
 ### Built-in designs
 
-Twenty-six free layouts come with the program, so `layout = atelier` works with no file:
+Thirty-three free layouts come with the program, so `layout = atelier` works with no file:
 
 | Name | What it shows |
 |---|---|
@@ -1336,6 +1417,13 @@ Twenty-six free layouts come with the program, so `layout = atelier` works with 
 | `radial` | a circular spectrum round the clock, with CPU and GPU on the sides *(animated, with music)* |
 | `stereo` | two circles, the left channel in blue and the right one in pink, with the figures between them *(animated, with music)* |
 | `bands` | three rows of bars: the bass in orange, the mids in magenta, the highs in cyan *(animated, with music)* |
+| `pihole` | Pi-hole: a big ring with the share of blocked queries and the figures in a list |
+| `pihole-cards` | Pi-hole: four cards (queries, blocked, share blocked, domains on the lists) |
+| `pihole-ring` | Pi-hole: one big ring in the middle, queries and blocked on the sides *(animated)* |
+| `pihole-console` | Pi-hole: a pixel-font readout, one line per figure |
+| `pihole-minimal` | Pi-hole: the share blocked, huge and light |
+| `pihole-light` | Pi-hole: a light page, figures in ink, one red accent |
+| `pihole-flow` | Pi-hole: three wide bars with flowing colours (blocked, cache, forwarded) *(animated)* |
 
 ![dusk](img/layout-dusk-animated.gif)
 ![aurora](img/layout-aurora-animated.gif)
@@ -1363,6 +1451,13 @@ Twenty-six free layouts come with the program, so `layout = atelier` works with 
 ![radial](img/layout-radial-animated.gif)
 ![stereo](img/layout-stereo-animated.gif)
 ![bands](img/layout-bands-animated.gif)
+![pihole](img/layout-pihole.png)
+![pihole-cards](img/layout-pihole-cards.png)
+![pihole-ring](img/layout-pihole-ring-animated.gif)
+![pihole-console](img/layout-pihole-console.png)
+![pihole-minimal](img/layout-pihole-minimal.png)
+![pihole-light](img/layout-pihole-light.png)
+![pihole-flow](img/layout-pihole-flow-animated.gif)
 
 On a portrait panel the program uses the version drawn for it. To change one, open the layout builder and pick **Copy a built-in design** (the copy is named as you typed in the name box, or `<design>-mine`); or save a file `layouts/atelier.layout` yourself: a file with the same name takes the place of the built-in one. The built-in designs are in the screens list of the settings editor, among the other layouts.
 
@@ -1435,7 +1530,7 @@ layout_interval = 20
 
 | Key | Values | Default |
 |---|---|---|
-| `tiles` | the tiles: `clock cpu cpu_temp cpu_watt gpu gpu_temp gpu_hotspot gpu_watt ram net disk fps weather music`, and with LibreHardwareMonitor `cpu_fan case_fan pump gpu_fan fans mb_temp disk_temp`, `,` between tiles, `\|` between rows, `:ring` for a ring, `clock:tall` (first tile only) as tall as all the rows; at most 16 | `clock:tall, cpu_temp, gpu_temp \| ram:ring, cpu:ring, gpu:ring` |
+| `tiles` | the tiles: `clock cpu cpu_temp cpu_watt gpu gpu_temp gpu_hotspot gpu_watt ram net disk fps weather music pihole`, and with LibreHardwareMonitor `cpu_fan case_fan pump gpu_fan fans mb_temp disk_temp`, `,` between tiles, `\|` between rows, `:ring` for a ring, `clock:tall` (first tile only) as tall as all the rows; at most 16 | `clock:tall, cpu_temp, gpu_temp \| ram:ring, cpu:ring, gpu:ring` |
 | `tiles_rpm` | a `CPU 1240 / CASE 780 RPM` line on the CPU tiles (needs LibreHardwareMonitor) | `true` |
 | `tiles_fan_max` | the RPM that fills the bar of a fan tile, `500`-`10000` | `2500` |
 | `tiles_font` | `smooth` \| `pixel` | `smooth` |
@@ -1554,7 +1649,7 @@ with `update_check = false`).
 ## Deck, Cards, Orbit and Console
 
 Four more full screens (`layout = deck`, `cards`, `orbit`, `console`). On a portrait panel (`orientation = portrait`) they stack their parts in a column: one row per device in `deck` and `orbit`, one card under the other in `cards` (the `|` groups are read in order), one tile under the other in `console`. Every key can also be a command-line
-flag and all of them apply live. Panels: `cpu gpu ram fans net disk clock weather music fps` (`clock` also shows
+flag and all of them apply live. Panels: `cpu gpu ram fans net disk clock weather music fps pihole` (`clock` also shows
 the weather and the playing track). `fans` needs [LibreHardwareMonitor](#fans-and-sensors-librehardwaremonitor).
 
 ![The fps panel in deck, cards, orbit and console](img/dash-fps.png)

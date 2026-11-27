@@ -1,0 +1,12 @@
+# pihole-ring — one big ring in the middle, queries on one side, blocked on the other.
+rect  x=0 y=0 w=100 h=100 color=#090B10 opacity=70
+ring  x=50 y=50 w=30 h=96 anchor=c value=pihole_percent text="{pihole_percent}" font=smooth weight=light color=#FF4D5E color2=#FFB84A back=#1F2530 thick=11 flow=6
+text  x=50 y=82 anchor=c size=3 font=smooth weight=medium color=#8A93A3 text="BLOCKED"
+text  x=4 y=22 size=3 font=smooth weight=medium color=#4DA3FF text="QUERIES"
+text  x=4 y=47 anchor=l size=16 font=smooth weight=light color=#F2F5FA text="{pihole_queries}"
+text  x=4 y=72 size=3 font=smooth weight=medium color=#8A93A3 text="ALLOWED {pihole_allowed}"
+text  x=96 y=22 anchor=tr size=3 font=smooth weight=medium color=#FF4D5E text="BLOCKED"
+text  x=96 y=47 anchor=r size=16 font=smooth weight=light color=#F2F5FA text="{pihole_blocked}"
+text  x=96 y=72 anchor=tr size=3 font=smooth weight=medium color=#8A93A3 text="{pihole_domains} DOMAINS ON LISTS"
+text  x=3 y=7 size=3 font=smooth weight=medium color=#FF4D5E text="PI-HOLE"
+text  x=97 y=7 anchor=tr size=3 font=smooth weight=medium color=#8A93A3 text="{pihole_status}"

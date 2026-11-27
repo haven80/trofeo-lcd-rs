@@ -43,6 +43,7 @@ mod tiles;
 mod ticker;
 mod tray;
 mod update;
+use trofeo_lcd::pihole;
 mod weather;
 mod weather_icon;
 
@@ -174,6 +175,8 @@ struct Config {
     silence_threshold: f32,
     /// The sound to listen to (`audio_device`): None = the default output.
     audio_device: Option<String>,
+    /// The Pi-hole to ask for statistics (`pihole_url`, ...); None = off.
+    pihole: Option<pihole::Settings>,
     silence_timeout: Duration,
     color_mode: ColorMode,
     /// If `Some`, the EQ bar color follows (by polling) the color of the OpenRGB
@@ -783,6 +786,7 @@ fn parse_args() -> anyhow::Result<Config> {
     if !(0.0..=1.0).contains(&silence_threshold) {
         anyhow::bail!("silence_threshold: must be between 0.0 and 1.0");
     }
+    let pihole = pihole::Settings::parse(&file).map_err(|e| anyhow::anyhow!(e))?;
     let audio_device = file.get("audio_device").map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
     let silence_timeout_ms = match silence_timeout_ms_cli {
         Some(v) => v,
@@ -908,6 +912,7 @@ fn parse_args() -> anyhow::Result<Config> {
         active_fps,
         silence_threshold,
         audio_device,
+        pihole,
         silence_timeout: Duration::from_millis(silence_timeout_ms),
         color_mode,
         openrgb_device,
@@ -2321,6 +2326,7 @@ fn main() -> anyhow::Result<()> {
     // in the config, or auto-detected from the machine's public IP otherwise. Runs
     // on its own background thread (network calls, refreshed every ~15 minutes) so
     // the render loop never blocks on it.
+    pihole::spawn(config.pihole.clone());
     let weather_monitor = weather::WeatherMonitor::spawn(config.weather_city.clone());
     let mut latest_weather: Option<weather::WeatherSnapshot> = None;
 
@@ -3237,6 +3243,8 @@ fn render_preview(config: &Config, req: &PreviewReq) -> anyhow::Result<Framebuff
     let Display { background, composite, mut fb, mut ui, .. } = build_display(config)?;
     let mut background = background;
     let (wd, gpu_data, weather) = preview_data();
+    // pictures made without the network show sample figures for Pi-hole
+    pihole::use_sample(true);
     // the sample FPS, so the "fps" item of the info block shows in the preview
     FPS_NOW.store(gpu_data.fps.unwrap_or(0).max(0) as u32, std::sync::atomic::Ordering::Relaxed);
     lhm::set_current(lhm::Readings::sample());
@@ -5692,7 +5700,7 @@ mod layout_tests {
                 Kind::ColorList if matches!(key, "effect_colors" | "spectrum_gradient" | "tiles_colors") => values.push("#112233, #445566".into()),
                 Kind::ColorList => values.extend(["#112233".into(), "#112233, #445566".into()]),
                 Kind::BarColor => values.extend(["auto".into(), "#112233".into(), "#112233, #445566".into()]),
-                Kind::Text | Kind::Path | Kind::Folder | Kind::Layout | Kind::Tiles | Kind::TileColumn => {}
+                Kind::Text | Kind::Secret | Kind::Path | Kind::Folder | Kind::Layout | Kind::Tiles | Kind::TileColumn => {}
                 Kind::Panels { columns } => {
                     if *columns {
                         values.extend(["cpu".into(), "clock | cpu, gpu | music, net, disk".into()]);
@@ -5752,7 +5760,7 @@ mod layout_tests {
         }
         // every key of the editor is one the program reads from the config file
         let from_cli_or_file = |k: &str| is_override_key(k) || ["orientation", "flip", "panel_size", "background", "background_dim", "ffmpeg", "language",
-            "hid_mount", "hid_header", "hid_resend_ms", "color", "silence_threshold", "audio_device", "silence_timeout_ms", "weather_city", "ticker_source", "ticker_refresh_min", "gpu_usage_source", "fps_source", "fps_driver_divisor", "update_check", "update_check_hours", "update_notice_secs", "start_in_tray", "margin", "margin_top", "margin_bottom", "margin_left", "margin_right"].contains(&k);
+            "hid_mount", "hid_header", "hid_resend_ms", "color", "silence_threshold", "audio_device", "pihole_url", "pihole_password", "pihole_interval", "pihole_timeout", "silence_timeout_ms", "weather_city", "ticker_source", "ticker_refresh_min", "gpu_usage_source", "fps_source", "fps_driver_divisor", "update_check", "update_check_hours", "update_notice_secs", "start_in_tray", "margin", "margin_top", "margin_bottom", "margin_left", "margin_right"].contains(&k);
         for f in fields() {
             assert!(from_cli_or_file(&f.key), "{} is not a key of the program", f.key);
         }

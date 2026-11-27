@@ -1,0 +1,16 @@
+# pihole-light (portrait) — a light page, the figures one under the other.
+rect  x=0 y=0 w=100 h=100 color=#F1EEE8 opacity=96
+text  x=8 y=3 size=3 font=smooth weight=medium color=#C8102E text="PI-HOLE"
+text  x=92 y=3 anchor=tr size=3 font=smooth weight=medium color=#77736B text="{pihole_status}"
+text  x=8 y=19 anchor=l size=22 font=smooth weight=light color=#14120F text="{pihole_percent}"
+text  x=8 y=29 w=84 size=3 font=smooth weight=medium color=#77736B text="OF THE QUERIES BLOCKED"
+rect  x=8 y=34 w=84 h=0.12 color=#CFCAC0
+text  x=8 y=37 size=3 font=smooth weight=medium color=#77736B text="QUERIES"
+text  x=8 y=43 anchor=l size=11 font=smooth weight=light color=#14120F text="{pihole_queries}"
+text  x=8 y=51 size=3 font=smooth weight=medium color=#C8102E text="BLOCKED"
+text  x=8 y=57 anchor=l size=11 font=smooth weight=light color=#14120F text="{pihole_blocked}"
+text  x=8 y=65 size=3 font=smooth weight=medium color=#77736B text="ON LISTS"
+text  x=8 y=71 anchor=l size=11 font=smooth weight=light color=#14120F text="{pihole_domains}"
+text  x=8 y=79 size=3 font=smooth weight=medium color=#77736B text="CLIENTS"
+text  x=8 y=85 anchor=l size=11 font=smooth weight=light color=#14120F text="{pihole_clients}"
+text  x=50 y=96 anchor=c size=4 font=smooth weight=regular color=#77736B text="{time_short}"

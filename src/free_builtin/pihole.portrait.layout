@@ -1,0 +1,17 @@
+# pihole (portrait) — the ring on top, the figures one under the other.
+rect  x=0 y=0 w=100 h=100 color=#0B0E14 opacity=78
+text  x=50 y=3 anchor=c size=3 font=smooth weight=medium color=#FF4D5E text="PI-HOLE   {pihole_status}"
+ring  x=50 y=17 w=84 h=24 anchor=c value=pihole_percent text="{pihole_percent}" font=smooth weight=light color=#FF4D5E color2=#FF9A3D back=#232A36 thick=13
+text  x=50 y=31 anchor=c size=3 font=smooth weight=medium color=#8A93A3 text="BLOCKED"
+rect  x=8 y=35 w=84 h=0.12 color=#2A3140
+text  x=8 y=38 size=3 font=smooth weight=medium color=#4DA3FF text="QUERIES"
+text  x=8 y=44 anchor=l size=11 font=smooth weight=light color=#F2F5FA text="{pihole_queries}"
+text  x=8 y=51 size=3 font=smooth weight=medium color=#FF4D5E text="BLOCKED"
+text  x=8 y=57 anchor=l size=11 font=smooth weight=light color=#F2F5FA text="{pihole_blocked}"
+text  x=8 y=64 size=3 font=smooth weight=medium color=#FFC845 text="ON LISTS"
+text  x=8 y=70 anchor=l size=11 font=smooth weight=light color=#F2F5FA text="{pihole_domains}"
+rect  x=8 y=76 w=84 h=0.12 color=#2A3140
+text  x=8 y=79 size=3 font=smooth weight=medium color=#8A93A3 text="ALLOWED {pihole_allowed}"
+text  x=8 y=83 size=3 font=smooth weight=medium color=#8A93A3 text="CACHED {pihole_cached}"
+text  x=8 y=87 size=3 font=smooth weight=medium color=#8A93A3 text="CLIENTS {pihole_clients}"
+text  x=50 y=95 anchor=c size=5 font=smooth weight=light color=#F2F5FA text="{time_short}"

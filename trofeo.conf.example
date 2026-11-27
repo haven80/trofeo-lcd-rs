@@ -276,11 +276,12 @@ language = en
 # A screen you designed yourself (the settings editor's Layout builder, or a text file
 # layouts/<name>.layout next to this file) is used by its name, like the others:
 # layout = default, my-screen
-# Twenty-six designs come with the program (no file needed; the layout builder can copy one to change):
+# Thirty-three designs come with the program (no file needed; the layout builder can copy one to change):
 #   swiss | dusk | aurora | carbon | eclipse | ledger | haiku | peach   (dusk, aurora, carbon, eclipse and ledger have flowing bars; see bar_animation)
 #   atelier | noir | pearl | volt | blaze | studio | board | mineral | cluster
 #   halo | gauges | terminal | horizon | ribbon
 #   pulse | radial | stereo | bands   (with a spectrum: rows, circles, left/right, bass/mids/highs)
+#   pihole | pihole-cards | pihole-ring | pihole-console | pihole-minimal | pihole-light | pihole-flow   (statistics of a Pi-hole, see the Pi-hole section)
 # layout = atelier
 # Rotation: several layouts separated by commas, changing every layout_interval seconds.
 # layout = cpu-gpu, temps, music
@@ -303,7 +304,7 @@ language = en
 #                               # list (no rotation); rotation restarts when the music stops
 
 # --- Tiles (layout = tiles) -----------------------------------------------------
-# Which tiles: clock cpu cpu_temp cpu_watt gpu gpu_temp gpu_hotspot gpu_watt ram net disk fps weather music
+# Which tiles: clock cpu cpu_temp cpu_watt gpu gpu_temp gpu_hotspot gpu_watt ram net disk fps weather music pihole
 #   and, with LibreHardwareMonitor (see "Fans" below): cpu_fan case_fan pump gpu_fan fans mb_temp disk_temp
 # ("," between tiles, "|" between rows, ":ring" = a ring, "clock:tall" = as tall as all rows).
 # layout = tiles
@@ -346,7 +347,7 @@ language = en
 
 # --- Deck, Cards, Orbit and Console (layout = deck | cards | orbit | console) ------------
 # Four more full screens, from the same readings as the tiles. Panels: cpu gpu ram fans net disk
-# clock weather music fps (the clock panel also shows the weather and the track; the fps panel
+# clock weather music fps pihole (the clock panel also shows the weather and the track; the fps panel
 # shows the FPS of the game that is running, "no game" otherwise).
 # layout = deck
 # deck = cpu, gpu, ram, clock           # instrument columns (2-5)
@@ -543,6 +544,19 @@ language = en
 # layout = weather              # weather panel alone
 # layout = default, weather     # rotates with the standard screen
 
+# --- Pi-hole (statistics of the network ad blocker, version 6) -----------------------------
+# Nothing happens until pihole_url is set. Then: layout = pihole (or pihole-cards, pihole-ring,
+# pihole-console, pihole-minimal, pihole-light, pihole-flow), or "pihole" as a panel of deck / cards /
+# orbit / console, as a tile of tiles, or {pihole_queries} {pihole_blocked} {pihole_percent}
+# {pihole_domains} ... in your own layouts. All five keys need a restart.
+# pihole_url = http://192.168.1.2:8080     # the address you open in the browser, without /admin
+# pihole_password =                        # the app password (Pi-hole: Settings > Web interface / API >
+#                                          # Configure app password). In clear text; put it in "double quotes"
+#                                          # if it has a # in it. Empty = Pi-hole has no password
+# pihole_interval = 15                     # 5-3600 seconds between two refreshes. The login is done once and
+#                                          # its session is used again; only a 401 makes it log in again
+# pihole_timeout = 5                       # 1-60 seconds to wait for Pi-hole to answer
+
 # --- Per-item control: size, position, color ----------------------------------
 # Items: cpu, gpu, uptime, time, date, mem (or ram), net, disk, volume, nowplaying,
 #        weather
@@ -603,7 +617,7 @@ language = en
 # restarting (orientation, margins, background, language, colors, layouts, brightness, etc.).
 # If the file has an error, the previous configuration stays valid and the reason is
 # written to trofeo-errors.txt (next to trofeo_lcd.exe).
-# Only deepcool, fps_monitor, openrgb, hide_console, start_in_tray, screenshot_key, weather_city,
+# Only deepcool, fps_monitor, openrgb, hide_console, start_in_tray, screenshot_key, weather_city, audio_device, pihole_*,
 # ticker_source and ticker_refresh_min require a restart. weather_unit, the "weather"
 # show/hide/size/position/color/backdrop options, and ticker_position/ticker_size/
 # ticker_color/ticker_backdrop/ticker_width all apply live, like everything else.

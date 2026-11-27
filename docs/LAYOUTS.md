@@ -2,7 +2,7 @@
 
 [← Back to the README](../README.md) · [All the docs](./README.md)
 
-Twenty-six new designs come with the program, next to the classic screens that were always there: `layout = <name>` and nothing else. Each has a version for portrait panels (chosen by itself). In the settings editor, *Screens → Layout builder → Copy a built-in design* makes a file of yours to change; a file `layouts/<name>.layout` with the same name takes the place of the built-in one. Details of the file format: [the options guide](../OPTIONS_GUIDE.md#free-layouts--design-your-own-screen).
+Thirty-three new designs come with the program, next to the classic screens that were always there: `layout = <name>` and nothing else. Each has a version for portrait panels (chosen by itself). In the settings editor, *Screens → Layout builder → Copy a built-in design* makes a file of yours to change; a file `layouts/<name>.layout` with the same name takes the place of the built-in one. Details of the file format: [the options guide](../OPTIONS_GUIDE.md#free-layouts--design-your-own-screen).
 
 ## Flowing bars
 
@@ -92,6 +92,77 @@ Three rows of bars: the bass in orange, the mids in magenta, the highs in cyan.
 <img src="../img/layout-bands-animated.gif" width="100%" alt="Bands">
 
 <img src="../img/layout-bands-portrait.png" height="420" alt="Bands, portrait">
+
+## Pi-hole
+
+The statistics of a [Pi-hole](https://pi-hole.net) 6: queries, blocked, the share blocked and the domains on the block lists. Set it up first (`pihole_url`, `pihole_password`): [the options guide](../OPTIONS_GUIDE.md#pi-hole). Also a panel for deck, cards, orbit and console, and a tile for tiles.
+### Pihole
+
+A big ring with the share of blocked queries, queries, blocked and domains on the lists in a row, and allowed, cached, forwarded and clients below.
+
+`layout = pihole`
+
+<img src="../img/layout-pihole.png" width="100%" alt="Pihole">
+
+<img src="../img/layout-pihole-portrait.png" height="420" alt="Pihole, portrait">
+### Pihole cards
+
+Four cards: queries, blocked, share blocked (with a bar) and domains on the lists.
+
+`layout = pihole-cards`
+
+<img src="../img/layout-pihole-cards.png" width="100%" alt="Pihole cards">
+
+<img src="../img/layout-pihole-cards-portrait.png" height="420" alt="Pihole cards, portrait">
+### Pihole ring
+
+One big ring in the middle, the queries on the left, the blocked ones on the right. The ring's colours flow.
+
+`layout = pihole-ring`
+
+<img src="../img/layout-pihole-ring-animated.gif" width="100%" alt="Pihole ring">
+
+<img src="../img/layout-pihole-ring-portrait.png" height="420" alt="Pihole ring, portrait">
+### Pihole console
+
+A pixel-font readout, one line per figure, a bar for the share.
+
+`layout = pihole-console`
+
+<img src="../img/layout-pihole-console.png" width="100%" alt="Pihole console">
+
+<img src="../img/layout-pihole-console-portrait.png" height="420" alt="Pihole console, portrait">
+### Pihole minimal
+
+The share blocked, huge and light, one quiet line under it.
+
+`layout = pihole-minimal`
+
+<img src="../img/layout-pihole-minimal.png" width="100%" alt="Pihole minimal">
+
+<img src="../img/layout-pihole-minimal-portrait.png" height="420" alt="Pihole minimal, portrait">
+### Pihole light
+
+A light page with the figures in ink and one red accent.
+
+`layout = pihole-light`
+
+<img src="../img/layout-pihole-light.png" width="100%" alt="Pihole light">
+
+<img src="../img/layout-pihole-light-portrait.png" height="420" alt="Pihole light, portrait">
+### Pihole flow
+
+Three wide bars whose colours flow: blocked, answered from the cache, forwarded.
+
+`layout = pihole-flow`
+
+<img src="../img/layout-pihole-flow-animated.gif" width="100%" alt="Pihole flow">
+
+<img src="../img/layout-pihole-flow-portrait.png" height="420" alt="Pihole flow, portrait">
+
+As a panel in the classic screens:
+
+<img src="../img/pihole-panels.png" width="100%" alt="The Pi-hole panel in deck, cards, orbit, console and tiles">
 
 ## Elegant and calm
 

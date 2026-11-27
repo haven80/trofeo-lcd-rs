@@ -1,0 +1,22 @@
+# pihole-cards — four cards: queries, blocked, share blocked, domains on the lists.
+rect  x=1 y=6 w=23.5 h=88 color=#161B25 opacity=92
+rect  x=1 y=6 w=23.5 h=1.2 color=#4DA3FF
+text  x=3 y=17 size=3 font=smooth weight=medium color=#4DA3FF text="QUERIES"
+text  x=3 y=50 anchor=l w=19.5 size=15 font=smooth weight=light color=#F2F5FA text="{pihole_queries}"
+text  x=3 y=76 w=19.5 size=3 font=smooth weight=medium color=#8A93A3 text="ALLOWED {pihole_allowed}"
+rect  x=25.5 y=6 w=23.5 h=88 color=#161B25 opacity=92
+rect  x=25.5 y=6 w=23.5 h=1.2 color=#FF4D5E
+text  x=27.5 y=17 size=3 font=smooth weight=medium color=#FF4D5E text="BLOCKED"
+text  x=27.5 y=50 anchor=l w=19.5 size=15 font=smooth weight=light color=#F2F5FA text="{pihole_blocked}"
+text  x=27.5 y=76 w=19.5 size=3 font=smooth weight=medium color=#8A93A3 text="CACHED {pihole_cached}"
+rect  x=50 y=6 w=23.5 h=88 color=#161B25 opacity=92
+rect  x=50 y=6 w=23.5 h=1.2 color=#FF9A3D
+text  x=52 y=17 size=3 font=smooth weight=medium color=#FF9A3D text="SHARE BLOCKED"
+text  x=52 y=50 anchor=l w=19.5 size=15 font=smooth weight=light color=#F2F5FA text="{pihole_percent}"
+text  x=52 y=76 w=19.5 size=3 font=smooth weight=medium color=#8A93A3 text="{pihole_status}"
+bar   x=52 y=86 w=19.5 h=3 value=pihole_percent color=#FF9A3D back=#262E3C
+rect  x=74.5 y=6 w=23.5 h=88 color=#161B25 opacity=92
+rect  x=74.5 y=6 w=23.5 h=1.2 color=#FFC845
+text  x=76.5 y=17 size=3 font=smooth weight=medium color=#FFC845 text="ON LISTS"
+text  x=76.5 y=50 anchor=l w=19.5 size=15 font=smooth weight=light color=#F2F5FA text="{pihole_domains}"
+text  x=76.5 y=76 w=19.5 size=3 font=smooth weight=medium color=#8A93A3 text="CLIENTS {pihole_clients}"

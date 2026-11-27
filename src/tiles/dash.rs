@@ -82,10 +82,11 @@ pub enum PKind {
     Weather,
     Music,
     Fps,
+    Pihole,
 }
 
 impl PKind {
-    pub const NAMES: &'static str = "cpu, gpu, ram, fans, net, disk, clock, weather, music, fps";
+    pub const NAMES: &'static str = "cpu, gpu, ram, fans, net, disk, clock, weather, music, fps, pihole";
 
     pub fn parse(s: &str) -> Option<PKind> {
         Some(match s.trim().to_ascii_lowercase().replace(['-', ' '], "_").as_str() {
@@ -99,6 +100,7 @@ impl PKind {
             "weather" | "meteo" => PKind::Weather,
             "music" | "nowplaying" | "now_playing" | "musica" => PKind::Music,
             "fps" | "framerate" | "frame_rate" => PKind::Fps,
+            "pihole" | "pi_hole" | "pihole6" | "adblock" => PKind::Pihole,
             _ => return None,
         })
     }
@@ -738,6 +740,30 @@ pub(super) fn panel(kind: PKind, d: &WidgetData, hw: &lhm::Readings, s: &Setting
             p.title = i18n::t().now_playing.to_string();
             p.text = true;
             p.hero = d.now_playing.clone().unwrap_or_else(|| "-".into());
+        }
+        PKind::Pihole => {
+            let snap = pihole::snapshot();
+            p.title = "PI-HOLE".into();
+            match &snap.stats {
+                Some(st) => {
+                    let share = |n: u64| if st.total > 0 { n as f32 / st.total as f32 } else { 0.0 };
+                    p.hero = pihole::percent_text(st.percent);
+                    p.unit = "%".into();
+                    p.frac = Some(st.percent / 100.0);
+                    // while Pi-hole is out of reach the last figures stay, and the line says so
+                    p.sub = if snap.status == pihole::Status::Online { "BLOCKED".into() } else { snap.status.word().to_string() };
+                    p.stats.push(stat("QUERIES", pihole::compact(st.total), ""));
+                    p.stats.push(stat("BLOCKED", pihole::compact(st.blocked), ""));
+                    p.stats.push(stat("LISTS", pihole::compact(st.domains), ""));
+                    p.rings.push(Ring { label: "BLOCKED".into(), frac: st.percent / 100.0 });
+                    p.rings.push(Ring { label: "CACHED".into(), frac: share(st.cached) });
+                    p.rings.push(Ring { label: "FORWARD".into(), frac: share(st.forwarded) });
+                }
+                None => {
+                    p.hero = "--".into();
+                    p.sub = snap.status.word().to_string();
+                }
+            }
         }
     }
     p.frac = p.frac.map(|f| f.clamp(0.0, 1.0));
@@ -1989,6 +2015,25 @@ mod tests {
         assert_eq!(c.orbit, vec![PKind::Gpu, PKind::Fps]);
         assert_eq!(c.console, vec![PKind::Fps, PKind::Cpu]);
         assert_eq!(PKind::parse("Framerate"), Some(PKind::Fps));
+    }
+
+    #[test]
+    fn the_pihole_panel_shows_the_blocked_share_and_is_listed_in_every_dash_layout() {
+        let (s, ts) = (Settings::default(), tiles::Settings::default());
+        let now = Local::now();
+        let hw = lhm::Readings::sample();
+        pihole::use_sample(true);
+        let p = panel(PKind::Pihole, &data(), &hw, &s, &ts, &now);
+        assert_eq!((p.title.as_str(), p.hero.as_str(), p.unit.as_str(), p.sub.as_str()), ("PI-HOLE", "25", "%", "BLOCKED"));
+        assert!((p.frac.unwrap() - 0.246).abs() < 0.001);
+        let stat = |l: &str| p.stats.iter().find(|x| x.label == l).map(|x| x.value.clone());
+        assert_eq!((stat("QUERIES").as_deref(), stat("BLOCKED").as_deref(), stat("LISTS").as_deref()), (Some("48213"), Some("11876"), Some("1.06M")));
+        assert_eq!(p.rings.len(), 3);
+        let c = parse_cfg("deck = cpu, pihole\ncards = cpu | pi-hole, gpu\norbit = gpu, pihole\nconsole = pihole, cpu\n").unwrap();
+        assert_eq!(c.deck, vec![PKind::Cpu, PKind::Pihole]);
+        assert_eq!(c.cards, vec![vec![PKind::Cpu], vec![PKind::Pihole, PKind::Gpu]]);
+        assert_eq!(c.orbit, vec![PKind::Gpu, PKind::Pihole]);
+        assert_eq!(c.console, vec![PKind::Pihole, PKind::Cpu]);
     }
 
     #[test]

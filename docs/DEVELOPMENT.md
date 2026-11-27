@@ -21,6 +21,7 @@ On Linux it needs `pkg-config` and the PulseAudio headers. Windows builds are ma
 - `src/dxgi_capture.rs` + `src/bin/screen.rs` — second monitor mode.
 - `src/weather.rs` + `src/weather_icon.rs` — weather (Open-Meteo) and its condition icons.
 - `src/ticker.rs` — news ticker: RSS/Atom feeds, plain-text URLs, or a local file.
+- `src/pihole.rs` — the Pi-hole client (login once, the session reused, a new login only on 401, a background thread), the small JSON reader, the numbers and texts for the screens; the tests run it against a tiny fake Pi-hole on localhost.
 - `src/spectrum.rs` — spectrum styles and color palettes, and the `Feed` (the bars of the mix, the left and the right channel) that free layouts read.
 - `src/media.rs` + `src/music_screen.rs` — now-playing info (Windows media controls / `playerctl`) and the Spotify-style music screen.
 - `src/pixel_game.rs` — the self-playing pixel-art platformer under the clock.

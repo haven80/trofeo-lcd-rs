@@ -622,10 +622,15 @@ impl Preview {
 /// Returns `Some(Some(text))` when a valid new value was typed, `Some(None)` when it was
 /// emptied, `None` when nothing changed.
 fn text_box(ui: &mut egui::Ui, ed: &mut Ed, key: &str, width: f32, valid: impl Fn(&str) -> bool, hint: &str) -> Option<Option<String>> {
+    text_box_ex(ui, ed, key, width, valid, hint, false)
+}
+
+/// `secret`: the characters are hidden (a password).
+fn text_box_ex(ui: &mut egui::Ui, ed: &mut Ed, key: &str, width: f32, valid: impl Fn(&str) -> bool, hint: &str, secret: bool) -> Option<Option<String>> {
     let stored = ed.get(key).unwrap_or_default();
     let mut text = ed.bufs.get(key).cloned().unwrap_or_else(|| stored.clone());
     let bad = !text.trim().is_empty() && !valid(&text);
-    let mut edit = egui::TextEdit::singleline(&mut text).desired_width(width).hint_text(hint);
+    let mut edit = egui::TextEdit::singleline(&mut text).desired_width(width).hint_text(hint).password(secret);
     if bad {
         edit = edit.text_color(Color32::from_rgb(255, 120, 120));
     }
@@ -1176,6 +1181,18 @@ fn field_widget(ui: &mut egui::Ui, ed: &mut Ed, f: &Field, l: Lang) {
         Kind::Text => {
             let out = text_box(ui, ed, &f.key, 320.0, |_| true, &f.default);
             apply(ed, &f.key, out);
+        }
+        Kind::Secret => {
+            // shown as dots; a quote would end the value early in the file
+            let id = egui::Id::new(("show_secret", f.key.as_str()));
+            let mut show = ui.data_mut(|d| d.get_temp::<bool>(id)).unwrap_or(false);
+            let out = text_box_ex(ui, ed, &f.key, 260.0, |t| !t.contains('"') && !t.contains('\''), "", !show);
+            apply(ed, &f.key, out);
+            ui.checkbox(&mut show, tr(l, "Show", "Mostra"));
+            ui.data_mut(|d| d.insert_temp(id, show));
+            if ed.bufs.get(&f.key).is_some_and(|t| t.contains('"') || t.contains('\'')) {
+                ui.colored_label(Color32::from_rgb(255, 120, 120), tr(l, "quotes are not allowed here", "le virgolette non sono ammesse qui"));
+            }
         }
         Kind::Path => {
             let out = text_box(ui, ed, &f.key, 320.0, |t| !t.contains('#'), "");

@@ -151,6 +151,9 @@ pub const METRICS: &[(&str, &str, f32)] = &[
     ("gpu_power", "GPU watts", 400.0),
     ("cpu_mhz", "CPU MHz", 6000.0),
     ("fps", "FPS", 240.0),
+    ("pihole_percent", "Pi-hole % blocked", 100.0),
+    ("pihole_cached_percent", "Pi-hole % answered from cache", 100.0),
+    ("pihole_forwarded_percent", "Pi-hole % forwarded upstream", 100.0),
 ];
 
 /// What `{...}` in a text can be: every metric (written with its unit) and these.
@@ -158,6 +161,8 @@ pub const PLACEHOLDERS: &[&str] = &[
     "cpu", "gpu", "ram", "cpu_temp", "gpu_temp", "gpu_hotspot", "cpu_power", "gpu_power", "cpu_mhz", "fps", "cpu_freq",
     "ram_used", "ram_free", "ram_total", "net_down", "net_up", "disk_read", "disk_write", "song", "time", "time_short", "date",
     "weather_temp", "weather_city",
+    "pihole_queries", "pihole_blocked", "pihole_allowed", "pihole_percent", "pihole_cached_percent", "pihole_forwarded_percent", "pihole_domains",
+    "pihole_cached", "pihole_forwarded", "pihole_clients", "pihole_status",
 ];
 
 pub fn metric_max(id: &str) -> f32 {
@@ -665,6 +670,13 @@ pub const BUILTIN: &[(&str, &str, &str, &str)] = &[
     ("radial", "Radial: the spectrum in a ring around the clock", "Radial: lo spettro in un anello attorno all'orologio", include_str!("free_builtin/radial.layout")),
     ("stereo", "Stereo: two rings, the left and the right channel, the clock between", "Stereo: due anelli, canale sinistro e destro, l'orologio in mezzo", include_str!("free_builtin/stereo.layout")),
     ("bands", "Bands: bass, mid and treble, each in a row of its own", "Bands: bassi, medi e alti, ognuno in una riga", include_str!("free_builtin/bands.layout")),
+    ("pihole", "Pi-hole: a big ring with the share of blocked queries and the figures in a list", "Pi-hole: un grande anello con la quota di richieste bloccate e i valori in elenco", include_str!("free_builtin/pihole.layout")),
+    ("pihole-cards", "Pi-hole cards: four cards (queries, blocked, share blocked, domains on the lists)", "Pi-hole a schede: quattro schede (richieste, bloccate, percentuale, domini nelle liste)", include_str!("free_builtin/pihole-cards.layout")),
+    ("pihole-ring", "Pi-hole ring: one big ring in the middle, queries and blocked on the sides", "Pi-hole anello: un grande anello al centro, richieste e bloccate ai lati", include_str!("free_builtin/pihole-ring.layout")),
+    ("pihole-console", "Pi-hole console: a pixel-font readout, one line per figure", "Pi-hole console: una lettura con font a pixel, una riga per valore", include_str!("free_builtin/pihole-console.layout")),
+    ("pihole-minimal", "Pi-hole minimal: the share blocked, huge and light, one quiet line under it", "Pi-hole minimale: la percentuale bloccata enorme e sottile, una riga discreta sotto", include_str!("free_builtin/pihole-minimal.layout")),
+    ("pihole-light", "Pi-hole light: a light page, figures in ink, one red accent", "Pi-hole chiaro: una pagina chiara, cifre a inchiostro, un accento rosso", include_str!("free_builtin/pihole-light.layout")),
+    ("pihole-flow", "Pi-hole flow: three wide bars with flowing colours (blocked, cache, forwarded)", "Pi-hole flusso: tre barre larghe con colori che scorrono (bloccate, cache, inoltrate)", include_str!("free_builtin/pihole-flow.layout")),
 ];
 
 /// The same designs for a tall, narrow panel (a portrait screen), `(name, file text)`.
@@ -695,6 +707,13 @@ pub const BUILTIN_PORTRAIT: &[(&str, &str)] = &[
     ("radial", include_str!("free_builtin/radial.portrait.layout")),
     ("stereo", include_str!("free_builtin/stereo.portrait.layout")),
     ("bands", include_str!("free_builtin/bands.portrait.layout")),
+    ("pihole", include_str!("free_builtin/pihole.portrait.layout")),
+    ("pihole-cards", include_str!("free_builtin/pihole-cards.portrait.layout")),
+    ("pihole-ring", include_str!("free_builtin/pihole-ring.portrait.layout")),
+    ("pihole-console", include_str!("free_builtin/pihole-console.portrait.layout")),
+    ("pihole-minimal", include_str!("free_builtin/pihole-minimal.portrait.layout")),
+    ("pihole-light", include_str!("free_builtin/pihole-light.portrait.layout")),
+    ("pihole-flow", include_str!("free_builtin/pihole-flow.portrait.layout")),
 ];
 
 /// The text of a built-in design.
@@ -872,18 +891,26 @@ mod tests {
             valid_name(name).unwrap();
             assert!(!en.is_empty() && !it.is_empty());
             let f = load_builtin(name).unwrap_or_else(|e| panic!("{e}"));
-            assert!(f.elements.len() >= 8 || ["blaze", "volt", "pulse", "radial", "stereo", "bands"].contains(name), "{name}");
+            assert!(f.elements.len() >= 8 || ["blaze", "volt", "pulse", "radial", "stereo", "bands", "pihole-ring", "pihole-minimal", "pihole-flow"].contains(name), "{name}");
             // what is written out is read back the same
             assert_eq!(parse(&render(name, &f)).unwrap(), f, "{name}");
         }
         for (name, _, _, _) in BUILTIN {
             let f = load_builtin_for(name, true).unwrap_or_else(|e| panic!("{e}"));
-            assert!(f.elements.len() >= 8 || ["blaze", "volt", "pulse", "radial", "stereo", "bands"].contains(name), "{name} (portrait)");
+            assert!(f.elements.len() >= 8 || ["blaze", "volt", "pulse", "radial", "stereo", "bands", "pihole-ring", "pihole-minimal", "pihole-flow"].contains(name), "{name} (portrait)");
             assert_ne!(f, load_builtin(name).unwrap(), "{name}");
         }
         assert_eq!(BUILTIN_PORTRAIT.len(), BUILTIN.len());
         assert!(builtin("HALO").is_some());
         assert!(builtin("nothing").is_none());
+    }
+
+    #[test]
+    fn the_pihole_names_of_the_layouts_are_the_ones_the_module_knows() {
+        let ph: Vec<&str> = PLACEHOLDERS.iter().copied().filter(|p| p.starts_with("pihole_")).collect();
+        assert_eq!(ph, crate::pihole::PLACEHOLDERS);
+        let ms: Vec<&str> = METRICS.iter().map(|m| m.0).filter(|m| m.starts_with("pihole_")).collect();
+        assert_eq!(ms, crate::pihole::METRICS);
     }
 
     #[test]

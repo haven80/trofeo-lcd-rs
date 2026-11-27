@@ -1,0 +1,12 @@
+# pihole-ring (portrait) — the ring on top, queries and blocked below.
+rect  x=0 y=0 w=100 h=100 color=#090B10 opacity=70
+text  x=50 y=3 anchor=c size=3 font=smooth weight=medium color=#8A93A3 text="PI-HOLE   {pihole_status}"
+ring  x=50 y=24 w=90 h=36 anchor=c value=pihole_percent text="{pihole_percent}" font=smooth weight=light color=#FF4D5E color2=#FFB84A back=#1F2530 thick=11 flow=6
+text  x=50 y=44 anchor=c size=3 font=smooth weight=medium color=#8A93A3 text="BLOCKED"
+text  x=8 y=52 size=3 font=smooth weight=medium color=#4DA3FF text="QUERIES"
+text  x=8 y=59 anchor=l size=13 font=smooth weight=light color=#F2F5FA text="{pihole_queries}"
+text  x=8 y=66 size=3 font=smooth weight=medium color=#FF4D5E text="BLOCKED"
+text  x=8 y=73 anchor=l size=13 font=smooth weight=light color=#F2F5FA text="{pihole_blocked}"
+text  x=8 y=80 size=3 font=smooth weight=medium color=#8A93A3 text="ALLOWED {pihole_allowed}"
+text  x=8 y=85 size=3 font=smooth weight=medium color=#8A93A3 text="{pihole_domains} ON LISTS"
+text  x=50 y=95 anchor=c size=5 font=smooth weight=light color=#F2F5FA text="{time_short}"

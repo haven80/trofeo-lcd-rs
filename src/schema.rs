@@ -23,6 +23,8 @@ pub enum Kind {
     /// `auto`, or one or more colors (the bars of the tiles).
     BarColor,
     Text,
+    /// A password: shown as dots in the editor.
+    Secret,
     /// A file.
     Path,
     /// A folder.
@@ -126,6 +128,7 @@ pub const SECTIONS: &[(&str, &str, &str)] = &[
     ("music", "Music card", "Scheda musica"),
     ("game", "Pixel game", "Mini gioco"),
     ("online", "Weather and news", "Meteo e notizie"),
+    ("pihole", "Pi-hole", "Pi-hole"),
     ("profiles", "Profiles", "Profili"),
     ("builder", "Layout builder", "Costruttore di layout"),
     ("system", "System", "Sistema"),
@@ -234,6 +237,13 @@ pub const LAYOUT_NAMES: &[(&str, &str, &str)] = &[
     ("radial", "Radial: the spectrum in a ring around the clock", "Radial: lo spettro in un anello attorno all'orologio"),
     ("stereo", "Stereo: two rings, the left and the right channel, the clock between", "Stereo: due anelli, canale sinistro e destro, l'orologio in mezzo"),
     ("bands", "Bands: bass, mid and treble, each in a row of its own", "Bands: bassi, medi e alti, ognuno in una riga"),
+    ("pihole", "Pi-hole: a big ring with the share of blocked queries and the figures in a list", "Pi-hole: un grande anello con la quota di richieste bloccate e i valori in elenco"),
+    ("pihole-cards", "Pi-hole cards: four cards (queries, blocked, share blocked, domains on the lists)", "Pi-hole a schede: quattro schede (richieste, bloccate, percentuale, domini nelle liste)"),
+    ("pihole-ring", "Pi-hole ring: one big ring in the middle, queries and blocked on the sides", "Pi-hole anello: un grande anello al centro, richieste e bloccate ai lati"),
+    ("pihole-console", "Pi-hole console: a pixel-font readout, one line per figure", "Pi-hole console: una lettura con font a pixel, una riga per valore"),
+    ("pihole-minimal", "Pi-hole minimal: the share blocked, huge and light, one quiet line under it", "Pi-hole minimale: la percentuale bloccata enorme e sottile, una riga discreta sotto"),
+    ("pihole-light", "Pi-hole light: a light page, figures in ink, one red accent", "Pi-hole chiaro: una pagina chiara, cifre a inchiostro, un accento rosso"),
+    ("pihole-flow", "Pi-hole flow: three wide bars with flowing colours (blocked, cache, forwarded)", "Pi-hole flusso: tre barre larghe con colori che scorrono (bloccate, cache, inoltrate)"),
 ];
 
 /// The tiles of `tiles = ...`: (name, English, Italian).
@@ -252,6 +262,7 @@ pub const TILE_KINDS: &[(&str, &str, &str)] = &[
     ("fps", "FPS", "FPS"),
     ("weather", "Weather", "Meteo"),
     ("music", "Now playing", "Brano in ascolto"),
+    ("pihole", "Pi-hole (blocked queries)", "Pi-hole (richieste bloccate)"),
     ("cpu_fan", "CPU fan (LibreHardwareMonitor)", "Ventola CPU (LibreHardwareMonitor)"),
     ("case_fan", "Case fans (LibreHardwareMonitor)", "Ventole del case (LibreHardwareMonitor)"),
     ("pump", "Pump / AIO (LibreHardwareMonitor)", "Pompa / AIO (LibreHardwareMonitor)"),
@@ -273,6 +284,7 @@ pub const PANEL_KINDS: &[(&str, &str, &str)] = &[
     ("weather", "Weather", "Meteo"),
     ("music", "Now playing", "Brano in ascolto"),
     ("fps", "FPS (while gaming)", "FPS (mentre giochi)"),
+    ("pihole", "Pi-hole (statistics of the network ad blocker)", "Pi-hole (statistiche del blocco pubblicità di rete)"),
 ];
 
 /// Named colors offered as swatches (all of them are understood by the program).
@@ -1011,6 +1023,28 @@ pub fn fields() -> Vec<Field> {
     add(Field::new("ticker_backdrop", "online", "Panel behind", "Pannello dietro", Bool).group("news"));
     add(Field::new("ticker_width", "online", "Width (%)", "Larghezza (%)", int(1, 100)).def("100").group("news"));
 
+    // ---- pihole
+    add(Field::new("pihole_url", "pihole", "Address of Pi-hole", "Indirizzo di Pi-hole", Text)
+        .restart()
+        .help(
+            "For example http://192.168.1.2:8080 (the address you open in the browser, without /admin). Empty = no Pi-hole. Needs Pi-hole version 6. Then use layout = pihole, or a pihole panel or tile, or {pihole_...} in your own layouts",
+            "Per esempio http://192.168.1.2:8080 (l'indirizzo che apri nel browser, senza /admin). Vuoto = nessun Pi-hole. Serve Pi-hole versione 6. Poi usa layout = pihole, un pannello o un tile pihole, oppure {pihole_...} nei tuoi layout",
+        ));
+    add(Field::new("pihole_password", "pihole", "Password (app password)", "Password (app password)", Secret)
+        .restart()
+        .help(
+            "Pi-hole: Settings > Web interface / API > Configure app password. Empty = Pi-hole has no password. It stays in this file in clear text",
+            "Pi-hole: Settings > Web interface / API > Configure app password. Vuoto = Pi-hole non ha una password. Resta in chiaro in questo file",
+        ));
+    add(Field::new("pihole_interval", "pihole", "Refresh every (seconds)", "Aggiorna ogni (secondi)", int(5, 3600))
+        .def("15")
+        .restart()
+        .help(
+            "The session of the login is kept and used again; the program logs in again only when Pi-hole says it has expired",
+            "La sessione del login viene mantenuta e riusata; il programma rifà il login solo quando Pi-hole dice che è scaduta",
+        ));
+    add(Field::new("pihole_timeout", "pihole", "Wait for an answer (seconds)", "Attesa della risposta (secondi)", int(1, 60)).def("5").restart());
+
     // ---- system
     add(Field::new("silence_threshold", "system", "Silence threshold", "Soglia di silenzio", Float { min: 0.0, max: 1.0 })
         .def("0.005")
@@ -1091,7 +1125,7 @@ pub const CATEGORIES: &[(&str, &str, &[&str])] = &[
     ("Look", "Aspetto", &["background", "effect", "look", "show", "items", "spectrum"]),
     ("Screens", "Schermate", &["layouts", "tiles", "dash", "frame", "steam", "profiles", "builder"]),
     ("Music and games", "Musica e giochi", &["music", "gaming", "game"]),
-    ("Online", "Online", &["online"]),
+    ("Online", "Online", &["online", "pihole"]),
     ("System", "Sistema", &["system"]),
     ("Share", "Condividi", &["share"]),
 ];

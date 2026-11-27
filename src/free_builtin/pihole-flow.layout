@@ -1,0 +1,12 @@
+# pihole-flow — three wide bars whose colours flow: blocked, answered from cache, forwarded.
+rect  x=0 y=0 w=100 h=100 color=#0A0C14 opacity=76
+text  x=3 y=9 size=3 font=smooth weight=medium color=#8A93A3 text="PI-HOLE   {pihole_status}"
+text  x=97 y=9 anchor=tr size=3 font=smooth weight=medium color=#8A93A3 text="{pihole_queries} QUERIES   {pihole_domains} ON LISTS   {time_short}"
+text  x=3 y=50 anchor=l size=22 font=smooth weight=light color=#F2F5FA text="{pihole_percent}"
+text  x=3 y=80 size=3 font=smooth weight=medium color=#FF4D5E text="BLOCKED"
+text  x=26 y=26 size=3 font=smooth weight=medium color=#FF4D5E text="BLOCKED  {pihole_blocked}"
+bar   x=26 y=33 w=71 h=9 value=pihole_percent color=#FF4D5E color2=#FFB84A flow=6 back=#1C2230
+text  x=26 y=50 size=3 font=smooth weight=medium color=#4DA3FF text="FROM CACHE  {pihole_cached}  ({pihole_cached_percent})"
+bar   x=26 y=57 w=71 h=9 value=pihole_cached_percent color=#4DA3FF color2=#7C5CFF flow=3 back=#1C2230
+text  x=26 y=74 size=3 font=smooth weight=medium color=#3DDC97 text="FORWARDED  {pihole_forwarded}  ({pihole_forwarded_percent})"
+bar   x=26 y=81 w=71 h=9 value=pihole_forwarded_percent color=#3DDC97 color2=#2FB4FF flow=2 back=#1C2230

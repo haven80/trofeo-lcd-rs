@@ -1,0 +1,11 @@
+# pihole-minimal (portrait) — the share blocked, huge, and one quiet line under it.
+rect  x=0 y=0 w=100 h=100 color=#0A0A0C opacity=80
+text  x=8 y=3 size=3 font=smooth weight=medium color=#FF4D5E text="PI-HOLE"
+text  x=92 y=3 anchor=tr size=3 font=smooth weight=medium color=#6A6A74 text="{pihole_status}"
+text  x=50 y=30 anchor=c size=22 font=smooth weight=light color=#F4F4F6 text="{pihole_percent}"
+text  x=50 y=44 anchor=c size=4 font=smooth weight=regular color=#8C8C96 text="BLOCKED"
+text  x=50 y=58 anchor=c size=6 font=smooth weight=light color=#F4F4F6 text="{pihole_blocked}"
+text  x=50 y=62 anchor=c size=3 font=smooth weight=regular color=#8C8C96 text="OF {pihole_queries} QUERIES"
+text  x=50 y=72 anchor=c size=6 font=smooth weight=light color=#F4F4F6 text="{pihole_domains}"
+text  x=50 y=76 anchor=c size=3 font=smooth weight=regular color=#8C8C96 text="DOMAINS ON LISTS"
+bar   x=15 y=88 w=70 h=0.4 value=pihole_percent color=#FF4D5E back=#26262C

@@ -1,0 +1,15 @@
+# pihole-flow (portrait) — the same, one bar over the other.
+rect  x=0 y=0 w=100 h=100 color=#0A0C14 opacity=76
+text  x=8 y=3 size=3 font=smooth weight=medium color=#8A93A3 text="PI-HOLE   {pihole_status}"
+text  x=50 y=17 anchor=c size=20 font=smooth weight=light color=#F2F5FA text="{pihole_percent}"
+text  x=50 y=27 anchor=c size=3 font=smooth weight=medium color=#8A93A3 text="BLOCKED"
+text  x=8 y=35 size=3 font=smooth weight=medium color=#FF4D5E text="BLOCKED  {pihole_blocked}"
+bar   x=8 y=39 w=84 h=3.2 value=pihole_percent color=#FF4D5E color2=#FFB84A flow=6 back=#1C2230
+text  x=8 y=48 size=3 font=smooth weight=medium color=#4DA3FF text="FROM CACHE  {pihole_cached}"
+bar   x=8 y=52 w=84 h=3.2 value=pihole_cached_percent color=#4DA3FF color2=#7C5CFF flow=3 back=#1C2230
+text  x=8 y=61 size=3 font=smooth weight=medium color=#3DDC97 text="FORWARDED  {pihole_forwarded}"
+bar   x=8 y=65 w=84 h=3.2 value=pihole_forwarded_percent color=#3DDC97 color2=#2FB4FF flow=2 back=#1C2230
+text  x=8 y=76 size=3 font=smooth weight=medium color=#8A93A3 text="QUERIES"
+text  x=8 y=82 anchor=l size=9 font=smooth weight=light color=#F2F5FA text="{pihole_queries}"
+text  x=8 y=88 size=3 font=smooth weight=medium color=#8A93A3 text="{pihole_domains} DOMAINS ON LISTS"
+text  x=50 y=96 anchor=c size=4 font=smooth weight=regular color=#8A93A3 text="{time_short}"

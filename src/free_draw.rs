@@ -247,6 +247,7 @@ fn placeholder(name: &str, wd: &layouts::WidgetData) -> String {
             .map(|w| if opts().weather_fahrenheit { format!("{:.0}F", w.temp_c * 9.0 / 5.0 + 32.0) } else { format!("{:.0}C", w.temp_c) })
             .unwrap_or_else(dash),
         "weather_city" => wd.weather.as_ref().and_then(|w| w.city.clone()).unwrap_or_default(),
+        n if n.starts_with("pihole_") => trofeo_lcd::pihole::placeholder(n, &trofeo_lcd::pihole::snapshot()).unwrap_or_else(dash),
         _ => dash(),
     }
 }
@@ -264,6 +265,7 @@ fn metric_number(id: &str, wd: &layouts::WidgetData) -> Option<f32> {
         "gpu_power" => wd.gpu_power.map(|p| p as f32),
         "cpu_mhz" => wd.cpu_mhz.map(|m| m as f32),
         "fps" => wd.fps.map(|f| f as f32),
+        n if n.starts_with("pihole_") => trofeo_lcd::pihole::metric(n, &trofeo_lcd::pihole::snapshot()),
         _ => None,
     }
 }
@@ -476,6 +478,7 @@ mod tests {
 
     #[test]
     fn every_placeholder_has_a_value() {
+        crate::pihole::use_sample(true);
         let d = data();
         for p in free::PLACEHOLDERS {
             assert_ne!(placeholder(p, &d), "--x", "{p}");

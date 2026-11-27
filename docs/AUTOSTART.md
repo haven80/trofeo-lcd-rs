@@ -49,4 +49,4 @@ Only `trofeo_lcd.exe` is started at logon: the settings editor is opened by hand
 # Autostart on Linux
 
 Linux autostart configuration is included on install guide.
-[Refer to Linux guide](../LINUX_INSTALL_AUTOSTART_UPDATE.md)
+[Refer to Linux guide](./LINUX_INSTALL_AUTOSTART_UPDATE.md)

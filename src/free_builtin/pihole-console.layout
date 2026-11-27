@@ -1,0 +1,15 @@
+# pihole-console — a pixel-font readout: one line per figure.
+rect  x=1 y=4 w=98 h=92 color=#000000 opacity=64
+text  x=3 y=7 size=4 color=#FF4D5E text="PIHOLE> STATS  {pihole_status}   {time}"
+text  x=3 y=22 size=5 color=#FF4D5E text="QUERIES"
+text  x=26 y=22 size=5 color=#FFE0E3 text="{pihole_queries}"
+text  x=97 y=22 anchor=tr size=5 color=#FFE0E3 text="{pihole_percent} BLOCKED"
+text  x=3 y=36 size=5 color=#FF4D5E text="BLOCKED"
+text  x=26 y=36 size=5 color=#FFE0E3 text="{pihole_blocked}"
+bar   x=48 y=37 w=49 h=6 value=pihole_percent color=#FF4D5E back=#2A0F12
+text  x=3 y=50 size=5 color=#FF4D5E text="LISTS"
+text  x=26 y=50 size=5 color=#FFE0E3 text="{pihole_domains} DOMAINS"
+text  x=3 y=64 size=5 color=#FF4D5E text="CACHED"
+text  x=26 y=64 size=5 color=#FFE0E3 text="{pihole_cached}   FWD {pihole_forwarded}"
+text  x=3 y=78 size=5 color=#FF4D5E text="CLIENTS"
+text  x=26 y=78 size=5 color=#FFE0E3 text="{pihole_clients}"

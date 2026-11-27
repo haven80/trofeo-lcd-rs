@@ -17,6 +17,7 @@ use super::*;
 use crate::layouts::WidgetData;
 use crate::smooth_font::{self, Weight};
 use std::path::PathBuf;
+use trofeo_lcd::pihole;
 
 type Rgb = (u8, u8, u8);
 
@@ -44,6 +45,8 @@ pub enum Kind {
     Fps,
     Weather,
     Music,
+    /// Statistics of a Pi-hole (see `pihole.rs`).
+    Pihole,
     /// Fan speeds etc. from LibreHardwareMonitor (see `lhm.rs`).
     CpuFan,
     CaseFan,
@@ -56,13 +59,13 @@ pub enum Kind {
 }
 
 impl Kind {
-    pub const ALL: [Kind; 21] = [
+    pub const ALL: [Kind; 22] = [
         Kind::Clock, Kind::Cpu, Kind::CpuTemp, Kind::CpuWatt, Kind::Gpu, Kind::GpuTemp, Kind::GpuHotspot, Kind::GpuWatt,
-        Kind::Ram, Kind::Net, Kind::Disk, Kind::Fps, Kind::Weather, Kind::Music,
+        Kind::Ram, Kind::Net, Kind::Disk, Kind::Fps, Kind::Weather, Kind::Music, Kind::Pihole,
         Kind::CpuFan, Kind::CaseFan, Kind::Pump, Kind::GpuFan, Kind::Fans, Kind::MbTemp, Kind::DiskTemp,
     ];
     pub const NAMES: &'static str =
-        "clock, cpu, cpu_temp, cpu_watt, gpu, gpu_temp, gpu_hotspot, gpu_watt, ram, net, disk, fps, weather, music, cpu_fan, case_fan, pump, gpu_fan, fans, mb_temp, disk_temp";
+        "clock, cpu, cpu_temp, cpu_watt, gpu, gpu_temp, gpu_hotspot, gpu_watt, ram, net, disk, fps, weather, music, pihole, cpu_fan, case_fan, pump, gpu_fan, fans, mb_temp, disk_temp";
 
     pub fn key(self) -> &'static str {
         match self {
@@ -80,6 +83,7 @@ impl Kind {
             Kind::Fps => "fps",
             Kind::Weather => "weather",
             Kind::Music => "music",
+            Kind::Pihole => "pihole",
             Kind::CpuFan => "cpu_fan",
             Kind::CaseFan => "case_fan",
             Kind::Pump => "pump",
@@ -111,6 +115,7 @@ impl Kind {
             "fps" => Kind::Fps,
             "weather" | "meteo" => Kind::Weather,
             "music" | "nowplaying" | "now_playing" | "musica" => Kind::Music,
+            "pihole" | "pi_hole" | "pihole6" | "adblock" => Kind::Pihole,
             "cpu_fan" | "cpufan" | "fan" | "ventola" => Kind::CpuFan,
             "case_fan" | "casefan" | "case" | "mb_fan" | "ventole_case" => Kind::CaseFan,
             "pump" | "pompa" | "aio" => Kind::Pump,
@@ -1182,6 +1187,27 @@ fn view(spec: TileSpec, d: &WidgetData, s: &Settings, now: &chrono::DateTime<Loc
             v.label = tr.now_playing.to_string();
             v.value = d.now_playing.clone().unwrap_or_else(|| "-".into());
         }
+        Kind::Pihole => {
+            let snap = pihole::snapshot();
+            v.label = "PI-HOLE".into();
+            match &snap.stats {
+                Some(st) => {
+                    v.value = pihole::percent_text(st.percent);
+                    v.unit = "%".into();
+                    v.frac = Some(st.percent / 100.0);
+                    // while Pi-hole is out of reach the last figures stay and the line says so
+                    v.detail = if snap.status == pihole::Status::Online {
+                        format!("{} / {}", pihole::compact(st.blocked), pihole::compact(st.total))
+                    } else {
+                        snap.status.word().to_string()
+                    };
+                }
+                None => {
+                    v.value = "--".into();
+                    v.detail = snap.status.word().to_string();
+                }
+            }
+        }
         Kind::CpuFan | Kind::CaseFan | Kind::Pump | Kind::GpuFan => {
             let (label, rpm) = match spec.kind {
                 Kind::CpuFan => ("CPU FAN", hw.cpu_fan),
@@ -1737,6 +1763,21 @@ mod tests {
             assert_eq!(parse_tiles(n).unwrap()[0][0].kind, Kind::GpuHotspot, "{n}");
         }
         assert_eq!(Kind::GpuHotspot.key(), "gpu_hotspot");
+    }
+
+    #[test]
+    fn the_pihole_tile_shows_the_blocked_share() {
+        let now = Local::now();
+        let s = Settings::default();
+        pihole::use_sample(true);
+        let tile = TileSpec { kind: Kind::Pihole, look: Look::Bar, tall: false };
+        let v = view(tile, &data(), &s, &now);
+        assert_eq!((v.label.as_str(), v.value.as_str(), v.unit.as_str(), v.detail.as_str()), ("PI-HOLE", "25", "%", "11876 / 48213"));
+        assert!((v.frac.unwrap() - 0.246).abs() < 0.001);
+        for n in ["pihole", "Pi-Hole", "adblock"] {
+            assert_eq!(parse_tiles(n).unwrap()[0][0].kind, Kind::Pihole, "{n}");
+        }
+        assert_eq!(Kind::Pihole.key(), "pihole");
     }
 
     #[test]
