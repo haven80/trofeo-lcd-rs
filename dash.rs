@@ -1,0 +1,2674 @@
+//! Four more full screens built from the same pieces as the tiles (`layout = deck`,
+//! `cards`, `orbit`, `console`). They show the same readings (CPU, GPU, RAM, fans, network, disk, clock,
+//! weather, music), each in its own way:
+//!
+//! * `deck`  - instrument columns: a live gauge line on top of every column, a big light value,
+//!   a sparkline of the last minutes and a 2x2 grid of small readings. Hairlines between the
+//!   columns, no boxes.
+//! * `cards` - flat, colourful cards in a mosaic (columns of one or more stacked cards). Every
+//!   card has a soft gradient that melts into its neighbour's colour and a ghost silhouette of
+//!   its own history along the bottom.
+//! * `orbit` - one cluster of concentric rings per device, with the readings beside it and a
+//!   legend of what each ring means.
+//!
+//! * `console` - a row of tiles under a bar with the names of the tiles and the clock. One tile
+//!   is in focus: it grows, lights up in its colour and shows the details; the others stay small
+//!   and dim. The focus moves by itself (`rotate`), follows the busiest part (`load`) or there is
+//!   none (`none`, every tile equally detailed).
+//!
+//! Everything is chosen in the config (`deck = ...`, `cards = ...`, `orbit = ...`, `dash_*`).
+//! Like the tiles, the screen is painted on a transparent layer that is redrawn only when
+//! something shown changes (about once a second, because of the graphs).
+
+use super::*;
+use std::collections::{HashMap, VecDeque};
+use std::hash::{Hash, Hasher};
+
+// ------------------------------------------------------------------ settings
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Style {
+    Deck,
+    Cards,
+    Orbit,
+    Console,
+}
+
+/// Visual treatment for the Spectrum content inside a Cards card.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SpectrumCardStyle {
+    Bars,
+    Led,
+    Mirror,
+}
+
+impl SpectrumCardStyle {
+    fn parse(value: &str) -> Option<Self> {
+        Some(match value.trim().to_ascii_lowercase().as_str() {
+            "bars" | "classic" => Self::Bars,
+            "led" | "segments" => Self::Led,
+            "mirror" | "mirrored" => Self::Mirror,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SpectrumCardChannel {
+    Combined,
+    Left,
+    Right,
+    Stereo,
+}
+
+impl SpectrumCardChannel {
+    fn parse(value: &str) -> Option<Self> {
+        Some(match value.trim().to_ascii_lowercase().as_str() {
+            "combined" | "mono" | "mix" => Self::Combined,
+            "left" | "l" => Self::Left,
+            "right" | "r" => Self::Right,
+            "stereo" | "lr" | "l_r" => Self::Stereo,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Focus {
+    /// One after the other, every `console_interval` seconds.
+    Rotate,
+    /// The busiest one (CPU, GPU, RAM, network, disk by load).
+    Load,
+    /// None: every tile shows its details and they are all the same size.
+    None,
+}
+
+impl Focus {
+    pub const NAMES: &'static str = "rotate | load | none";
+
+    pub fn parse(s: &str) -> Option<Focus> {
+        Some(match s.trim().to_ascii_lowercase().as_str() {
+            "rotate" | "cycle" | "auto" | "ruota" => Focus::Rotate,
+            "load" | "busiest" | "follow" | "activity" | "carico" => Focus::Load,
+            "none" | "off" | "static" | "nessuno" => Focus::None,
+            _ => return None,
+        })
+    }
+}
+
+impl Style {
+    pub fn from_layout(name: &str) -> Option<Style> {
+        match name {
+            "deck" => Some(Style::Deck),
+            "cards" => Some(Style::Cards),
+            "orbit" => Some(Style::Orbit),
+            "console" => Some(Style::Console),
+            _ => None,
+        }
+    }
+}
+
+/// What a column / card / cluster can show.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PKind {
+    Cpu,
+    Gpu,
+    Ram,
+    Fans,
+    Net,
+    Disk,
+    Drives,
+    Clock,
+    Weather,
+    Music,
+    Fps,
+    Spectrum,
+    SpectrumLeft,
+    SpectrumRight,
+    SpectrumMix,
+    SpectrumMix2,
+    Discord,
+}
+
+impl PKind {
+    pub const NAMES: &'static str = "cpu, gpu, ram, fans, net, disk, drives, clock, weather, music, fps, spectrum, spectrum_l, spectrum_r, spectrum_mix, spectrum_mix_2, discord";
+
+    pub fn parse(s: &str) -> Option<PKind> {
+        Some(match s.trim().to_ascii_lowercase().replace(['-', ' '], "_").as_str() {
+            "cpu" => PKind::Cpu,
+            "gpu" => PKind::Gpu,
+            "ram" | "mem" | "memory" => PKind::Ram,
+            "fans" | "fan" | "ventole" => PKind::Fans,
+            "net" | "network" | "rete" => PKind::Net,
+            "disk" | "storage" | "disco" => PKind::Disk,
+            "drives" | "volumes" | "partitions" => PKind::Drives,
+            "clock" | "time" | "orologio" => PKind::Clock,
+            "weather" | "meteo" => PKind::Weather,
+            "music" | "nowplaying" | "now_playing" | "musica" => PKind::Music,
+            "fps" | "framerate" | "frame_rate" => PKind::Fps,
+            "spectrum" | "eq" | "audio_spectrum" => PKind::Spectrum,
+            "spectrum_l" | "spectrum_left" | "spectrumleft" => PKind::SpectrumLeft,
+            "spectrum_r" | "spectrum_right" | "spectrumright" => PKind::SpectrumRight,
+            "spectrum_mix" | "spectrum_m" | "spectrummix" => PKind::SpectrumMix,
+            "spectrum_mix_2" | "spectrum_mix2" | "spectrummix2" => PKind::SpectrumMix2,
+            "discord" | "discord_voice" => PKind::Discord,
+            _ => return None,
+        })
+    }
+
+    /// Weight of a column of cards / of a deck column (clock and text panels are wider).
+    fn weight(self) -> f32 {
+        match self {
+            PKind::Clock => 1.15,
+            PKind::Weather | PKind::Music | PKind::Discord => 1.1,
+            PKind::Spectrum | PKind::SpectrumLeft | PKind::SpectrumRight | PKind::SpectrumMix | PKind::SpectrumMix2 => 2.3,
+            _ => 1.0,
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct Settings {
+    pub font: FontStyle,
+    pub text: Option<Rgb>,
+    /// `dark` (white text on a dark plate) or `light` (dark text on a white one, pastel cards).
+    pub theme: Theme,
+    /// The plate behind `deck` and `orbit` (default by theme).
+    pub plate_color: Option<Rgb>,
+    /// 0-100: opacity of the cards.
+    pub cards_opacity: u32,
+    /// What the big number of the CPU and GPU panels is: the temperature or the load.
+    pub hero_load: bool,
+    /// Cards: the fan speed (RPM) at the top right of the CPU and GPU cards.
+    pub cards_fan: bool,
+    /// Accent colours (rings, cards, graph lines).
+    pub colors: Vec<Rgb>,
+    /// Seconds of history in the graphs.
+    pub history: u32,
+    pub graph: bool,
+    /// 0-100: opacity of the plate behind `deck` and `orbit`.
+    pub plate: Option<u32>,
+    /// Network speed (MB/s) that fills a ring / gauge.
+    pub net_max: u32,
+    pub bg: BgMode,
+    pub bg_colors: Vec<Rgb>,
+    pub bg_image: Option<PathBuf>,
+    pub bg_dim: u32,
+    pub deck: Vec<PKind>,
+    pub deck_gauge: bool,
+    pub cards: Vec<Vec<PKind>>,
+    pub cards_radius: Option<u32>,
+    pub cards_gap: u32,
+    pub cards_spectrum_style: SpectrumCardStyle,
+    pub cards_spectrum_channel: SpectrumCardChannel,
+    /// Independent audio endpoints for Spectrum L, R and MIX cards.
+    /// Format: output|endpoint-id| or input|endpoint-id|.
+    pub cards_spectrum_left_source: String,
+    pub cards_spectrum_right_source: String,
+    pub cards_spectrum_mix_source: String,
+    pub cards_spectrum_mix2_source: String,
+    /// Per-spectrum processing: compressor amount (0-100) and gain (0-100, 50 = unity).
+    pub cards_spectrum_left_compressor: u32,
+    pub cards_spectrum_left_gain: u32,
+    pub cards_spectrum_right_compressor: u32,
+    pub cards_spectrum_right_gain: u32,
+    pub cards_spectrum_mix_compressor: u32,
+    pub cards_spectrum_mix2_compressor: u32,
+    pub cards_spectrum_mix_gain: u32,
+    pub cards_spectrum_mix2_gain: u32,
+    /// Fixed FFT scale: auto normalization is disabled by default to prevent pumping.
+    pub cards_spectrum_left_auto_normalize: bool,
+    pub cards_spectrum_right_auto_normalize: bool,
+    pub cards_spectrum_mix_auto_normalize: bool,
+    pub cards_spectrum_mix2_auto_normalize: bool,
+    /// Fixed-scale sensitivity percentage (100 = standard reference).
+    pub cards_spectrum_left_fixed_scale: u32,
+    pub cards_spectrum_right_fixed_scale: u32,
+    pub cards_spectrum_mix_fixed_scale: u32,
+    pub cards_spectrum_mix2_fixed_scale: u32,
+    /// Per-card FFT resolution (power of two: 256..2048).
+    pub cards_spectrum_left_fft: u32,
+    pub cards_spectrum_right_fft: u32,
+    pub cards_spectrum_mix_fft: u32,
+    pub cards_spectrum_mix2_fft: u32,
+    /// Per-card number of frequency bars (16..96).
+    pub cards_spectrum_left_bars: u32,
+    pub cards_spectrum_right_bars: u32,
+    pub cards_spectrum_mix_bars: u32,
+    pub cards_spectrum_mix2_bars: u32,
+    /// Per-card smoothing amount (0 = immediate, 100 = very smooth).
+    pub cards_spectrum_left_smoothing: u32,
+    pub cards_spectrum_right_smoothing: u32,
+    pub cards_spectrum_mix_smoothing: u32,
+    pub cards_spectrum_mix2_smoothing: u32,
+    /// Per-spectrum frequency window (Hz).
+    pub cards_spectrum_left_min_hz: u32,
+    pub cards_spectrum_left_max_hz: u32,
+    pub cards_spectrum_right_min_hz: u32,
+    pub cards_spectrum_right_max_hz: u32,
+    pub cards_spectrum_mix_min_hz: u32,
+    pub cards_spectrum_mix2_min_hz: u32,
+    pub cards_spectrum_mix_max_hz: u32,
+    pub cards_spectrum_mix2_max_hz: u32,
+    /// Legacy single-source setting retained for backward-compatible config loading.
+    pub cards_spectrum_source: String,
+    pub orbit: Vec<PKind>,
+    pub orbit_clock: bool,
+    pub orbit_legend: bool,
+    pub console: Vec<PKind>,
+    pub console_focus: Focus,
+    /// Seconds each tile stays in focus (`rotate`).
+    pub console_interval: u32,
+    /// The bar on top with the names of the tiles and the clock.
+    pub console_bar: bool,
+}
+
+pub const DEFAULT_COLORS: [Rgb; 5] = [
+    (0xA7, 0x6B, 0xFF),
+    (0x38, 0xC6, 0xF4),
+    (0xFF, 0x6F, 0xB1),
+    (0xFF, 0xC0, 0x45),
+    (0x3D, 0xDC, 0x97),
+];
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings {
+            font: FontStyle::Smooth,
+            text: None,
+            theme: Theme::Dark,
+            plate_color: None,
+            cards_opacity: 100,
+            hero_load: false,
+            cards_fan: true,
+            colors: DEFAULT_COLORS.to_vec(),
+            history: 90,
+            graph: true,
+            plate: None,
+            net_max: 25,
+            bg: BgMode::Global,
+            bg_colors: vec![(0x10, 0x14, 0x28), (0x24, 0x10, 0x30)],
+            bg_image: None,
+            bg_dim: 0,
+            deck: vec![PKind::Cpu, PKind::Gpu, PKind::Ram, PKind::Clock],
+            deck_gauge: true,
+            cards: vec![
+                vec![PKind::Clock],
+                vec![PKind::Cpu],
+                vec![PKind::Gpu],
+                vec![PKind::Ram, PKind::Disk],
+                vec![PKind::Music, PKind::Net],
+                vec![PKind::Drives],
+            ],
+            cards_radius: None,
+            cards_gap: 12,
+            cards_spectrum_style: SpectrumCardStyle::Bars,
+            cards_spectrum_channel: SpectrumCardChannel::Stereo,
+            cards_spectrum_left_source: "output||mix".into(),
+            cards_spectrum_right_source: "output||mix".into(),
+            cards_spectrum_mix_source: "output||mix".into(),
+            cards_spectrum_mix2_source: "output||mix".into(),
+            cards_spectrum_left_compressor: 0,
+            cards_spectrum_left_gain: 50,
+            cards_spectrum_right_compressor: 0,
+            cards_spectrum_right_gain: 50,
+            cards_spectrum_mix_compressor: 0,
+            cards_spectrum_mix2_compressor: 0,
+            cards_spectrum_mix_gain: 50,
+            cards_spectrum_mix2_gain: 50,
+            cards_spectrum_left_auto_normalize: false,
+            cards_spectrum_right_auto_normalize: false,
+            cards_spectrum_mix_auto_normalize: false,
+            cards_spectrum_mix2_auto_normalize: false,
+            cards_spectrum_left_fixed_scale: 100,
+            cards_spectrum_right_fixed_scale: 100,
+            cards_spectrum_mix_fixed_scale: 100,
+            cards_spectrum_mix2_fixed_scale: 100,
+            cards_spectrum_left_fft: 1024,
+            cards_spectrum_right_fft: 1024,
+            cards_spectrum_mix_fft: 1024,
+            cards_spectrum_mix2_fft: 1024,
+            cards_spectrum_left_bars: 48,
+            cards_spectrum_right_bars: 48,
+            cards_spectrum_mix_bars: 48,
+            cards_spectrum_mix2_bars: 48,
+            cards_spectrum_left_smoothing: 50,
+            cards_spectrum_right_smoothing: 50,
+            cards_spectrum_mix_smoothing: 50,
+            cards_spectrum_mix2_smoothing: 50,
+            cards_spectrum_left_min_hz: 32,
+            cards_spectrum_left_max_hz: 16_000,
+            cards_spectrum_right_min_hz: 32,
+            cards_spectrum_right_max_hz: 16_000,
+            cards_spectrum_mix_min_hz: 32,
+            cards_spectrum_mix2_min_hz: 32,
+            cards_spectrum_mix_max_hz: 16_000,
+            cards_spectrum_mix2_max_hz: 16_000,
+            cards_spectrum_source: "output||".into(),
+            orbit: vec![PKind::Cpu, PKind::Gpu, PKind::Ram],
+            orbit_clock: true,
+            orbit_legend: true,
+            console: vec![PKind::Cpu, PKind::Gpu, PKind::Ram, PKind::Net, PKind::Disk],
+            console_focus: Focus::Rotate,
+            console_interval: 6,
+            console_bar: true,
+        }
+    }
+}
+
+fn validate_audio_source(key: &str, value: &str) -> anyhow::Result<()> {
+    let mut parts = value.split('|');
+    let kind = parts.next().unwrap_or("output").trim().to_ascii_lowercase();
+    if !matches!(kind.as_str(), "output" | "input") || parts.next().is_none() {
+        anyhow::bail!("{key}: expected output|endpoint-id| or input|endpoint-id|");
+    }
+    Ok(())
+}
+
+fn parse_kinds(key: &str, raw: &str, max: usize) -> anyhow::Result<Vec<PKind>> {
+    let mut out = Vec::new();
+    for item in raw.split(',') {
+        let item = item.trim();
+        if item.is_empty() {
+            continue;
+        }
+        out.push(PKind::parse(item).ok_or_else(|| anyhow::anyhow!("{key}: '{item}' is not valid ({})", PKind::NAMES))?);
+    }
+    if out.is_empty() {
+        anyhow::bail!("{key}: the list is empty ({})", PKind::NAMES);
+    }
+    if out.len() > max {
+        anyhow::bail!("{key}: at most {max} entries (you listed {})", out.len());
+    }
+    Ok(out)
+}
+
+/// `cards = clock | cpu | gpu | ram, disk | music, net`: `|` separates the columns, `,` stacks cards.
+pub fn parse_cards(raw: &str) -> anyhow::Result<Vec<Vec<PKind>>> {
+    let mut cols = Vec::new();
+    for col in raw.split('|') {
+        if col.trim().is_empty() {
+            continue;
+        }
+        let stack = parse_kinds("cards", col, 3)?;
+        cols.push(stack);
+    }
+    if cols.is_empty() {
+        anyhow::bail!("cards: the list is empty ({})", PKind::NAMES);
+    }
+    if cols.len() > 6 {
+        anyhow::bail!("cards: at most 6 columns (you listed {})", cols.len());
+    }
+    Ok(cols)
+}
+
+pub fn parse(file: &ConfigFile) -> anyhow::Result<Settings> {
+    let mut s = Settings::default();
+    if let Some(v) = file.get("dash_font") {
+        s.font = match v.trim().to_ascii_lowercase().as_str() {
+            "smooth" | "liscio" | "vector" | "ttf" => FontStyle::Smooth,
+            "pixel" | "normal" | "normale" | "bitmap" => FontStyle::Pixel,
+            _ => anyhow::bail!("dash_font: '{v}' not valid (smooth | pixel)"),
+        };
+    }
+    if let Some(v) = file.get("dash_theme") {
+        s.theme = match v.trim().to_ascii_lowercase().as_str() {
+            "dark" | "scuro" => Theme::Dark,
+            "light" | "chiaro" | "white" | "bianco" => Theme::Light,
+            _ => anyhow::bail!("dash_theme: '{v}' not valid (dark | light)"),
+        };
+    }
+    if let Some(v) = file.get("dash_plate_color") {
+        s.plate_color = Some(parse_rgb("dash_plate_color", v)?);
+    }
+    if let Some(v) = file.get("dash_text_color") {
+        s.text = Some(parse_rgb("dash_text_color", v)?);
+    }
+    let num = |key: &str, lo: u32, hi: u32| -> anyhow::Result<Option<u32>> {
+        match file.get_u32(key).map_err(|e| anyhow::anyhow!(e))? {
+            None => Ok(None),
+            Some(v) if (lo..=hi).contains(&v) => Ok(Some(v)),
+            Some(v) => anyhow::bail!("{key}: must be between {lo} and {hi} (got {v})"),
+        }
+    };
+    let boolean = |key: &str| file.get_bool(key).map_err(|e| anyhow::anyhow!(e));
+    // accent colours: a preset of the animated backgrounds, or a list of your own
+    if let Some(v) = file.get("dash_palette") {
+        let name = v.trim();
+        if !name.eq_ignore_ascii_case("default") && !name.is_empty() {
+            let pal = effect::Palette::parse(name)
+                .ok_or_else(|| anyhow::anyhow!("dash_palette: '{name}' not valid (default | {})", effect::Palette::NAMES))?;
+            // the dark parts of a preset would vanish on a dark screen: lift them
+            s.colors = (0..6)
+                .map(|i| {
+                    let c = pal.at(i as f32 / 6.0);
+                    let l = luma(c);
+                    if l < 130.0 { lerp_rgb(c, (255, 255, 255), (130.0 - l) / (255.0 - l)) } else { c }
+                })
+                .collect();
+        }
+    }
+    if let Some(v) = file.get("dash_colors") {
+        let list = parse_rgb_list("dash_colors", v)?;
+        if list.is_empty() {
+            anyhow::bail!("dash_colors: needs at least one color, e.g. #A76BFF, #38C6F4");
+        }
+        s.colors = list;
+    }
+    if let Some(v) = num("dash_history", 20, 600)? {
+        s.history = v;
+    }
+    if let Some(v) = boolean("dash_graph")? {
+        s.graph = v;
+    }
+    if let Some(v) = file.get("dash_hero") {
+        s.hero_load = match v.trim().to_ascii_lowercase().as_str() {
+            "temp" | "temperature" | "temperatura" => false,
+            "load" | "usage" | "carico" | "percent" => true,
+            _ => anyhow::bail!("dash_hero: '{v}' not valid (temp | load)"),
+        };
+    }
+    if let Some(v) = boolean("cards_fan")? {
+        s.cards_fan = v;
+    }
+    if let Some(v) = num("cards_opacity", 0, 100)? {
+        s.cards_opacity = v;
+    }
+    if let Some(v) = num("dash_plate", 0, 100)? {
+        s.plate = Some(v);
+    }
+    if let Some(v) = num("dash_net_max", 1, 1000)? {
+        s.net_max = v;
+    }
+    if let Some(v) = file.get("dash_bg") {
+        s.bg = BgMode::parse(v).ok_or_else(|| anyhow::anyhow!("dash_bg: '{v}' not valid ({})", BgMode::NAMES))?;
+    }
+    if let Some(v) = file.get("dash_bg_color") {
+        let list = parse_rgb_list("dash_bg_color", v)?;
+        if list.is_empty() {
+            anyhow::bail!("dash_bg_color: needs at least one color, e.g. #10142A or #10142A, #241030");
+        }
+        s.bg_colors = list;
+    }
+    if let Some(v) = file.get("dash_bg_image") {
+        s.bg_image = Some(PathBuf::from(v));
+    }
+    if s.bg == BgMode::Image && s.bg_image.is_none() {
+        anyhow::bail!("dash_bg = image needs dash_bg_image = <file>");
+    }
+    s.bg_dim = num("dash_bg_dim", 0, 100)?.unwrap_or(0);
+    if let Some(v) = file.get("deck") {
+        s.deck = parse_kinds("deck", v, 5)?;
+    }
+    if let Some(v) = boolean("deck_gauge")? {
+        s.deck_gauge = v;
+    }
+    if let Some(v) = file.get("cards") {
+        s.cards = parse_cards(v)?;
+    }
+    s.cards_radius = num("cards_radius", 0, 60)?;
+    if let Some(v) = num("cards_gap", 0, 40)? {
+        s.cards_gap = v;
+    }
+    if let Some(v) = num("cards_spectrum_left_compressor", 0, 100)? { s.cards_spectrum_left_compressor = v; }
+    if let Some(v) = num("cards_spectrum_left_gain", 0, 100)? { s.cards_spectrum_left_gain = v; }
+    if let Some(v) = num("cards_spectrum_right_compressor", 0, 100)? { s.cards_spectrum_right_compressor = v; }
+    if let Some(v) = num("cards_spectrum_right_gain", 0, 100)? { s.cards_spectrum_right_gain = v; }
+    if let Some(v) = num("cards_spectrum_mix_compressor", 0, 100)? { s.cards_spectrum_mix_compressor = v; }
+    if let Some(v) = num("cards_spectrum_mix_gain", 0, 100)? { s.cards_spectrum_mix_gain = v; }
+    if let Some(v) = num("cards_spectrum_mix2_compressor", 0, 100)? { s.cards_spectrum_mix2_compressor = v; }
+    if let Some(v) = num("cards_spectrum_mix2_gain", 0, 100)? { s.cards_spectrum_mix2_gain = v; }
+    for (key, slot) in [
+        ("cards_spectrum_left_auto_normalize", &mut s.cards_spectrum_left_auto_normalize),
+        ("cards_spectrum_right_auto_normalize", &mut s.cards_spectrum_right_auto_normalize),
+        ("cards_spectrum_mix_auto_normalize", &mut s.cards_spectrum_mix_auto_normalize),
+        ("cards_spectrum_mix2_auto_normalize", &mut s.cards_spectrum_mix2_auto_normalize),
+    ] {
+        if let Some(v) = boolean(key)? { *slot = v; }
+    }
+    for (key, slot) in [
+        ("cards_spectrum_left_fixed_scale", &mut s.cards_spectrum_left_fixed_scale),
+        ("cards_spectrum_right_fixed_scale", &mut s.cards_spectrum_right_fixed_scale),
+        ("cards_spectrum_mix_fixed_scale", &mut s.cards_spectrum_mix_fixed_scale),
+        ("cards_spectrum_mix2_fixed_scale", &mut s.cards_spectrum_mix2_fixed_scale),
+    ] {
+        if let Some(v) = num(key, 10, 500)? { *slot = v; }
+    }
+    for (key, slot) in [
+        ("cards_spectrum_left_fft", &mut s.cards_spectrum_left_fft),
+        ("cards_spectrum_right_fft", &mut s.cards_spectrum_right_fft),
+        ("cards_spectrum_mix_fft", &mut s.cards_spectrum_mix_fft),
+        ("cards_spectrum_mix2_fft", &mut s.cards_spectrum_mix2_fft),
+    ] {
+        if let Some(v) = num(key, 256, 2048)? {
+            if ![256, 512, 1024, 2048].contains(&v) { anyhow::bail!("{key}: use 256, 512, 1024 or 2048"); }
+            *slot = v;
+        }
+    }
+    for (key, slot) in [
+        ("cards_spectrum_left_bars", &mut s.cards_spectrum_left_bars),
+        ("cards_spectrum_right_bars", &mut s.cards_spectrum_right_bars),
+        ("cards_spectrum_mix_bars", &mut s.cards_spectrum_mix_bars),
+        ("cards_spectrum_mix2_bars", &mut s.cards_spectrum_mix2_bars),
+    ] { if let Some(v) = num(key, 16, 96)? { *slot = v; } }
+    for (key, slot) in [
+        ("cards_spectrum_left_smoothing", &mut s.cards_spectrum_left_smoothing),
+        ("cards_spectrum_right_smoothing", &mut s.cards_spectrum_right_smoothing),
+        ("cards_spectrum_mix_smoothing", &mut s.cards_spectrum_mix_smoothing),
+        ("cards_spectrum_mix2_smoothing", &mut s.cards_spectrum_mix2_smoothing),
+    ] { if let Some(v) = num(key, 0, 100)? { *slot = v; } }
+    for (key, slot) in [
+        ("cards_spectrum_left_min_hz", &mut s.cards_spectrum_left_min_hz),
+        ("cards_spectrum_left_max_hz", &mut s.cards_spectrum_left_max_hz),
+        ("cards_spectrum_right_min_hz", &mut s.cards_spectrum_right_min_hz),
+        ("cards_spectrum_right_max_hz", &mut s.cards_spectrum_right_max_hz),
+        ("cards_spectrum_mix_min_hz", &mut s.cards_spectrum_mix_min_hz),
+        ("cards_spectrum_mix_max_hz", &mut s.cards_spectrum_mix_max_hz),
+        ("cards_spectrum_mix2_min_hz", &mut s.cards_spectrum_mix2_min_hz),
+        ("cards_spectrum_mix2_max_hz", &mut s.cards_spectrum_mix2_max_hz),
+    ] { if let Some(v) = num(key, 20, 20_000)? { *slot = v; } }
+    for (name, lo, hi) in [
+        ("L", s.cards_spectrum_left_min_hz, s.cards_spectrum_left_max_hz),
+        ("R", s.cards_spectrum_right_min_hz, s.cards_spectrum_right_max_hz),
+        ("MIX", s.cards_spectrum_mix_min_hz, s.cards_spectrum_mix_max_hz),
+        ("MIX 2", s.cards_spectrum_mix2_min_hz, s.cards_spectrum_mix2_max_hz),
+    ] { if lo >= hi { anyhow::bail!("Spectrum {name}: minimum Hz must be lower than maximum Hz"); } }
+    if let Some(v) = file.get("cards_spectrum_style") {
+        s.cards_spectrum_style = SpectrumCardStyle::parse(v)
+            .ok_or_else(|| anyhow::anyhow!("cards_spectrum_style: '{v}' not valid (bars | led | mirror)"))?;
+    }
+    if let Some(v) = file.get("cards_spectrum_channel") {
+        s.cards_spectrum_channel = SpectrumCardChannel::parse(v)
+            .ok_or_else(|| anyhow::anyhow!("cards_spectrum_channel: '{v}' not valid (combined | left | right | stereo)"))?;
+    }
+    // Legacy key initializes all three selectors unless a dedicated key overrides it.
+    if let Some(v) = file.get("cards_spectrum_source") {
+        validate_audio_source("cards_spectrum_source", v)?;
+        s.cards_spectrum_source = v.trim().to_string();
+        s.cards_spectrum_left_source = v.trim().to_string();
+        s.cards_spectrum_right_source = v.trim().to_string();
+        s.cards_spectrum_mix_source = v.trim().to_string();
+    }
+    for (key, slot) in [
+        ("cards_spectrum_left_source", &mut s.cards_spectrum_left_source),
+        ("cards_spectrum_right_source", &mut s.cards_spectrum_right_source),
+        ("cards_spectrum_mix_source", &mut s.cards_spectrum_mix_source),
+        ("cards_spectrum_mix2_source", &mut s.cards_spectrum_mix2_source),
+    ] {
+        if let Some(v) = file.get(key) {
+            validate_audio_source(key, v)?;
+            *slot = v.trim().to_string();
+        }
+    }
+    if let Some(v) = file.get("orbit") {
+        s.orbit = parse_kinds("orbit", v, 4)?;
+    }
+    if let Some(v) = boolean("orbit_clock")? {
+        s.orbit_clock = v;
+    }
+    if let Some(v) = boolean("orbit_legend")? {
+        s.orbit_legend = v;
+    }
+    if let Some(v) = file.get("console") {
+        s.console = parse_kinds("console", v, 7)?;
+    }
+    if let Some(v) = file.get("console_focus") {
+        s.console_focus = Focus::parse(v).ok_or_else(|| anyhow::anyhow!("console_focus: '{v}' not valid ({})", Focus::NAMES))?;
+    }
+    if let Some(v) = num("console_interval", 2, 120)? {
+        s.console_interval = v;
+    }
+    if let Some(v) = boolean("console_bar")? {
+        s.console_bar = v;
+    }
+    Ok(s)
+}
+
+// ------------------------------------------------------------------ history
+
+/// The last readings of what the graphs draw, one per second.
+pub struct History {
+    series: HashMap<&'static str, VecDeque<f32>>,
+    last: Option<f64>,
+    /// Counts the samples taken (part of the redraw signature).
+    pub(super) rev: u64,
+}
+
+impl History {
+    pub(super) fn new() -> Self {
+        History { series: HashMap::new(), last: None, rev: 0 }
+    }
+
+    /// Takes a sample when a second has passed since the last one.
+    pub(super) fn sample(&mut self, secs: f64, keep: usize, values: &[(&'static str, Option<f32>)]) {
+        if self.last.is_some_and(|l| secs - l < 1.0 && secs >= l) {
+            return;
+        }
+        self.last = Some(secs);
+        self.rev += 1;
+        for (k, v) in values {
+            let q = self.series.entry(k).or_default();
+            if let Some(v) = v {
+                q.push_back(*v);
+            }
+            while q.len() > keep {
+                q.pop_front();
+            }
+        }
+    }
+
+    /// For previews (fixed clock): a plausible wavy history around the current value.
+    pub(super) fn fake(&mut self, keep: usize, values: &[(&'static str, Option<f32>)]) {
+        if self.rev > 0 {
+            return;
+        }
+        self.rev = 1;
+        for (k, v) in values {
+            let Some(v) = v else { continue };
+            let seed = (k.bytes().fold(0u32, |a, b| a.wrapping_mul(31).wrapping_add(b as u32)) % 1000) as f32;
+            let q = self.series.entry(k).or_default();
+            let amp = (v.abs() * 0.12).max(1.0);
+            for i in 0..keep {
+                let t = i as f32;
+                let w = (t * 0.21 + seed).sin() * 0.6 + (t * 0.07 + seed * 0.5).sin() * 0.4 + (t * 0.55 + seed).sin() * 0.15;
+                q.push_back(v + w * amp);
+            }
+        }
+    }
+
+    pub(super) fn get(&self, key: &str) -> Vec<f32> {
+        self.series.get(key).map(|q| q.iter().copied().collect()).unwrap_or_default()
+    }
+}
+
+// -------------------------------------------------------------------- panels
+
+#[derive(Clone, PartialEq, Debug)]
+pub(super) struct Stat {
+    pub(super) label: String,
+    pub(super) value: String,
+    pub(super) unit: String,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub(super) struct Ring {
+    pub(super) label: String,
+    pub(super) frac: f32,
+}
+
+/// What one column / card / cluster shows, already formatted.
+#[derive(Clone, PartialEq, Debug)]
+pub(super) struct Panel {
+    pub(super) kind: PKind,
+    pub(super) title: String,
+    pub(super) sub: String,
+    pub(super) hero: String,
+    pub(super) unit: String,
+    pub(super) frac: Option<f32>,
+    /// Name of the history the graph draws, and the smallest range it spans.
+    pub(super) series: Option<(&'static str, f32)>,
+    pub(super) stats: Vec<Stat>,
+    pub(super) rings: Vec<Ring>,
+    /// Extra lines of the clock / weather / music panels.
+    pub(super) lines: Vec<String>,
+    /// The hero is text (a title), not a number.
+    pub(super) text: bool,
+    /// Fan speed shown in the header of a card (CPU and GPU).
+    pub(super) fan: Option<u32>,
+    pub(super) drives: Vec<DriveUsage>,
+    /// Per-logical-processor utilization for the Cards CPU mini-chart.
+    pub(super) cpu_core_usages: Vec<f32>,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub(super) struct DriveUsage {
+    pub name: String,
+    pub total: u64,
+    pub free: u64,
+}
+
+pub(super) fn stat(label: &str, value: impl Into<String>, unit: &str) -> Stat {
+    Stat { label: label.to_string(), value: value.into(), unit: unit.to_string() }
+}
+
+/// 4350 -> ("4.35", "GHz"), 950 -> ("950", "MHz").
+pub(super) fn freq_parts(mhz: u32) -> (String, &'static str) {
+    if mhz >= 1000 {
+        (format!("{:.2}", mhz as f32 / 1000.0), "GHz")
+    } else {
+        (mhz.to_string(), "MHz")
+    }
+}
+
+pub(super) fn gb(mb: u64) -> String {
+    format!("{:.1}", mb as f32 / 1024.0)
+}
+
+pub(super) fn rate_parts(kb: f64) -> (String, &'static str) {
+    if kb >= 1024.0 {
+        (format!("{:.1}", kb / 1024.0), "MB/s")
+    } else {
+        (format!("{kb:.0}"), "KB/s")
+    }
+}
+
+fn drive_usage() -> Vec<DriveUsage> {
+    let disks = sysinfo::Disks::new_with_refreshed_list();
+    let mut drives: Vec<DriveUsage> = disks.iter().filter_map(|disk| {
+        let total = disk.total_space();
+        if total == 0 { return None; }
+        // Use the Windows mount-point letter, never the volume label/name.
+        // Volume labels such as "GAMES", "SYSTEM" or manufacturer names must
+        // not be rendered in the compact Drives card.
+        let mount = disk.mount_point().to_string_lossy();
+        let bytes = mount.as_bytes();
+        let letter = if bytes.len() >= 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic() {
+            Some(format!("{}:", (bytes[0] as char).to_ascii_uppercase()))
+        } else {
+            let name = disk.name().to_string_lossy();
+            let name = name.trim();
+            let b = name.as_bytes();
+            if b.len() >= 2 && b[1] == b':' && b[0].is_ascii_alphabetic() {
+                Some(format!("{}:", (b[0] as char).to_ascii_uppercase()))
+            } else {
+                None
+            }
+        }?;
+        Some(DriveUsage { name: letter, total, free: disk.available_space().min(total) })
+    }).collect();
+    drives.sort_by(|a, b| a.name.cmp(&b.name));
+    drives.truncate(6);
+    drives
+}
+
+fn format_capacity(bytes: u64) -> String {
+    const TB: f64 = 1_099_511_627_776.0;
+    const GB: f64 = 1_073_741_824.0;
+    if bytes as f64 >= TB { format!("{:.1} TB", bytes as f64 / TB) }
+    else { format!("{:.0} GB", bytes as f64 / GB) }
+}
+
+pub(super) fn panel(kind: PKind, d: &WidgetData, hw: &lhm::Readings, s: &Settings, ts: &tiles::Settings, now: &chrono::DateTime<Local>) -> Panel {
+    let smooth = s.font == FontStyle::Smooth;
+    let deg = if smooth { "\u{b0}C" } else { "C" };
+    let case = |t: String| if smooth { nice_case(&t) } else { t.to_uppercase() };
+    let o = opts();
+    let pct = |v: f32| format!("{:.*}", o.percent_decimals as usize, v);
+    let mut p = Panel {
+        kind,
+        title: String::new(),
+        sub: String::new(),
+        hero: "--".into(),
+        unit: String::new(),
+        frac: None,
+        series: None,
+        stats: Vec::new(),
+        rings: Vec::new(),
+        lines: Vec::new(),
+        text: false,
+        fan: None,
+        drives: Vec::new(),
+        cpu_core_usages: if kind == PKind::Cpu { d.cpu_core_usages.clone() } else { Vec::new() },
+    };
+    match kind {
+        PKind::Cpu => {
+            p.title = "CPU".into();
+            if !d.cpu_core_usages.is_empty() {
+                let logical = d.cpu_core_usages.len();
+                let physical = d.cpu_physical_cores.unwrap_or(logical);
+                p.sub = format!("{physical} cores · {logical} threads");
+            }
+            match d.cpu_temp {
+                Some(t) if !s.hero_load => {
+                    p.hero = format!("{t:.0}");
+                    p.unit = deg.into();
+                    p.frac = Some(t / 100.0);
+                    p.series = Some(("cpu_temp", 12.0));
+                }
+                _ => {
+                    p.hero = pct(d.cpu_pct);
+                    p.unit = "%".into();
+                    p.frac = Some(d.cpu_pct / 100.0);
+                    p.series = Some(("cpu_pct", 30.0));
+                }
+            }
+            // the reading that is not the big number goes first among the small ones
+            match d.cpu_temp {
+                Some(t) if s.hero_load => p.stats.push(stat("TEMP", format!("{t:.0}"), deg)),
+                _ => p.stats.push(stat("LOAD", pct(d.cpu_pct), "%")),
+            }
+            if let Some(w) = d.cpu_power {
+                p.stats.push(stat("POWER", format!("{w:.0}"), "W"));
+            }
+            if let Some(m) = d.cpu_mhz {
+                let (v, u) = freq_parts(m);
+                p.stats.push(stat("CLOCK", v, u));
+            }
+            if let Some(r) = hw.cpu_fan {
+                p.stats.push(stat("FAN", r.to_string(), "RPM"));
+                p.fan = Some(r);
+            }
+            p.rings.push(Ring { label: "LOAD".into(), frac: d.cpu_pct / 100.0 });
+            if let Some(t) = d.cpu_temp {
+                p.rings.push(Ring { label: "TEMP".into(), frac: t / 100.0 });
+            }
+            if let Some(w) = d.cpu_power {
+                p.rings.push(Ring { label: "POWER".into(), frac: w / ts.cpu_watt_max as f32 });
+            }
+        }
+        PKind::Gpu => {
+            p.title = "GPU".into();
+            // The requested GPU card composition uses HOTSPOT as the large
+            // central reading. LOAD and POWER stay in the first two positions
+            // of the original three-column bottom row (left and centre).
+            if let Some(h) = d.gpu_hotspot {
+                p.hero = h.to_string();
+                p.unit = deg.into();
+                p.frac = Some(h as f32 / 110.0);
+                p.series = Some(("gpu_hotspot", 12.0));
+            } else if let Some(t) = d.gpu_temp {
+                // If hotspot is unavailable, show the edge temperature rather
+                // than incorrectly substituting GPU load as a temperature.
+                p.hero = t.to_string();
+                p.unit = deg.into();
+                p.frac = Some(t as f32 / 100.0);
+                p.series = Some(("gpu_temp", 12.0));
+            } else {
+                p.hero = "N/A".into();
+                p.unit.clear();
+            }
+            if let Some(g) = d.gpu_pct {
+                p.stats.push(stat("LOAD", pct(g), "%"));
+                p.rings.push(Ring { label: "LOAD".into(), frac: g / 100.0 });
+            }
+            if let Some(t) = d.gpu_temp {
+                p.rings.push(Ring { label: "TEMP".into(), frac: t as f32 / 100.0 });
+            }
+            if let Some(w) = d.gpu_power {
+                p.stats.push(stat("POWER", w.to_string(), "W"));
+                p.rings.push(Ring { label: "POWER".into(), frac: w as f32 / ts.gpu_watt_max as f32 });
+            }
+            if let Some(r) = hw.gpu_fan {
+                p.stats.push(stat("FAN", r.to_string(), "RPM"));
+                p.fan = Some(r);
+            }
+            if let Some(f) = d.fps {
+                p.stats.push(stat("FPS", f.to_string(), ""));
+            }
+        }
+        PKind::Fps => {
+            p.title = "FPS".into();
+            if let Some(f) = d.fps {
+                p.hero = f.to_string();
+                p.frac = Some(f as f32 / ts.fps_max.max(1) as f32);
+                p.series = Some(("fps", 30.0));
+                if f > 0 {
+                    p.stats.push(stat("FRAME", format!("{:.1}", 1000.0 / f as f32), "ms"));
+                }
+            } else {
+                p.sub = "no game".into();
+            }
+            if let Some(g) = d.gpu_pct {
+                p.stats.push(stat("GPU", pct(g), "%"));
+            }
+            if let Some(t) = d.gpu_temp {
+                p.stats.push(stat("TEMP", t.to_string(), deg));
+            }
+            if let Some(f) = d.fps {
+                p.rings.push(Ring { label: "FPS".into(), frac: f as f32 / ts.fps_max.max(1) as f32 });
+            }
+            if let Some(g) = d.gpu_pct {
+                p.rings.push(Ring { label: "GPU".into(), frac: g / 100.0 });
+            }
+        }
+        PKind::Ram => {
+            let pc = if d.total_mb > 0 { d.used_mb as f32 * 100.0 / d.total_mb as f32 } else { 0.0 };
+            p.title = i18n::t().mem.to_string();
+            p.hero = pct(pc);
+            p.unit = "%".into();
+            p.frac = Some(pc / 100.0);
+            p.series = Some(("ram", 10.0));
+            p.sub = format!("of {} GB", gb(d.total_mb));
+            p.stats.push(stat("USED", gb(d.used_mb), "GB"));
+            p.stats.push(stat("FREE", gb(d.total_mb.saturating_sub(d.used_mb)), "GB"));
+            let (rv, ru) = rate_parts(d.disk_mb.0 * 1024.0);
+            let (wv, wu) = rate_parts(d.disk_mb.1 * 1024.0);
+            p.stats.push(stat("READ", rv, ru));
+            p.stats.push(stat("WRITE", wv, wu));
+            p.rings.push(Ring { label: "RAM".into(), frac: pc / 100.0 });
+            p.rings.push(Ring { label: "DISK".into(), frac: ((d.disk_mb.0 + d.disk_mb.1) / 200.0) as f32 });
+            p.rings.push(Ring { label: "NET".into(), frac: ((d.net_kb.0 + d.net_kb.1) / (s.net_max as f64 * 1024.0)) as f32 });
+        }
+        PKind::Fans => {
+            p.title = "FANS".into();
+            let rows = hw.fan_rows();
+            if let Some((name, rpm)) = rows.first() {
+                p.hero = rpm.to_string();
+                p.unit = "RPM".into();
+                p.frac = Some(*rpm as f32 / ts.fan_max as f32);
+                p.series = Some(("fan", 600.0));
+                p.sub = name.to_ascii_uppercase();
+            }
+            for (name, rpm) in rows.iter().skip(1) {
+                p.stats.push(stat(&name.to_ascii_uppercase(), rpm.to_string(), "RPM"));
+            }
+            if let Some(t) = hw.mb_temp {
+                p.stats.push(stat("BOARD", format!("{t:.0}"), deg));
+            }
+            for (name, rpm) in rows.iter().take(4) {
+                p.rings.push(Ring { label: name.to_ascii_uppercase(), frac: *rpm as f32 / ts.fan_max as f32 });
+            }
+        }
+        PKind::Net => {
+            p.title = i18n::t().net.to_string();
+            let (v, u) = rate_parts(d.net_kb.0);
+            p.hero = v;
+            p.unit = u.into();
+            p.frac = Some((d.net_kb.0 / (s.net_max as f64 * 1024.0)) as f32);
+            p.series = Some(("net", 400.0));
+            p.sub = "DOWN".into();
+            let (uv, uu) = rate_parts(d.net_kb.1);
+            p.stats.push(stat("UP", uv, uu));
+            p.rings.push(Ring { label: "DOWN".into(), frac: p.frac.unwrap_or(0.0) });
+            p.rings.push(Ring { label: "UP".into(), frac: (d.net_kb.1 / (s.net_max as f64 * 1024.0)) as f32 });
+        }
+        PKind::Disk => {
+            p.title = i18n::t().disk.to_string();
+            let (v, u) = rate_parts(d.disk_mb.0 * 1024.0);
+            p.hero = v;
+            p.unit = u.into();
+            p.frac = Some((d.disk_mb.0 / 200.0) as f32);
+            p.series = Some(("disk", 5.0));
+            p.sub = "READ".into();
+            let (wv, wu) = rate_parts(d.disk_mb.1 * 1024.0);
+            p.stats.push(stat("WRITE", wv, wu));
+            if let Some(t) = hw.disk_temp {
+                p.stats.push(stat("SSD", format!("{t:.0}"), deg));
+            }
+            p.rings.push(Ring { label: "READ".into(), frac: (d.disk_mb.0 / 200.0) as f32 });
+            p.rings.push(Ring { label: "WRITE".into(), frac: (d.disk_mb.1 / 200.0) as f32 });
+        }
+        PKind::Drives => {
+            p.title = "DRIVES".into();
+            p.drives = drive_usage();
+            let total_free: u64 = p.drives.iter().map(|d| d.free).sum();
+            p.sub = format!("{} free", format_capacity(total_free));
+            p.text = true;
+        }
+        PKind::Clock => {
+            p.title = case(i18n::weekday(now));
+            p.sub = case(i18n::day_month_year(now));
+            p.hero = crate::fmt_clock(now, ts.clock_seconds);
+            if let Some(w) = &d.weather {
+                let f = o.weather_fahrenheit;
+                let unit = if smooth { if f { "\u{b0}F" } else { "\u{b0}C" } } else if f { "F" } else { "C" };
+                let city = w.city.clone().map(|c| format!(" - {c}")).unwrap_or_default();
+                p.lines.push(format!("{:.0}{} {}", w.temp_in(f), unit, case(format!("{}{}", weather_icon::condition_name(w.icon), city))));
+            }
+            if let Some(t) = &d.now_playing {
+                p.lines.push(t.clone());
+            }
+        }
+        PKind::Weather => {
+            p.text = false;
+            p.title = i18n::t().weather.to_string();
+            if let Some(w) = &d.weather {
+                let f = o.weather_fahrenheit;
+                p.hero = format!("{:.0}", w.temp_in(f));
+                p.unit = if smooth { if f { "\u{b0}F" } else { "\u{b0}C" } } else if f { "F" } else { "C" }.into();
+                p.frac = Some(w.temp_in(f) / if f { 120.0 } else { 50.0 });
+                p.sub = case(weather_icon::condition_name(w.icon).to_string());
+                if let Some(c) = &w.city {
+                    p.lines.push(c.clone());
+                }
+                if let Some(h) = w.humidity {
+                    p.stats.push(stat("HUMIDITY", h.to_string(), "%"));
+                }
+            }
+        }
+        PKind::Spectrum => {
+            p.title = "SPECTRUM".into();
+            p.sub = "AUDIO".into();
+            p.text = true;
+        }
+        PKind::SpectrumLeft => {
+            p.title = "SPECTRUM L".into();
+            p.sub = "LEFT CHANNEL".into();
+            p.text = true;
+        }
+        PKind::SpectrumRight => {
+            p.title = "SPECTRUM R".into();
+            p.sub = "RIGHT CHANNEL".into();
+            p.text = true;
+        }
+        PKind::SpectrumMix => {
+            p.title = "SPECTRUM MIX".into();
+        }
+        PKind::SpectrumMix2 => {
+            p.title = "SPECTRUM MIX 2".into();
+            p.sub = "L + R".into();
+            p.text = true;
+        }
+        PKind::Music => {
+            p.title = i18n::t().now_playing.to_string();
+            p.text = true;
+            p.hero = d.now_playing.clone().unwrap_or_else(|| "-".into());
+        }
+        PKind::Discord => {
+            let voice = crate::discord::snapshot();
+            p.title = "DISCORD VOICE".into();
+            p.text = true;
+            if voice.channel.is_empty() {
+                p.hero = if voice.connected { "NOT IN VOICE".into() } else { "CONNECT DISCORD".into() };
+                p.sub = if voice.error.is_empty() { "WAITING FOR VOICE CHANNEL".into() } else { "RPC CONNECTION ERROR".into() };
+            } else {
+                p.hero = voice.channel;
+                p.sub = format!("{} PARTICIPANTS", voice.users.len());
+                // Keep the Discord participant state structured for the renderer:
+                // speaking | initial | name | microphone-muted | headphones-deafened.
+                // The renderer fills the complete left column before the right column.
+                p.lines = voice.users.iter().take(16).map(|u| format!(
+                    "{}|{}|{}|{}|{}",
+                    if u.speaking { "1" } else { "0" },
+                    u.name.chars().next().unwrap_or(' ').to_uppercase().collect::<String>(),
+                    u.name.replace('|', " "),
+                    if u.self_muted || u.muted { "1" } else { "0" },
+                    if u.self_deafened || u.deafened { "1" } else { "0" },
+                )).collect();
+            }
+        }
+    }
+    p.frac = p.frac.map(|f| f.clamp(0.0, 1.0));
+    for r in &mut p.rings {
+        r.frac = r.frac.clamp(0.0, 1.0);
+    }
+    p
+}
+
+// ----------------------------------------------------------------- drawing
+
+pub(super) fn luma(c: Rgb) -> f32 {
+    c.0 as f32 * 0.299 + c.1 as f32 * 0.587 + c.2 as f32 * 0.114
+}
+
+/// The `i`-th accent colour; on the light theme the pale ones are deepened so they show on white.
+pub(super) fn accent(s: &Settings, i: usize) -> Rgb {
+    let c = s.colors[i % s.colors.len().max(1)];
+    if s.theme == Theme::Light && luma(c) > 150.0 {
+        darken(c, ((luma(c) - 150.0) / 255.0).clamp(0.0, 0.3) + 0.08)
+    } else {
+        c
+    }
+}
+
+pub(super) fn is_light(s: &Settings) -> bool {
+    s.theme == Theme::Light
+}
+
+/// Text colour by theme (or `dash_text_color`).
+pub(super) fn text_color(s: &Settings) -> Rgb {
+    s.text.unwrap_or(if is_light(s) { (0x1B, 0x22, 0x36) } else { (0xFF, 0xFF, 0xFF) })
+}
+
+/// Plate behind deck / orbit: colour and alpha.
+pub(super) fn plate(s: &Settings) -> (Rgb, u8) {
+    let rgb = s.plate_color.unwrap_or(if is_light(s) { (0xFF, 0xFF, 0xFF) } else { (6, 8, 16) });
+    (rgb, (s.plate.unwrap_or(if is_light(s) { 92 } else { 50 }) * 255 / 100) as u8)
+}
+
+/// Lines and outlines: pale on the dark theme, dark on the light one. (colour, alpha for outline, alpha for hairline)
+pub(super) fn line_style(s: &Settings) -> (Rgb, u8, u8) {
+    if is_light(s) { ((0x1B, 0x22, 0x36), 60, 46) } else { ((255, 255, 255), 34, 30) }
+}
+
+pub(super) fn darken(c: Rgb, t: f32) -> Rgb {
+    lerp_rgb(c, (0, 0, 0), t)
+}
+
+impl Layer {
+    /// A soft dot.
+    pub(super) fn dot(&mut self, cx: f32, cy: f32, r: f32, rgb: Rgb, alpha: u8) {
+        let (x0, x1, y0, y1) = ((cx - r - 1.0).floor() as i32, (cx + r + 1.0).ceil() as i32, (cy - r - 1.0).floor() as i32, (cy + r + 1.0).ceil() as i32);
+        for py in y0..y1 {
+            for px in x0..x1 {
+                let d = (px as f32 + 0.5 - cx).hypot(py as f32 + 0.5 - cy);
+                let cov = (r + 0.5 - d).clamp(0.0, 1.0);
+                if cov > 0.0 {
+                    self.over(px, py, rgb, (alpha as f32 * cov).round() as u8);
+                }
+            }
+        }
+    }
+
+    /// A graph: a line with a fading area under it. `span_min` = the smallest range the vertical
+    /// axis covers (so a quiet reading does not turn into noise).
+    pub(super) fn spark(&mut self, rect: (f32, f32, f32, f32), data: &[f32], span_min: f32, rgb: Rgb, thick: f32, fill_alpha: u8, line_alpha: u8, end_dot: bool) {
+        let (x, y, w, h) = rect;
+        if data.len() < 2 || w < 6.0 || h < 6.0 {
+            return;
+        }
+        let (mut lo, mut hi) = (f32::MAX, f32::MIN);
+        for v in data {
+            lo = lo.min(*v);
+            hi = hi.max(*v);
+        }
+        let span = (hi - lo).max(span_min);
+        let mid = (hi + lo) / 2.0;
+        let (lo, hi) = (mid - span / 2.0, mid + span / 2.0);
+        let n = data.len().min((w / 2.0) as usize).max(2);
+        let inset = thick + 1.0;
+        let pts: Vec<(f32, f32)> = (0..n)
+            .map(|i| {
+                let f = i as f32 / (n - 1) as f32;
+                let src = f * (data.len() - 1) as f32;
+                let (a, b) = (src.floor() as usize, (src.floor() as usize + 1).min(data.len() - 1));
+                let v = data[a] + (data[b] - data[a]) * (src - a as f32);
+                (x + f * w, y + h - inset - (v - lo) / (hi - lo) * (h - 2.0 * inset))
+            })
+            .collect();
+        // area under the line
+        if fill_alpha > 0 {
+            let mut seg = 0;
+            for px in x.floor() as i32..(x + w).ceil() as i32 {
+                let fx = px as f32 + 0.5;
+                while seg + 2 < pts.len() && pts[seg + 1].0 < fx {
+                    seg += 1;
+                }
+                let (a, b) = (pts[seg], pts[seg + 1]);
+                let t = ((fx - a.0) / (b.0 - a.0).max(0.001)).clamp(0.0, 1.0);
+                let ly = a.1 + (b.1 - a.1) * t;
+                let depth = (y + h - ly).max(1.0);
+                for py in ly.floor() as i32..(y + h).ceil() as i32 {
+                    let top = ((py as f32 + 1.0) - ly).clamp(0.0, 1.0);
+                    let fade = 1.0 - ((py as f32 + 0.5 - ly) / depth).clamp(0.0, 1.0);
+                    self.over(px, py, rgb, (fill_alpha as f32 * top * fade * fade).round() as u8);
+                }
+            }
+        }
+        // the line
+        let half = thick / 2.0;
+        for pair in pts.windows(2).filter(|_| line_alpha > 0) {
+            let (a, b) = (pair[0], pair[1]);
+            let (x0, x1) = ((a.0.min(b.0) - half - 1.0).floor() as i32, (a.0.max(b.0) + half + 1.0).ceil() as i32);
+            let (y0, y1) = ((a.1.min(b.1) - half - 1.0).floor() as i32, (a.1.max(b.1) + half + 1.0).ceil() as i32);
+            let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+            let len2 = (dx * dx + dy * dy).max(0.0001);
+            for py in y0..y1 {
+                for px in x0..x1 {
+                    let (fx, fy) = (px as f32 + 0.5, py as f32 + 0.5);
+                    let t = (((fx - a.0) * dx + (fy - a.1) * dy) / len2).clamp(0.0, 1.0);
+                    let d = (fx - (a.0 + dx * t)).hypot(fy - (a.1 + dy * t));
+                    let cov = (half + 0.5 - d).clamp(0.0, 1.0);
+                    if cov > 0.0 {
+                        self.over(px, py, rgb, (line_alpha as f32 * cov).round() as u8);
+                    }
+                }
+            }
+        }
+        if end_dot {
+            if let Some(last) = pts.last() {
+                self.dot(last.0, last.1, thick * 1.5 + 1.0, rgb, 70);
+                self.dot(last.0, last.1, thick * 0.9 + 0.8, rgb, 255);
+            }
+        }
+    }
+}
+
+/// Everything the three styles share while drawing.
+pub(super) struct Ctx<'a> {
+    pub(super) s: &'a Settings,
+    pub(super) hist: &'a History,
+    pub(super) text: Rgb,
+    pub(super) color_mode: ColorMode,
+}
+
+pub(super) fn value_unit(p: &mut Painter, x: f32, base: f32, value: &str, unit: &str, cap: f32, w: W, color: Rgb, alpha: u8, unit_alpha: u8) -> f32 {
+    let vw = p.text(x, base, value, cap, w, color, alpha);
+    if unit.is_empty() {
+        return vw;
+    }
+    let ucap = (cap * 0.42).max(7.0);
+    let gap = (cap * 0.1).max(2.0);
+    vw + gap + p.text(x + vw + gap, base, unit, ucap, W::Regular, color, unit_alpha)
+}
+
+pub(super) fn vu_width(p: &Painter, value: &str, unit: &str, cap: f32, w: W) -> f32 {
+    let mut t = p.width(value, cap, w);
+    if !unit.is_empty() {
+        let ucap = (cap * 0.42).max(7.0);
+        t += (cap * 0.1).max(2.0) + p.width(unit, ucap, W::Regular);
+    }
+    t
+}
+
+/// The biggest cap (<= `cap`) at which value + unit fit in `max_w`.
+pub(super) fn fit_vu(p: &Painter, value: &str, unit: &str, cap: f32, max_w: f32, w: W) -> f32 {
+    let mut c = cap;
+    for _ in 0..40 {
+        if vu_width(p, value, unit, c, w) <= max_w || c <= 6.0 {
+            break;
+        }
+        c = if p.font == FontStyle::Pixel { (c - 7.0).max(7.0) } else { (c * 0.94).floor() };
+    }
+    c
+}
+
+pub(super) fn clip(p: &Painter, text: &str, cap: f32, max_w: f32, w: W) -> String {
+    if p.width(text, cap, w) <= max_w {
+        return text.to_string();
+    }
+    let mut t: String = text.to_string();
+    while t.chars().count() > 3 && p.width(&format!("{t}..."), cap, w) > max_w {
+        t.pop();
+    }
+    format!("{}...", t.trim_end())
+}
+
+pub(super) fn graph_data(c: &Ctx, panel: &Panel) -> Option<(Vec<f32>, f32)> {
+    let (key, span) = panel.series?;
+    let d = c.hist.get(key);
+    (c.s.graph && d.len() >= 2).then_some((d, span))
+}
+
+/// A small label over a value (+ unit); returns the width used.
+pub(super) fn stat_cell(p: &mut Painter, c: &Ctx, x: f32, y: f32, max_w: f32, st: &Stat, vcap: f32, ink: Rgb, label_alpha: u8) -> f32 {
+    let lcap = (vcap * 0.4).max(7.0);
+    p.text(x, y + lcap, &clip(p, &st.label, lcap, max_w, W::Regular), lcap, W::Regular, ink, label_alpha);
+    let vcap = fit_vu(p, &st.value, &st.unit, vcap, max_w, W::Regular);
+    let base = y + lcap + vcap * 1.22;
+    let _ = c;
+    value_unit(p, x, base, &st.value, &st.unit, vcap, W::Regular, ink, 255, label_alpha)
+}
+
+/// A panel taller than it is wide (the LCD turned to portrait): the screens stack their parts in a
+/// column instead of standing them side by side.
+fn is_portrait((_, _, w, h): (f32, f32, f32, f32)) -> bool {
+    h > w * 1.1
+}
+
+// -- deck
+
+fn draw_deck(p: &mut Painter, c: &Ctx, panels: &[Panel], area: (f32, f32, f32, f32)) {
+    let (x, y, w, h) = area;
+    let portrait = is_portrait(area);
+    let radius = (h.min(w) * 0.06).clamp(10.0, 26.0);
+    let (plate_rgb, plate_alpha) = plate(c.s);
+    let (line, outline_a, hair_a) = line_style(c.s);
+    if plate_alpha > 0 {
+        p.layer.fill_rrect_solid(area, radius, plate_rgb, plate_alpha);
+    }
+    p.layer.stroke_rrect(area, radius, 1.5, line, outline_a);
+    let weights: Vec<f32> = panels.iter().map(|q| q.kind.weight()).collect();
+    if portrait {
+        // rows instead of columns
+        for (i, (panel, (off, rh))) in panels.iter().zip(split(h as u32, 0, &weights)).enumerate() {
+            let ry = y + off as f32;
+            if i > 0 {
+                p.layer.fill_rrect_solid((x + w * 0.06, ry.round(), w * 0.88, 1.0), 0.0, line, hair_a);
+            }
+            deck_column(p, c, panel, accent(c.s, i), (x, ry, w, rh as f32));
+        }
+        return;
+    }
+    let cols = split(w as u32, 0, &weights);
+    for (i, (panel, (off, cw))) in panels.iter().zip(cols).enumerate() {
+        let cx = x + off as f32;
+        let cw = cw as f32;
+        let acc = accent(c.s, i);
+        if i > 0 {
+            p.layer.fill_rrect_solid((cx.round(), y + h * 0.08, 1.0, h * 0.84), 0.0, line, hair_a);
+        }
+        deck_column(p, c, panel, acc, (cx, y, cw, h));
+    }
+}
+
+fn deck_column(p: &mut Painter, c: &Ctx, panel: &Panel, acc: Rgb, (x, y, w, h): (f32, f32, f32, f32)) {
+    let pad = (h * 0.075).clamp(9.0, 26.0);
+    let inner = w - 2.0 * pad;
+    let ink = c.text;
+    // the live gauge on top: a short line that grows with the main value
+    if c.s.deck_gauge {
+        if let Some(f) = panel.frac {
+            let gy = y + (h * 0.012).max(3.0);
+            let gh = (h * 0.012).clamp(2.0, 4.0);
+            p.layer.fill_rrect_solid((x + pad, gy, inner, gh), gh / 2.0, ink, 28);
+            let fw = (inner * f).max(gh);
+            p.layer.fill_rrect((x + pad, gy, fw, gh), gh / 2.0, &move |t| lerp_rgb(acc, (255, 255, 255), t * 0.35), 255);
+        }
+    }
+    let lcap = (h * 0.052).clamp(8.0, 17.0);
+    let lbase = y + pad + lcap + 4.0;
+    p.layer.dot(x + pad + lcap * 0.32, lbase - lcap * 0.5, lcap * 0.32, acc, 255);
+    let title_x = x + pad + lcap * 0.9;
+    p.text(title_x, lbase, &clip(p, &panel.title, lcap, inner - lcap, W::Medium), lcap, W::Medium, ink, 170);
+    if panel.kind == PKind::Clock {
+        deck_clock(p, c, panel, acc, (x, y, w, h), pad, lbase);
+        return;
+    }
+    // hero value (+ graph to its right)
+    let graph = graph_data(c, panel);
+    let top = lbase + pad * 0.6;
+    let hero_zone = h * 0.30;
+    let hero_w = if graph.is_some() && !panel.text { inner * 0.6 } else { inner };
+    let tw = if p.font == FontStyle::Smooth { W::Light } else { W::Regular };
+    let hero_cap = if panel.text {
+        (hero_zone * 0.30).min(lcap * 2.0)
+    } else {
+        fit_vu(p, &panel.hero, &panel.unit, hero_zone * 0.86, hero_w, tw)
+    };
+    let hero_base = top + hero_zone * 0.1 + hero_cap;
+    if panel.text {
+        let t = clip(p, &panel.hero, hero_cap, inner, W::Regular);
+        p.text(x + pad, hero_base, &t, hero_cap, W::Regular, ink, 255);
+    } else {
+        value_unit(p, x + pad, hero_base, &panel.hero, &panel.unit, hero_cap, tw, ink, 255, 150);
+    }
+    if !panel.sub.is_empty() {
+        let sc = lcap * 0.9;
+        p.text(x + pad, hero_base + sc * 1.7, &clip(p, &panel.sub, sc, inner, W::Regular), sc, W::Regular, ink, 130);
+    }
+    if let Some((data, span)) = &graph {
+        let gx = x + pad + hero_w + pad * 0.3;
+        let gw = x + w - pad - gx;
+        p.layer.spark((gx, top, gw, hero_zone * 0.78), data, *span, acc, (h * 0.006).clamp(1.5, 3.0), 70, 255, true);
+    }
+    // 2x2 grid of readings
+    let grid_top = top + hero_zone + pad * 0.9 + if panel.sub.is_empty() { 0.0 } else { lcap * 0.9 };
+    let rem = (y + h - pad - grid_top).max(10.0);
+    let n = panel.stats.len().min(4);
+    if n == 0 {
+        return;
+    }
+    let rows = n.div_ceil(2);
+    let row_h = rem / rows as f32;
+    let vcap = (row_h * 0.46).min(hero_cap * 0.6).max(9.0);
+    let cell_w = (inner - pad) / 2.0;
+    for (i, st) in panel.stats.iter().take(4).enumerate() {
+        let (col, row) = (i % 2, i / 2);
+        stat_cell(p, c, x + pad + col as f32 * (cell_w + pad), grid_top + row as f32 * row_h, cell_w, st, vcap, ink, 140);
+    }
+}
+
+fn deck_clock(p: &mut Painter, c: &Ctx, panel: &Panel, acc: Rgb, (x, y, w, h): (f32, f32, f32, f32), pad: f32, lbase: f32) {
+    let inner = w - 2.0 * pad;
+    let ink = c.text;
+    let lcap = (h * 0.052).clamp(8.0, 17.0);
+    let top = lbase + pad * 0.4;
+    let tw = if p.font == FontStyle::Smooth { W::Light } else { W::Regular };
+    let cap = p.fit(&panel.hero, h * 0.30, inner, tw);
+    let base = top + cap * 1.08;
+    p.text(x + pad, base, &panel.hero, cap, tw, ink, 255);
+    let sc = lcap * 1.05;
+    p.text(x + pad, base + sc * 1.9, &clip(p, &panel.sub, sc, inner, W::Regular), sc, W::Regular, ink, 160);
+    // weather and now playing, one line each, with a dot in the accent
+    let mut ly = base + sc * 1.9 + pad * 1.1;
+    for (i, line) in panel.lines.iter().enumerate() {
+        if ly > y + h - pad * 0.6 {
+            break;
+        }
+        let lc = lcap * 1.15;
+        if i > 0 {
+            ly += pad * 0.2;
+        }
+        p.text(x + pad, ly, &clip(p, line, lc, inner, W::Regular), lc, W::Regular, ink, if i == 0 { 230 } else { 170 });
+        ly += lc * 1.9;
+    }
+    let _ = acc;
+}
+
+// -- cards
+
+fn draw_cards(p: &mut Painter, c: &Ctx, cols: &[Vec<PKind>], panels: &[Vec<Panel>], area: (f32, f32, f32, f32), spectrum_left: &[f32], spectrum_right: &[f32], spectrum_mix: &[f32], spectrum_mix2: &[f32], peaks_left: &[f32], peaks_right: &[f32], peaks_mix: &[f32], peaks_mix2: &[f32]) {
+    let (x, y, w, h) = area;
+    let gap = c.s.cards_gap;
+    if is_portrait(area) {
+        // one card under the other (the columns of the config are read one after the other)
+        let flat: Vec<&Panel> = panels.iter().flatten().collect();
+        let weights: Vec<f32> = flat.iter().map(|q| match q.kind { PKind::Clock => 1.1, PKind::Spectrum | PKind::SpectrumLeft | PKind::SpectrumRight | PKind::SpectrumMix | PKind::SpectrumMix2 => 2.4, _ => 1.0 }).collect();
+        for (idx, (panel, (off, ch))) in flat.into_iter().zip(split(h as u32, gap, &weights)).enumerate() {
+            card(p, c, panel, idx, (x, y + off as f32, w, ch as f32), spectrum_left, spectrum_right, spectrum_mix, spectrum_mix2, peaks_left, peaks_right, peaks_mix, peaks_mix2);
+        }
+        return;
+    }
+    let weights: Vec<f32> = cols.iter().map(|col| if col.len() == 1 { col[0].weight() * 1.15 } else { 1.0 }).collect();
+    let xs = split(w as u32, gap, &weights);
+    let mut idx = 0usize;
+    for ((stack, panels), (off, cw)) in cols.iter().zip(panels).zip(xs) {
+        let n = stack.len() as u32;
+        let card_weights: Vec<f32> = stack.iter().map(|kind| if matches!(*kind, PKind::Spectrum | PKind::SpectrumLeft | PKind::SpectrumRight | PKind::SpectrumMix | PKind::SpectrumMix2) { 2.4 } else { 1.0 }).collect();
+        let ys = split(h as u32, gap, &card_weights);
+        for (panel, (yoff, ch)) in panels.iter().zip(ys) {
+            let rect = (x + off as f32, y + yoff as f32, cw as f32, ch as f32);
+            card(p, c, panel, idx, rect, spectrum_left, spectrum_right, spectrum_mix, spectrum_mix2, peaks_left, peaks_right, peaks_mix, peaks_mix2);
+            idx += 1;
+        }
+    }
+}
+
+fn card(p: &mut Painter, c: &Ctx, panel: &Panel, idx: usize, (x, y, w, h): (f32, f32, f32, f32), spectrum_left: &[f32], spectrum_right: &[f32], spectrum_mix: &[f32], spectrum_mix2: &[f32], peaks_left: &[f32], peaks_right: &[f32], peaks_mix: &[f32], peaks_mix2: &[f32]) {
+    if w < 60.0 || h < 40.0 {
+        return;
+    }
+    let radius = c.s.cards_radius.map_or_else(|| (w.min(h) * 0.16).clamp(10.0, 34.0), |r| r as f32);
+    let paper = panel.kind == PKind::Clock;
+    let light = is_light(c.s);
+    // on the light theme the cards are pastel versions of the accents
+    let tone = |col: Rgb| if light { lerp_rgb(col, (255, 255, 255), 0.5) } else { col };
+    let a = if paper { if light { (0xFF, 0xFF, 0xFF) } else { (0xF3, 0xF1, 0xEC) } } else { tone(accent(c.s, idx)) };
+    // melts toward the next card's colour
+    let b = if paper { (0xE2, 0xDF, 0xD8) } else { lerp_rgb(a, tone(accent(c.s, idx + 1)), 0.38) };
+    let b = if light { darken(b, 0.04) } else { darken(b, 0.1) };
+    let alpha = (c.s.cards_opacity.min(100) * 255 / 100) as u8;
+    p.layer.fill_rrect((x, y, w, h), radius, &move |t| lerp_rgb(a, b, t), alpha);
+    let (line, _, _) = line_style(c.s);
+    p.layer.stroke_rrect((x, y, w, h), radius, 1.2, line, 40);
+    // dark text on light cards; when the cards are see-through the text follows the theme, since
+    // what is behind them is the (dark) background
+    let dark_ink = if light { true } else if c.s.cards_opacity < 65 { false } else { luma(lerp_rgb(a, b, 0.5)) > 140.0 };
+    let ink: Rgb = if dark_ink { (0x13, 0x15, 0x22) } else { (0xFF, 0xFF, 0xFF) };
+    let pad = (h.min(w * 0.6) * 0.1).clamp(9.0, 24.0);
+    let inner = w - 2.0 * pad;
+    let compact = h < 135.0;
+    // ghost silhouette of the history along the bottom
+    if let Some((data, span)) = graph_data(c, panel) {
+        let gh = if compact { h * 0.5 } else { h * 0.46 };
+        let rect = (x + 1.0, y + h - gh - 1.0, w - 2.0, gh);
+        // clip by drawing inside the rounded corner: the area is faded at the bottom, the corners
+        // are trimmed afterwards by the card outline, so keep a margin
+        let rect = (rect.0 + radius * 0.25, rect.1, rect.2 - radius * 0.5, rect.3 - radius * 0.3);
+        p.layer.spark(rect, &data, span, ink, 1.0, 54, 0, false);
+    }
+    let lcap = (h * 0.085).clamp(8.0, 17.0);
+    let lbase = y + pad + lcap;
+    let lw = if p.font == FontStyle::Smooth { W::Medium } else { W::Regular };
+    // top right: the sub-title, or for CPU / GPU the fan speed
+    let fan_txt = match panel.fan {
+        Some(r) if c.s.cards_fan && panel.sub.is_empty() && matches!(panel.kind, PKind::Cpu | PKind::Gpu) => Some(format!("{r} RPM")),
+        _ => None,
+    };
+    let head = fan_txt.as_deref().unwrap_or(&panel.sub);
+    let sub_w = if head.is_empty() { 0.0 } else { p.width(head, lcap * 0.9, W::Regular) };
+    let show_sub = !head.is_empty() && sub_w + pad < inner * 0.6 && panel.kind != PKind::Clock && panel.kind != PKind::Cpu;
+    p.text(x + pad, lbase, &clip(p, &panel.title, lcap, inner - if show_sub { sub_w + pad } else { 0.0 }, lw), lcap, lw, ink, 175);
+    if show_sub {
+        p.text(x + w - pad - sub_w, lbase, head, lcap * 0.9, W::Regular, ink, if fan_txt.is_some() { 175 } else { 130 });
+    }
+    // the fan is in the header: do not repeat it among the small readings
+    let hide_fan = fan_txt.is_some() && show_sub;
+    let stats: Vec<&Stat> = panel.stats.iter().filter(|s| !(hide_fan && s.label == "FAN")).collect();
+    if panel.kind == PKind::Drives {
+        let drives = &panel.drives;
+        if drives.is_empty() {
+            p.text(x + pad, lbase + pad * 2.0, "NO DRIVES", lcap, W::Medium, ink, 180);
+            return;
+        }
+        let top = lbase + pad * 1.25;
+        let bottom = y + h - pad * 1.45 - lcap * 0.45;
+        let chart_h = (bottom - top).max(10.0);
+        let count = drives.len().min(6);
+        let gap_x = (inner * 0.045).clamp(4.0, 12.0);
+        let bar_w = ((inner - gap_x * (count.saturating_sub(1) as f32)) / count as f32).max(5.0);
+        for (i, drive) in drives.iter().take(count).enumerate() {
+            let bx = x + pad + i as f32 * (bar_w + gap_x);
+            let used = drive.total.saturating_sub(drive.free) as f32 / drive.total.max(1) as f32;
+            p.layer.fill_rrect_solid((bx, top, bar_w, chart_h), (bar_w * 0.12).min(5.0), (36, 43, 57), 220);
+            let fill_h = (chart_h * used.clamp(0.0, 1.0)).max(2.0);
+            let drive_accent = accent(c.s, idx);
+            // Reduce saturation by 10% while preserving the palette's hue and brightness.
+            let drive_luma = luma(drive_accent);
+            let drive_fill = (
+                (drive_luma + (drive_accent.0 as f32 - drive_luma) * 0.90).round().clamp(0.0, 255.0) as u8,
+                (drive_luma + (drive_accent.1 as f32 - drive_luma) * 0.90).round().clamp(0.0, 255.0) as u8,
+                (drive_luma + (drive_accent.2 as f32 - drive_luma) * 0.90).round().clamp(0.0, 255.0) as u8,
+            );
+            let drive_fill = if light { lerp_rgb(drive_fill, (255, 255, 255), 0.5) } else { drive_fill };
+            p.layer.fill_rrect_solid((bx, bottom - fill_h, bar_w, fill_h), (bar_w * 0.12).min(5.0), drive_fill, 235);
+            let label = drive.name.trim_end_matches(':');
+            let label_w = p.width(label, lcap * 0.82, W::Medium);
+            p.text(bx + (bar_w - label_w) * 0.5, bottom + lcap * 0.9, label, lcap * 0.82, W::Medium, ink, 190);
+        }
+        return;
+    }
+    if matches!(panel.kind, PKind::Spectrum | PKind::SpectrumLeft | PKind::SpectrumRight | PKind::SpectrumMix | PKind::SpectrumMix2) {
+        // The card shell remains exactly the same as every other Cards panel.
+        // Each explicit L/R/MIX card is fed by its own configured audio capture.
+        let graph_top = lbase + pad * 1.35;
+        let graph_bottom = y + h - pad * 0.75;
+        let graph_h = (graph_bottom - graph_top).max(8.0);
+        let draw_graph = |p: &mut Painter, values: &[f32], peaks: &[f32], gx: f32, gw: f32, label: Option<&str>| {
+            let count = values.len().min(96);
+            if count == 0 || gw <= 2.0 { return; }
+            let gap_px = (gw * 0.006).clamp(1.0, 3.0);
+            let bar_w = ((gw - gap_px * count.saturating_sub(1) as f32) / count as f32).max(1.0);
+            for i in 0..count {
+                let level = values[i].clamp(0.0, 1.0);
+                let peak = peaks.get(i).copied().unwrap_or(level).clamp(level, 1.0);
+                let bh = (graph_h * level).max(if level > 0.025 { 1.5 } else { 0.0 });
+                let bx = gx + i as f32 * (bar_w + gap_px);
+                let col = lerp_rgb(ink, accent(c.s, idx), 0.58);
+                match c.s.cards_spectrum_style {
+                    SpectrumCardStyle::Bars => {
+                        if bh > 0.0 { p.layer.fill_rrect_solid((bx, graph_bottom - bh, bar_w, bh), (bar_w * 0.35).min(2.0), col, 205); }
+                    }
+                    SpectrumCardStyle::Led => {
+                        let segments = 12usize;
+                        let seg_gap = (graph_h * 0.012).clamp(1.0, 2.0);
+                        let seg_h = ((graph_h - seg_gap * (segments - 1) as f32) / segments as f32).max(1.0);
+                        let lit = (level * segments as f32).ceil() as usize;
+                        for seg in 0..lit.min(segments) {
+                            let sy = graph_bottom - (seg as f32 + 1.0) * seg_h - seg as f32 * seg_gap;
+                            p.layer.fill_rrect_solid((bx, sy, bar_w, seg_h), (bar_w * 0.25).min(1.5), col, 205);
+                        }
+                    }
+                    SpectrumCardStyle::Mirror => {
+                        let half = bh * 0.5;
+                        let mid = graph_top + graph_h * 0.5;
+                        p.layer.fill_rrect_solid((bx, mid - half, bar_w, half * 2.0), (bar_w * 0.3).min(2.0), col, 205);
+                    }
+                }
+                let py = if c.s.cards_spectrum_style == SpectrumCardStyle::Mirror {
+                    graph_top + graph_h * 0.5 - graph_h * peak * 0.5
+                } else { graph_bottom - graph_h * peak };
+                if peak > 0.025 { p.layer.fill_rrect_solid((bx, py, bar_w, 1.5_f32.max(h * 0.006)), 0.75, ink, 175); }
+            }
+            if let Some(label) = label {
+                p.text(gx + 2.0, graph_top + (lcap * 0.8), label, lcap * 0.65, W::Medium, ink, 175);
+            }
+        };
+        let inner_w = inner;
+        let channel = match panel.kind {
+            PKind::SpectrumLeft => SpectrumCardChannel::Left,
+            PKind::SpectrumRight => SpectrumCardChannel::Right,
+            PKind::SpectrumMix | PKind::SpectrumMix2 => SpectrumCardChannel::Combined,
+            _ => c.s.cards_spectrum_channel,
+        };
+        match channel {
+            SpectrumCardChannel::Combined => {
+                if panel.kind == PKind::SpectrumMix2 {
+                    draw_graph(p, spectrum_mix2, peaks_mix2, x + pad, inner_w, None);
+                } else if panel.kind == PKind::SpectrumMix {
+                    draw_graph(p, spectrum_mix, peaks_mix, x + pad, inner_w, None);
+                } else {
+                    let combined: Vec<f32> = spectrum_left.iter().zip(spectrum_right).map(|(l, r)| (*l + *r) * 0.5).collect();
+                    let combined_peaks: Vec<f32> = peaks_left.iter().zip(peaks_right).map(|(l, r)| (*l).max(*r)).collect();
+                    draw_graph(p, &combined, &combined_peaks, x + pad, inner_w, None);
+                }
+            }
+            SpectrumCardChannel::Left => draw_graph(p, spectrum_left, peaks_left, x + pad, inner_w, None),
+            SpectrumCardChannel::Right => draw_graph(p, spectrum_right, peaks_right, x + pad, inner_w, None),
+            SpectrumCardChannel::Stereo => {
+                let half_w = (inner_w - pad * 0.35) * 0.5;
+                draw_graph(p, spectrum_left, peaks_left, x + pad, half_w, Some("L"));
+                draw_graph(p, spectrum_right, peaks_right, x + pad + half_w + pad * 0.35, half_w, Some("R"));
+            }
+        }
+        return;
+    }
+    if panel.kind == PKind::Clock {
+        let tw = if p.font == FontStyle::Smooth { W::Medium } else { W::Regular };
+        let cap = p.fit(&panel.hero, h * 0.3, inner, tw);
+        let base = lbase + pad * 0.5 + lcap * 1.3 + cap * 1.05;
+        let sc = lcap * 0.95;
+        p.text(x + pad, lbase + sc * 1.8, &clip(p, &panel.sub, sc, inner, W::Regular), sc, W::Regular, ink, 150);
+        p.text(x + pad, base + sc * 1.2, &panel.hero, cap, tw, ink, 255);
+        let mut ly = base + sc * 1.2 + pad * 1.2;
+        for line in &panel.lines {
+            if ly > y + h - pad * 0.4 {
+                break;
+            }
+            p.text(x + pad, ly, &clip(p, line, sc, inner, W::Regular), sc, W::Regular, ink, 190);
+            ly += sc * 1.8;
+        }
+        return;
+    }
+    if panel.kind == PKind::Discord {
+        let top = lbase + pad * 1.05;
+        // Protected minimums: editor/card scaling cannot shrink participant text,
+        // avatar diameter or vertical row pitch below these values.
+        const MIN_NAME_SIZE: f32 = 9.18; // Minimum for a full-height Discord card
+        const MIN_SPLIT_NAME_SIZE: f32 = 10.0;
+        const MAX_SPLIT_NAME_SIZE: f32 = 11.0;
+        const MIN_ROW_PITCH: f32 = 12.15;
+        const MIN_AVATAR_DIAMETER: f32 = 14.0;
+        let available_h = (y + h - top - pad * 0.45).max(0.0);
+        // A full-height Discord card has six rows per participant column.
+        // When it shares the vertical stack with another card, use five.
+        // Reserve room for the channel heading and avatar radius so the last
+        // participant row is never clipped at the bottom of the card.
+        let rows_per_col = if h < 240.0 { 5usize } else { 6usize };
+        let row_pitch = (available_h / (rows_per_col as f32 + 1.65)).max(MIN_ROW_PITCH);
+        let title_size = ((row_pitch * 0.72).clamp(8.0, 13.0) * 1.35).max(MIN_NAME_SIZE);
+        // In the half-height/two-card layout, keep participant names in a
+        // narrow readable range regardless of the available row pitch.
+        let name_size = if rows_per_col == 5 {
+            title_size.clamp(MIN_SPLIT_NAME_SIZE, MAX_SPLIT_NAME_SIZE)
+        } else {
+            title_size.max(MIN_NAME_SIZE)
+        };
+        let header_y = top + row_pitch * 0.88;
+        if panel.hero == "NOT IN VOICE" || panel.hero == "CONNECT DISCORD" {
+            p.text(x + pad, header_y, &clip(p, &panel.hero, name_size * 1.3, inner, W::Medium), name_size * 1.3, W::Medium, ink, 220);
+        } else {
+            p.text(x + pad, header_y, &clip(p, &panel.hero, name_size * 1.2, inner, W::Medium), name_size * 1.2, W::Medium, ink, 235);
+            let list_top = top + row_pitch * 1.65;
+            let list_bottom = (y + h - pad * 0.25).max(list_top);
+            let mid_x = x + pad + inner * 0.5;
+            // Subtle center divider, matching the Cards palette.
+            p.layer.line(mid_x, list_top - row_pitch * 0.35, mid_x, list_bottom, 1.0, ink, 65);
+            let col_gap = pad * 0.65;
+            let col_w = (inner - col_gap) * 0.5;
+            let avatar_d = (row_pitch * 0.78).max(MIN_AVATAR_DIAMETER);
+            let avatar_r = avatar_d * 0.5;
+            for (i, line) in panel.lines.iter().take(rows_per_col * 2).enumerate() {
+                // Left column is filled top-to-bottom before the right column.
+                let col = if i < rows_per_col { 0 } else { 1 };
+                let row = if col == 0 { i } else { i - rows_per_col };
+                let col_x = x + pad + col as f32 * (col_w + col_gap);
+                let yy = list_top + row_pitch * (row as f32 + 0.5);
+                if yy + avatar_r > y + h + 1.0 { continue; }
+                let mut parts = line.splitn(5, '|');
+                let speaking = parts.next().unwrap_or("0") == "1";
+                let initial = parts.next().unwrap_or(" ");
+                let label = parts.next().unwrap_or(line);
+                let muted = parts.next().unwrap_or("0") == "1";
+                let deafened = parts.next().unwrap_or("0") == "1";
+                let avatar_x = col_x + avatar_r + 1.0;
+                if speaking {
+                    // Keep the outer diameter unchanged; grow the green ring inward by 45%.
+                    let ring_outer = avatar_r + 2.0;
+                    let ring_thickness = 2.0 * 1.45;
+                    p.layer.dot(avatar_x, yy, ring_outer, (40, 230, 110), 255);
+                    p.layer.dot(avatar_x, yy, (ring_outer - ring_thickness).max(0.0), accent(c.s, idx + i + 1), 245);
+                } else {
+                    p.layer.dot(avatar_x, yy, avatar_r, accent(c.s, idx + i + 1), 245);
+                }
+                let initial_size = (name_size * 0.72).max(6.0);
+                let initial_w = p.width(initial, initial_size, W::Medium);
+                p.text(avatar_x - initial_w * 0.5, yy + initial_size * 0.35, initial, initial_size, W::Medium, (255,255,255), 255);
+                let icon_space = (if muted { 8.0 } else { 0.0 }) + (if deafened { 9.0 } else { 0.0 });
+                let text_x = col_x + avatar_d + pad * 0.45;
+                let text_w = (col_w - (text_x - col_x) - icon_space - 2.0).max(1.0);
+                p.text(text_x, yy + name_size * 0.34, &clip(p, label, name_size, text_w, W::Regular), name_size, W::Regular, ink, 220);
+                // Tiny native vector status icons avoid unsupported font glyphs.
+                let mut ix = col_x + col_w - 4.0;
+                if deafened {
+                    let red = (245, 90, 90);
+                    // Headphones-off: compact headband, ear cups and diagonal slash.
+                    p.layer.line(ix - 3.0, yy + 1.5, ix - 2.6, yy - 1.5, 1.0, red, 235);
+                    p.layer.line(ix - 2.6, yy - 1.5, ix, yy - 3.0, 1.0, red, 235);
+                    p.layer.line(ix, yy - 3.0, ix + 2.6, yy - 1.5, 1.0, red, 235);
+                    p.layer.line(ix + 2.6, yy - 1.5, ix + 3.0, yy + 1.5, 1.0, red, 235);
+                    p.layer.line(ix - 3.0, yy - 2.8, ix + 3.0, yy + 2.8, 1.2, red, 245);
+                    ix -= 9.0;
+                }
+                if muted {
+                    let red = (245, 90, 90);
+                    // Microphone-off: capsule, short stand and diagonal mute slash.
+                    p.layer.line(ix, yy - 3.0, ix, yy + 0.8, 1.6, red, 235);
+                    p.layer.line(ix - 2.0, yy + 0.8, ix + 2.0, yy + 0.8, 1.0, red, 235);
+                    p.layer.line(ix - 3.0, yy - 3.0, ix + 3.0, yy + 3.0, 1.2, red, 245);
+                }
+            }
+        }
+        return;
+    }
+    // hero
+    let hero_top = lbase + pad * 0.35;
+    let stats_h = if compact { 0.0 } else { h * 0.26 };
+    let avail = (y + h - pad - stats_h - hero_top).max(12.0);
+    let tw = if p.font == FontStyle::Smooth { W::Medium } else { W::Regular };
+    if panel.text {
+        let cap = (avail * 0.5).clamp(10.0, lcap * 2.2);
+        let t = clip(p, &panel.hero, cap, inner, W::Regular);
+        p.text(x + pad, hero_top + (avail + cap) / 2.0, &t, cap, W::Regular, ink, 255);
+        return;
+    }
+    // The Cards CPU panel gets one live bar per logical processor, matching
+    // the compact per-core monitor in the reference while retaining the card palette.
+    if panel.kind == PKind::Cpu && !compact && !panel.cpu_core_usages.is_empty() {
+        let bars_w = inner * 0.53;
+        let value_w = inner - bars_w - pad * 0.55;
+        let cap = fit_vu(p, &panel.hero, &panel.unit, (avail * 0.9).min(h * 0.5), value_w, tw);
+        let base = hero_top + (avail + cap) / 2.0;
+        value_unit(p, x + pad, base, &panel.hero, &panel.unit, cap, tw, ink, 255, 150);
+        let count = panel.cpu_core_usages.len().min(32);
+        let gx = x + pad + value_w + pad * 0.55;
+        let gw = bars_w;
+        let gap = (gw * 0.025).clamp(2.0, 5.0);
+        let bw = ((gw - gap * count.saturating_sub(1) as f32) / count as f32).max(2.0);
+        let chart_top = hero_top + avail * 0.02;
+        let chart_bottom = hero_top + avail * 0.66;
+        let chart_h = (chart_bottom - chart_top).max(8.0);
+        let fill = if light { lerp_rgb(accent(c.s, idx), (255, 255, 255), 0.18) } else { accent(c.s, idx) };
+        let track = if light { (205, 211, 222) } else { (34, 42, 57) };
+        for (i, usage) in panel.cpu_core_usages.iter().take(count).enumerate() {
+            let bx = gx + i as f32 * (bw + gap);
+            p.layer.fill_rrect_solid((bx, chart_top, bw, chart_h), (bw * 0.22).min(2.5), track, 225);
+            let fh = chart_h * (usage.clamp(0.0, 100.0) / 100.0);
+            if fh > 0.5 {
+                p.layer.fill_rrect_solid((bx, chart_bottom - fh, bw, fh), (bw * 0.22).min(2.5), fill, 245);
+            }
+        }
+        let core_label = panel.sub.as_str();
+        if !core_label.is_empty() {
+            let label_size = (lcap * 0.72).clamp(7.0, 12.0);
+            let label_w = p.width(core_label, label_size, W::Regular);
+            p.text(gx + (gw - label_w).max(0.0) * 0.5, chart_bottom + label_size * 0.95, core_label, label_size, W::Regular, ink, 125);
+        }
+    }
+    // in a compact card the readings sit to the right of the value
+    let cpu_chart_drawn = panel.kind == PKind::Cpu && !compact && !panel.cpu_core_usages.is_empty();
+    let right_w = if compact && !stats.is_empty() { inner * 0.36 } else { 0.0 };
+    if !cpu_chart_drawn {
+        let cap = fit_vu(p, &panel.hero, &panel.unit, (avail * 0.9).min(h * 0.5), inner - right_w - if right_w > 0.0 { pad } else { 0.0 }, tw);
+        let base = hero_top + (avail + cap) / 2.0;
+        value_unit(p, x + pad, base, &panel.hero, &panel.unit, cap, tw, ink, 255, 150);
+    }
+    if compact {
+        if let Some(st) = stats.first().copied() {
+            let vcap = (h * 0.15).clamp(9.0, 22.0);
+            stat_cell(p, c, x + w - pad - right_w, hero_top + (avail - vcap * 2.2) / 2.0, right_w, st, vcap, ink, 150);
+        }
+        return;
+    }
+    // Bottom readings. GPU deliberately retains the original three-column
+    // geometry: LOAD in column 1 and POWER in column 2, leaving column 3
+    // empty because HOTSPOT has moved to the large central value.
+    if panel.kind == PKind::Gpu {
+        let cell = (inner - pad * 2.0) / 3.0;
+        let vcap = (stats_h * 0.42).clamp(9.0, 26.0);
+        for (i, st) in stats.iter().copied().filter(|st| st.label == "LOAD" || st.label == "POWER").enumerate().take(2) {
+            stat_cell(p, c, x + pad + i as f32 * (cell + pad), y + h - pad - stats_h * 0.92, cell, st, vcap, ink, 150);
+        }
+    } else {
+        // up to three readings in a row at the bottom
+        let n = stats.len().min(3);
+        if n > 0 {
+            let cell = (inner - pad * (n as f32 - 1.0)) / n as f32;
+            let vcap = (stats_h * 0.42).clamp(9.0, 26.0);
+            for (i, st) in stats.iter().copied().take(3).enumerate() {
+                stat_cell(p, c, x + pad + i as f32 * (cell + pad), y + h - pad - stats_h * 0.92, cell, st, vcap, ink, 150);
+            }
+        }
+    }
+}
+
+// -- orbit
+
+fn draw_orbit(p: &mut Painter, c: &Ctx, panels: &[Panel], clock: Option<&Panel>, area: (f32, f32, f32, f32)) {
+    let (x, y, w, h) = area;
+    let radius = (h.min(w) * 0.06).clamp(10.0, 26.0);
+    let (plate_rgb, plate_alpha) = plate(c.s);
+    let (line, outline_a, hair_a) = line_style(c.s);
+    if plate_alpha > 0 {
+        p.layer.fill_rrect_solid(area, radius, plate_rgb, plate_alpha);
+    }
+    p.layer.stroke_rrect(area, radius, 1.5, line, outline_a);
+    let mut weights: Vec<f32> = vec![1.0; panels.len()];
+    if is_portrait(area) {
+        // the clusters one under the other, the clock block last
+        if clock.is_some() {
+            weights.push(0.6);
+        }
+        let slots = split(h as u32, 0, &weights);
+        let mut ring_color = 0usize;
+        for (i, (panel, (off, sh))) in panels.iter().zip(slots.iter()).enumerate() {
+            if i > 0 {
+                p.layer.fill_rrect_solid((x + w * 0.08, y + *off as f32, w * 0.84, 1.0), 0.0, line, hair_a);
+            }
+            orbit_cluster(p, c, panel, ring_color, (x, y + *off as f32, w, *sh as f32));
+            ring_color += panel.rings.len().max(1);
+        }
+        if let (Some(cp), Some((off, sh))) = (clock, slots.last()) {
+            if !panels.is_empty() {
+                p.layer.fill_rrect_solid((x + w * 0.08, y + *off as f32, w * 0.84, 1.0), 0.0, line, hair_a);
+            }
+            let (sy, sh) = (y + *off as f32, *sh as f32);
+            let pad = (sh * 0.12).clamp(9.0, 26.0);
+            let lcap = (sh * 0.09).clamp(8.0, 17.0);
+            deck_clock_title(p, c, cp, (x, sy, w, sh), pad, sy + pad + lcap + 4.0);
+            deck_clock(p, c, cp, accent(c.s, ring_color), (x, sy, w, sh), pad, sy + pad + lcap + 4.0);
+        }
+        return;
+    }
+    if clock.is_some() {
+        weights.push(0.72);
+    }
+    let slots = split(w as u32, 0, &weights);
+    let mut ring_color = 0usize;
+    for (i, (panel, (off, sw))) in panels.iter().zip(slots.iter()).enumerate() {
+        if i > 0 {
+            p.layer.fill_rrect_solid((x + *off as f32, y + h * 0.1, 1.0, h * 0.8), 0.0, line, hair_a);
+        }
+        orbit_cluster(p, c, panel, ring_color, (x + *off as f32, y, *sw as f32, h));
+        ring_color += panel.rings.len().max(1);
+    }
+    if let (Some(cp), Some((off, sw))) = (clock, slots.last()) {
+        if !panels.is_empty() {
+            p.layer.fill_rrect_solid((x + *off as f32, y + h * 0.1, 1.0, h * 0.8), 0.0, line, hair_a);
+        }
+        let pad = (h * 0.075).clamp(9.0, 26.0);
+        let lcap = (h * 0.052).clamp(8.0, 17.0);
+        let lbase = y + pad + lcap + 4.0;
+        deck_clock_title(p, c, cp, (x + *off as f32, y, *sw as f32, h), pad, lbase);
+        deck_clock(p, c, cp, accent(c.s, ring_color), (x + *off as f32, y, *sw as f32, h), pad, lbase);
+    }
+}
+
+fn deck_clock_title(p: &mut Painter, c: &Ctx, panel: &Panel, (x, _y, w, _h): (f32, f32, f32, f32), pad: f32, lbase: f32) {
+    let lcap = (_h * 0.052).clamp(8.0, 17.0);
+    let inner = w - 2.0 * pad;
+    p.text(x + pad, lbase, &clip(p, &panel.title, lcap, inner, W::Medium), lcap, W::Medium, c.text, 170);
+}
+
+fn orbit_cluster(p: &mut Painter, c: &Ctx, panel: &Panel, color0: usize, (x, y, w, h): (f32, f32, f32, f32)) {
+    let pad = (h * 0.075).clamp(9.0, 24.0);
+    let ink = c.text;
+    let lcap = (h * 0.052).clamp(8.0, 17.0);
+    // the name under the rings, the legend under the name
+    let foot = lcap * 3.6 + pad * 0.4;
+    let ring_h = (h - 2.0 * pad - foot).max(40.0);
+    let wide = w > ring_h * 1.55;
+    let ring_w = if wide { w * 0.5 } else { w - 2.0 * pad };
+    let r = (ring_h / 2.0).min(ring_w / 2.0);
+    let cx = if wide { x + pad + r } else { x + w / 2.0 };
+    let cy = y + pad + ring_h / 2.0;
+    let rings = &panel.rings;
+    let n = rings.len().max(1);
+    let thick = (r * 0.54 / (n as f32 + 0.3 * (n as f32 - 1.0))).min(r * 0.2).max(3.0);
+    let gap = thick * 0.3;
+    for (i, ring) in rings.iter().enumerate() {
+        let r_out = r - i as f32 * (thick + gap);
+        let col = accent(c.s, color0 + i);
+        p.layer.arc(cx, cy, r_out, thick, 1.0, &move |_| col, 34);
+        let c2 = lerp_rgb(col, (255, 255, 255), 0.3);
+        p.layer.arc(cx, cy, r_out, thick, ring.frac.max(0.012), &move |t| lerp_rgb(col, c2, t), 255);
+    }
+    // the centre
+    let inner_r = r - n as f32 * (thick + gap) + gap;
+    let tw = if p.font == FontStyle::Smooth { W::Medium } else { W::Regular };
+    let hero = if panel.text { clip(p, &panel.hero, lcap * 1.4, inner_r * 1.8, W::Regular) } else { panel.hero.clone() };
+    let unit = if panel.text { "" } else { panel.unit.as_str() };
+    let cap = fit_vu(p, &hero, unit, (inner_r * 0.8).max(10.0), inner_r * 1.65, tw);
+    let tw_px = vu_width(p, &hero, unit, cap, tw);
+    value_unit(p, cx - tw_px / 2.0, cy + cap / 2.0, &hero, unit, cap, tw, ink, 255, 150);
+    // the readings beside (wide slot) or under (narrow slot) the rings
+    if wide {
+        let sx = cx + r + pad * 1.4;
+        let sw = x + w - pad - sx;
+        let n = panel.stats.len().min(4);
+        if n > 0 && sw > 30.0 {
+            let row_h = (ring_h / n as f32).min(ring_h / 3.0);
+            let vcap = (row_h * 0.4).clamp(9.0, 24.0);
+            let top = cy - row_h * n as f32 / 2.0;
+            for (i, st) in panel.stats.iter().take(4).enumerate() {
+                stat_cell(p, c, sx, top + i as f32 * row_h + (row_h - vcap * 1.95) / 2.0, sw, st, vcap, ink, 140);
+            }
+        }
+    }
+    // name, then the legend of the rings
+    let name_cap = lcap * 1.15;
+    let name_base = y + pad + ring_h + pad * 0.5 + name_cap;
+    let name = if panel.sub.is_empty() || panel.kind == PKind::Fans { panel.title.clone() } else { format!("{}  {}", panel.title, panel.sub) };
+    let nw = p.width(&name, name_cap, W::Medium);
+    let name_cap2 = if nw > w - 2.0 * pad { p.fit(&name, name_cap, w - 2.0 * pad, W::Medium) } else { name_cap };
+    let nw = p.width(&name, name_cap2, W::Medium);
+    p.text(x + (w - nw) / 2.0, name_base, &name, name_cap2, W::Medium, ink, 235);
+    if c.s.orbit_legend && !panel.rings.is_empty() {
+        let lc = lcap * 0.85;
+        let items: Vec<(&str, Rgb)> = panel.rings.iter().enumerate().map(|(i, r)| (r.label.as_str(), accent(c.s, color0 + i))).collect();
+        let dot = lc * 0.55;
+        let total: f32 = items.iter().map(|(l, _)| dot * 2.0 + lc * 0.5 + p.width(l, lc, W::Regular) + lc * 1.2).sum::<f32>() - lc * 1.2;
+        let mut lx = x + (w - total.min(w - pad)) / 2.0;
+        let ly = name_base + lc * 1.9;
+        for (l, col) in items {
+            p.layer.dot(lx + dot, ly - lc * 0.35, dot, col, 255);
+            lx += dot * 2.0 + lc * 0.5;
+            lx += p.text(lx, ly, l, lc, W::Regular, ink, 160) + lc * 1.2;
+        }
+    }
+}
+
+// -- console
+
+/// The tiles of the `console` layout. `focus` is the tile in focus (`None`: no focus, all alike).
+fn draw_console(p: &mut Painter, c: &Ctx, panels: &[Panel], clock: Option<&Panel>, focus: Option<usize>, area: (f32, f32, f32, f32)) {
+    let (x, y, w, h) = area;
+    if panels.is_empty() {
+        return;
+    }
+    // a portrait panel: the tiles are stacked in a column instead of standing side by side
+    let vertical = h > w * 1.1;
+    let side = if vertical { (w * 0.03).clamp(4.0, 14.0) } else { (h * 0.025).clamp(4.0, 14.0) };
+    let bar_h = match clock {
+        Some(_) if vertical => (w * 0.13).clamp(24.0, 64.0),
+        Some(_) => (h * 0.16).clamp(24.0, 64.0),
+        None => 0.0,
+    };
+    let (acc0, text) = (accent(c.s, 0), c.text);
+    if let Some(cp) = clock {
+        // tabs on the left, the clock on the right
+        let cap = (bar_h * 0.46).clamp(9.0, 26.0);
+        let base = y + bar_h * 0.62;
+        let tw = if p.font == FontStyle::Smooth { W::Medium } else { W::Regular };
+        let time_cap = cap * 1.25;
+        let time_w = p.width(&cp.hero, time_cap, tw);
+        let date_cap = cap * 0.8;
+        let date_w = p.width(&cp.sub, date_cap, W::Regular);
+        let mut room = w - side - time_w - cap * 1.5;
+        let show_date = !cp.sub.is_empty() && date_w + cap * 3.0 < w * 0.3;
+        p.text(x + w - side - time_w, base + (time_cap - cap) * 0.45, &cp.hero, time_cap, tw, text, 255);
+        if show_date {
+            let dx = x + w - side - time_w - cap * 1.1 - date_w;
+            p.text(dx, base, &cp.sub, date_cap, W::Regular, text, 150);
+            room = dx - cap * 1.5 - (x + side);
+        } else {
+            room -= side;
+        }
+        let mut tx = x + side;
+        let gap = cap * 1.9;
+        // portrait: every tile is on the screen anyway, so the bar only has the date and the clock
+        if vertical {
+            let date = clip(p, &cp.sub, date_cap, (x + w - side - time_w - cap * 1.2) - tx, W::Regular);
+            p.text(tx, base, &date, date_cap, W::Regular, text, 170);
+        }
+        for (i, panel) in panels.iter().enumerate().filter(|_| !vertical) {
+            let name = panel.title.to_uppercase();
+            let nw = p.width(&name, cap, tw);
+            if tx + nw > x + side + room {
+                break;
+            }
+            let on = focus == Some(i);
+            p.text(tx, base, &name, cap, tw, text, if on { 255 } else if focus.is_some() { 120 } else { 200 });
+            if on {
+                p.layer.fill_rrect_solid((tx, base + cap * 0.45, nw, (cap * 0.2).max(2.0)), cap * 0.1, accent(c.s, i), 255);
+            }
+            tx += nw + gap;
+        }
+    }
+    let gap = (if vertical { w * 0.03 } else { h * 0.03 }).clamp(8.0, 18.0);
+    let top = y + bar_h + if bar_h > 0.0 { side * 0.5 } else { 0.0 };
+    let th = (h - (top - y)).max(40.0);
+    let weights: Vec<f32> = panels
+        .iter()
+        .enumerate()
+        .map(|(i, panel)| match focus {
+            Some(f) if f == i => 2.4,
+            Some(_) => 1.0,
+            None => panel.kind.weight(),
+        })
+        .collect();
+    let _ = acc0;
+    if vertical {
+        let weights: Vec<f32> = weights.iter().map(|wt| if focus.is_some() { *wt } else { 1.0 }).collect();
+        for (i, (panel, (off, len))) in panels.iter().zip(split(th as u32, gap as u32, &weights)).enumerate() {
+            let on = focus == Some(i);
+            console_tile(p, c, panel, i, on, on || focus.is_none(), (x, top + off as f32, w, len as f32));
+        }
+        return;
+    }
+    let slots = split(w as u32, gap as u32, &weights);
+    for (i, (panel, (off, tw))) in panels.iter().zip(slots).enumerate() {
+        let on = focus == Some(i);
+        console_tile(p, c, panel, i, on, on || focus.is_none(), (x + off as f32, top, tw as f32, th));
+    }
+}
+
+fn console_tile(p: &mut Painter, c: &Ctx, panel: &Panel, idx: usize, focused: bool, detailed: bool, (x, y, w, h): (f32, f32, f32, f32)) {
+    if w < 50.0 || h < 50.0 {
+        return;
+    }
+    let radius = (h * 0.09).clamp(10.0, 30.0);
+    let light = is_light(c.s);
+    let (plate_rgb, _) = plate(c.s);
+    let plate_rgb = if c.s.plate_color.is_some() { plate_rgb } else if light { (0xFF, 0xFF, 0xFF) } else { (8, 10, 22) };
+    let col = accent(c.s, idx);
+    let col2 = accent(c.s, idx + 1);
+    let (line, _, _) = line_style(c.s);
+    let mut ink = c.text;
+    if focused {
+        // the tile in focus: its colour as a gradient on the plate, a glow around it
+        let (a, b) = if light {
+            // one hue, from a soft tone to a paler one: mixing two deepened accents turns muddy on white
+            (lerp_rgb(plate_rgb, col, 0.5), lerp_rgb(plate_rgb, col, 0.2))
+        } else {
+            (lerp_rgb(plate_rgb, col, 0.5), lerp_rgb(plate_rgb, col2, 0.18))
+        };
+        for k in (1..=4).rev() {
+            let kf = k as f32 * 1.6;
+            p.layer.stroke_rrect((x - kf, y - kf, w + 2.0 * kf, h + 2.0 * kf), radius + kf, 2.0, col, (16 - 3 * k as i32).max(3) as u8);
+        }
+        p.layer.fill_rrect((x, y, w, h), radius, &move |t| lerp_rgb(a, b, t), 238);
+        p.layer.stroke_rrect((x, y, w, h), radius, 2.0, lerp_rgb(col, (255, 255, 255), 0.35), 235);
+        if luma(lerp_rgb(a, b, 0.5)) > 150.0 && c.s.text.is_none() {
+            ink = (0x13, 0x15, 0x22);
+        }
+    } else if detailed {
+        let a = lerp_rgb(plate_rgb, col, if light { 0.3 } else { 0.22 });
+        p.layer.fill_rrect((x, y, w, h), radius, &move |t| lerp_rgb(a, plate_rgb, t * 0.6), if light { 215 } else { 200 });
+        p.layer.stroke_rrect((x, y, w, h), radius, 1.4, col, 120);
+    } else {
+        p.layer.fill_rrect_solid((x, y, w, h), radius, plate_rgb, if light { 120 } else { 105 });
+        p.layer.stroke_rrect((x, y, w, h), radius, 1.2, line, 34);
+    }
+    let pad = (h.min(w * 0.7) * 0.09).clamp(9.0, 26.0);
+    let inner = w - 2.0 * pad;
+    let lcap = (h * 0.07).clamp(9.0, 20.0);
+    let lw = if p.font == FontStyle::Smooth { W::Medium } else { W::Regular };
+    let tw = lw;
+    let dim = if detailed { 215 } else { 150 };
+    // title, and for the detailed tiles the sub-title at the right
+    let head = if detailed { panel.sub.as_str() } else { "" };
+    let sub_w = if head.is_empty() { 0.0 } else { p.width(head, lcap * 0.9, W::Regular) };
+    let show_sub = !head.is_empty() && sub_w + pad < inner * 0.55 && panel.kind != PKind::Clock;
+    let title_w = inner - if show_sub { sub_w + pad } else { 0.0 };
+    p.text(x + pad, y + pad + lcap, &clip(p, &panel.title, lcap, title_w, lw), lcap, lw, ink, dim);
+    if show_sub {
+        p.text(x + w - pad - sub_w, y + pad + lcap, head, lcap * 0.9, W::Regular, ink, 160);
+    }
+    let body_top = y + pad + lcap * 2.0;
+    if panel.text {
+        // a title (the music): up to two lines
+        let cap = if detailed { (h * 0.085).clamp(11.0, 26.0) } else { (h * 0.065).clamp(10.0, 18.0) };
+        let mut base = body_top + cap * 1.3;
+        for part in wrap2(p, &panel.hero, cap, inner) {
+            p.text(x + pad, base, &part, cap, W::Regular, ink, 245);
+            base += cap * 1.4;
+        }
+        return;
+    }
+    if !detailed {
+        // small tile: the value in the middle, a bar for the share at the bottom
+        let bar_h = (h * 0.028).clamp(3.0, 7.0);
+        let avail = h - (body_top - y) - pad - bar_h * 2.5;
+        let cap = fit_vu(p, &panel.hero, &panel.unit, (avail * 0.55).clamp(12.0, h * 0.26), inner, tw);
+        let base = body_top + (avail + cap) / 2.0;
+        value_unit(p, x + pad, base, &panel.hero, &panel.unit, cap, tw, ink, 255, 150);
+        if let Some(f) = panel.frac {
+            let by = y + h - pad - bar_h;
+            p.layer.fill_rrect_solid((x + pad, by, inner, bar_h), bar_h / 2.0, ink, 40);
+            if f > 0.0 {
+                p.layer.fill_rrect((x + pad, by, (inner * f).max(bar_h), bar_h), bar_h / 2.0, &move |t| lerp_rgb(col, lerp_rgb(col, (255, 255, 255), 0.4), t), 255);
+            }
+        }
+        return;
+    }
+    // the tile in focus (or any tile when there is no focus): value, graph, readings
+    let compact = h < 190.0;
+    let stats: Vec<&Stat> = panel.stats.iter().take(3).collect();
+    let stats_h = if stats.is_empty() || compact { 0.0 } else { h * 0.2 };
+    let hero_cap = (h * if focused { 0.3 } else { 0.24 }).min(h - (body_top - y) - pad - stats_h);
+    let cap = fit_vu(p, &panel.hero, &panel.unit, hero_cap.max(12.0), inner, tw);
+    let base = body_top + cap;
+    value_unit(p, x + pad, base, &panel.hero, &panel.unit, cap, tw, ink, 255, 160);
+    let rest_top = base + pad * 0.5;
+    let rest_bottom = y + h - pad - stats_h;
+    if let Some((data, span)) = graph_data(c, panel) {
+        let gh = (rest_bottom - rest_top).min(h * 0.28);
+        if gh >= 14.0 {
+            p.layer.spark((x + pad, rest_top, inner, gh), &data, span, ink, if focused { 1.8 } else { 1.3 }, 70, 215, focused);
+        }
+    } else if stats.is_empty() {
+        let sc = lcap * 0.95;
+        let mut ly = rest_top + sc * 1.4;
+        for line in &panel.lines {
+            if ly > y + h - pad * 0.5 {
+                break;
+            }
+            p.text(x + pad, ly, &clip(p, line, sc, inner, W::Regular), sc, W::Regular, ink, 200);
+            ly += sc * 1.8;
+        }
+    }
+    if stats_h > 0.0 {
+        let n = stats.len();
+        let cell = (inner - pad * (n as f32 - 1.0)) / n as f32;
+        let vcap = (stats_h * 0.46).clamp(9.0, 28.0);
+        for (i, st) in stats.iter().copied().enumerate() {
+            stat_cell(p, c, x + pad + i as f32 * (cell + pad), y + h - pad - stats_h * 0.95, cell, st, vcap, ink, 160);
+        }
+    }
+}
+
+/// A text on at most two lines (split at spaces), the last one cut with "..." when it is still too long.
+fn wrap2(p: &Painter, text: &str, cap: f32, max_w: f32) -> Vec<String> {
+    if p.width(text, cap, W::Regular) <= max_w {
+        return vec![text.to_string()];
+    }
+    let mut first = String::new();
+    let mut rest: Vec<&str> = Vec::new();
+    for (i, word) in text.split_whitespace().enumerate() {
+        let candidate = if first.is_empty() { word.to_string() } else { format!("{first} {word}") };
+        if rest.is_empty() && (first.is_empty() || p.width(&candidate, cap, W::Regular) <= max_w) {
+            first = candidate;
+        } else {
+            rest.push(word);
+        }
+        let _ = i;
+    }
+    let first = clip(p, &first, cap, max_w, W::Regular);
+    if rest.is_empty() {
+        return vec![first];
+    }
+    vec![first, clip(p, &rest.join(" "), cap, max_w, W::Regular)]
+}
+
+// ---------------------------------------------------------------------- screen
+
+pub struct DashScreen {
+    started: std::time::Instant,
+    layer: Layer,
+    sig: String,
+    hist: History,
+    /// Paints the background (the same engine as the tiles).
+    bg: TilesScreen,
+    pub redraws: u32,
+    /// The tile in focus of the `console` layout and since when (for `console_focus = load`).
+    focus: usize,
+    focus_since: f64,
+}
+
+impl DashScreen {
+    pub fn new() -> Self {
+        DashScreen { started: std::time::Instant::now(), layer: Layer::new(1, 1), sig: String::new(), hist: History::new(), bg: TilesScreen::new(), redraws: 0, focus: 0, focus_since: f64::NEG_INFINITY }
+    }
+
+    /// The tile of the `console` layout in focus, `None` when there is no focus.
+    fn pick_focus(&mut self, kinds: &[PKind], data: &WidgetData, ram_pct: f32, s: &Settings, secs: f64) -> Option<usize> {
+        let n = kinds.len();
+        if n == 0 {
+            return None;
+        }
+        match s.console_focus {
+            Focus::None => None,
+            Focus::Rotate => Some(((secs.max(0.0) / s.console_interval.max(1) as f64) as usize) % n),
+            Focus::Load => {
+                let net = (data.net_kb.0 + data.net_kb.1) / (s.net_max as f64 * 1024.0) * 100.0;
+                let disk = (data.disk_mb.0 + data.disk_mb.1) / 200.0 * 100.0;
+                let score = |k: PKind| -> f32 {
+                    match k {
+                        PKind::Cpu => data.cpu_pct,
+                        PKind::Gpu => data.gpu_pct.unwrap_or(0.0),
+                        PKind::Ram => ram_pct,
+                        PKind::Net => net.clamp(0.0, 100.0) as f32,
+                        PKind::Disk => disk.clamp(0.0, 100.0) as f32,
+                        PKind::Drives => 0.0,
+                        _ => 0.0,
+                    }
+                };
+                let scores: Vec<f32> = kinds.iter().map(|k| score(*k)).collect();
+                let best = (0..n).fold(0, |b, i| if scores[i] > scores[b] { i } else { b });
+                if self.focus >= n {
+                    self.focus = best;
+                    self.focus_since = secs;
+                } else if best != self.focus && scores[best] >= scores[self.focus] + 10.0 && secs - self.focus_since >= 3.0 {
+                    // a clear lead for a few seconds: the focus moves (no flicker between two close ones)
+                    self.focus = best;
+                    self.focus_since = secs;
+                }
+                Some(self.focus)
+            }
+        }
+    }
+
+    /// Frames per second the screen wants: static cards update slowly; animated backgrounds
+    /// and the live Spectrum card are paced by the main loop.
+    pub fn wanted_fps(s: &Settings, effect_fps: f32, active_fps: f32) -> f32 {
+        match s.bg {
+            BgMode::Effect => effect_fps,
+            BgMode::Image => active_fps,
+            _ => 4.0,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw(&mut self, fb: &mut Framebuffer, area: Rect, style: Style, data: &WidgetData, color_mode: ColorMode, s: &Settings, ts: &tiles::Settings, env: &Env, spectrum_left: &[f32], spectrum_right: &[f32], spectrum_mix: &[f32], spectrum_mix2: &[f32], peaks_left: &[f32], peaks_right: &[f32], peaks_mix: &[f32], peaks_mix2: &[f32]) {
+        // the background, through a Tiles settings value that carries only the background
+        let bg = tiles::Settings { bg: s.bg, bg_colors: s.bg_colors.clone(), bg_image: s.bg_image.clone(), bg_dim: s.bg_dim, ..tiles::Settings::default() };
+        self.bg.paint_background(fb, &bg, env);
+        let (ax, ay, aw, ah) = area;
+        let inset = (ah as f32 * 0.03).clamp(6.0, 16.0);
+        let rect = (inset, inset, aw as f32 - 2.0 * inset, ah as f32 - 2.0 * inset);
+        if rect.2 < 120.0 || rect.3 < 80.0 {
+            return;
+        }
+        let now = Local::now();
+        let hw = lhm::current();
+        let secs = env.secs.unwrap_or_else(|| self.started.elapsed().as_secs_f64());
+        let ram_pct = if data.total_mb > 0 { data.used_mb as f32 * 100.0 / data.total_mb as f32 } else { 0.0 };
+        let sampled: [(&'static str, Option<f32>); 9] = [
+            ("cpu_temp", data.cpu_temp),
+            ("cpu_pct", Some(data.cpu_pct)),
+            ("gpu_temp", data.gpu_temp.map(|t| t as f32)),
+            ("gpu_pct", data.gpu_pct),
+            ("ram", Some(ram_pct)),
+            ("fan", hw.cpu_fan.or(hw.case_fan).or(hw.pump).or(hw.gpu_fan).map(|v| v as f32)),
+            ("net", Some(data.net_kb.0 as f32)),
+            ("disk", Some(data.disk_mb.0 as f32)),
+            ("fps", data.fps.map(|f| f as f32)),
+        ];
+        let keep = s.history as usize;
+        if env.secs.is_some() {
+            self.hist.fake(keep.min(90), &sampled);
+        } else {
+            self.hist.sample(secs, keep, &sampled);
+        }
+        let mk = |k: PKind| panel(k, data, &hw, s, ts, &now);
+        let (kinds_flat, clock_panel): (Vec<PKind>, Option<Panel>) = match style {
+            Style::Deck => (s.deck.clone(), None),
+            Style::Cards => (s.cards.iter().flatten().copied().collect(), None),
+            Style::Orbit => (s.orbit.clone(), s.orbit_clock.then(|| mk(PKind::Clock))),
+            Style::Console => (s.console.clone(), s.console_bar.then(|| mk(PKind::Clock))),
+        };
+        let focus = if style == Style::Console { self.pick_focus(&kinds_flat, data, ram_pct, s, secs) } else { None };
+        let panels: Vec<Panel> = kinds_flat.iter().map(|k| mk(*k)).collect();
+        let mut spectrum_hasher = std::collections::hash_map::DefaultHasher::new();
+        for value in spectrum_left.iter().chain(spectrum_right).chain(spectrum_mix).chain(peaks_left).chain(peaks_right).chain(peaks_mix) {
+            (((*value).clamp(0.0, 1.0) * 255.0).round() as u8).hash(&mut spectrum_hasher);
+        }
+        let spectrum_revision = spectrum_hasher.finish();
+        let sig = format!("{style:?}|{s:?}|{area:?}|{panels:?}|{clock_panel:?}|{}|{:?}|{focus:?}|{spectrum_revision}", self.hist.rev, color_mode);
+        if sig != self.sig {
+            if self.layer.w != aw as usize || self.layer.h != ah as usize {
+                self.layer = Layer::new(aw, ah);
+            } else {
+                self.layer.clear();
+            }
+            let text = text_color(s);
+            let ctx = Ctx { s, hist: &self.hist, text, color_mode };
+            let mut painter = Painter { layer: &mut self.layer, font: s.font };
+            match style {
+                Style::Deck => draw_deck(&mut painter, &ctx, &panels, rect),
+                Style::Cards => {
+                    let mut it = panels.iter().cloned();
+                    let grouped: Vec<Vec<Panel>> = s.cards.iter().map(|col| col.iter().filter_map(|_| it.next()).collect()).collect();
+                    draw_cards(&mut painter, &ctx, &s.cards, &grouped, rect, spectrum_left, spectrum_right, spectrum_mix, spectrum_mix2, peaks_left, peaks_right, peaks_mix, peaks_mix2);
+                }
+                Style::Orbit => draw_orbit(&mut painter, &ctx, &panels, clock_panel.as_ref(), rect),
+                Style::Console => draw_console(&mut painter, &ctx, &panels, clock_panel.as_ref(), focus, rect),
+            }
+            self.sig = sig;
+            self.redraws += 1;
+        }
+        self.layer.composite_onto(fb, ax, ay);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse_cfg(txt: &str) -> anyhow::Result<Settings> {
+        parse(&ConfigFile::parse(txt).unwrap())
+    }
+
+    #[test]
+    fn options_parse_and_are_checked() {
+        let d = parse_cfg("").unwrap();
+        assert_eq!(d, Settings::default());
+        let s = parse_cfg("deck = cpu, fans, clock\ncards = clock | cpu, gpu | music\norbit = gpu, ram\norbit_clock = false\ndash_colors = #FF0000, #00FF00\ndash_history = 120\ndash_graph = false\n").unwrap();
+        assert_eq!(s.deck, vec![PKind::Cpu, PKind::Fans, PKind::Clock]);
+        assert_eq!(s.cards, vec![vec![PKind::Clock], vec![PKind::Cpu, PKind::Gpu], vec![PKind::Music]]);
+        assert_eq!(s.orbit, vec![PKind::Gpu, PKind::Ram]);
+        assert!(!s.orbit_clock && !s.graph);
+        assert_eq!((s.colors.len(), s.history), (2, 120));
+        assert!(parse_cfg("deck = cpu, tv\n").is_err());
+        assert!(parse_cfg("deck = \n").is_err());
+        assert!(parse_cfg("cards = a | b\n").is_err());
+        let spectrum = parse_cfg("cards = cpu | spectrum\ncards_spectrum_channel = left\ncards_spectrum_style = led\n").unwrap();
+        assert_eq!(spectrum.cards[1], vec![PKind::Spectrum]);
+        let selected_audio = parse_cfg("cards_spectrum_source = input|001122|\n").unwrap();
+        assert_eq!(selected_audio.cards_spectrum_source, "input|001122|");
+        assert!(parse_cfg("cards_spectrum_source = microphone|001122|\n").is_err());
+        let channel_cards = parse_cfg("cards = spectrum_l | spectrum_r | spectrum_mix\n").unwrap();
+        assert_eq!(channel_cards.cards, vec![vec![PKind::SpectrumLeft], vec![PKind::SpectrumRight], vec![PKind::SpectrumMix]]);
+        assert_eq!(spectrum.cards_spectrum_channel, SpectrumCardChannel::Left);
+        assert_eq!(spectrum.cards_spectrum_style, SpectrumCardStyle::Led);
+        assert!(parse_cfg("dash_history = 5\n").is_err());
+        assert!(parse_cfg("dash_palette = nonsense\n").is_err());
+        assert!(parse_cfg("dash_bg = image\n").is_err());
+        assert_eq!(parse_cfg("dash_palette = ocean\n").unwrap().colors.len(), 6);
+        let l = parse_cfg("dash_theme = light\ndash_plate_color = #F0F0F0\ndash_plate = 30\ncards_opacity = 40\n").unwrap();
+        assert_eq!((l.theme, l.plate_color, l.plate, l.cards_opacity), (Theme::Light, Some((0xF0, 0xF0, 0xF0)), Some(30), 40));
+        assert_eq!(Settings::default().plate, None);
+        assert!(parse_cfg("dash_theme = grey\n").is_err());
+        assert!(parse_cfg("cards_opacity = 101\n").is_err());
+        assert!(parse_cfg("dash_plate_color = default\n").is_err());
+        let c = parse_cfg("console = gpu, cpu, clock\nconsole_focus = load\nconsole_interval = 10\nconsole_bar = false\n").unwrap();
+        assert_eq!(c.console, vec![PKind::Gpu, PKind::Cpu, PKind::Clock]);
+        assert_eq!((c.console_focus, c.console_interval, c.console_bar), (Focus::Load, 10, false));
+        assert_eq!(parse_cfg("console_focus = none\n").unwrap().console_focus, Focus::None);
+        assert!(parse_cfg("console_focus = sometimes\n").is_err());
+        assert!(parse_cfg("console_interval = 1\n").is_err());
+        assert!(parse_cfg("console = cpu, gpu, ram, fans, net, disk, music, weather\n").is_err());
+        assert_eq!(Style::from_layout("console"), Some(Style::Console));
+    }
+
+    #[test]
+    fn the_console_focus_rotates_follows_the_load_or_stays_off() {
+        let kinds = [PKind::Cpu, PKind::Gpu, PKind::Ram, PKind::Clock];
+        let mut d = data();
+        d.cpu_pct = 10.0;
+        d.gpu_pct = Some(20.0);
+        let mut screen = DashScreen::new();
+        let mut s = parse_cfg("console_interval = 5\n").unwrap();
+        // rotate: one tile after the other, back to the first
+        let picks: Vec<_> = [0.0, 4.9, 5.0, 10.0, 15.0, 19.9, 20.0].iter().map(|t| screen.pick_focus(&kinds, &d, 30.0, &s, *t)).collect();
+        assert_eq!(picks, vec![Some(0), Some(0), Some(1), Some(2), Some(3), Some(3), Some(0)]);
+        // none: no focus at all
+        s.console_focus = Focus::None;
+        assert_eq!(screen.pick_focus(&kinds, &d, 30.0, &s, 7.0), None);
+        // load: the busiest, but it does not flicker between two close ones
+        s.console_focus = Focus::Load;
+        let mut screen = DashScreen::new();
+        assert_eq!(screen.pick_focus(&kinds, &d, 30.0, &s, 0.0), Some(2)); // RAM 30 %
+        d.gpu_pct = Some(35.0);
+        assert_eq!(screen.pick_focus(&kinds, &d, 30.0, &s, 10.0), Some(2)); // only 5 points ahead
+        d.gpu_pct = Some(90.0);
+        assert_eq!(screen.pick_focus(&kinds, &d, 30.0, &s, 11.0), Some(1)); // a clear lead: it moves
+        d.cpu_pct = 100.0;
+        assert_eq!(screen.pick_focus(&kinds, &d, 30.0, &s, 12.0), Some(1)); // but not again within 3 seconds
+        assert_eq!(screen.pick_focus(&kinds, &d, 30.0, &s, 15.0), Some(0));
+    }
+
+    #[test]
+    fn history_takes_one_sample_a_second_and_keeps_the_last_ones() {
+        let mut h = History::new();
+        for i in 0..10 {
+            h.sample(i as f64 * 0.4, 5, &[("a", Some(i as f32))]);
+        }
+        // 0.0, 1.2, 2.0(+0.8), ... : about one per second
+        let a = h.get("a");
+        assert!(a.len() <= 5 && a.len() >= 3, "{a:?}");
+        assert!(a.windows(2).all(|w| w[0] < w[1]));
+    }
+
+    fn data() -> WidgetData {
+        WidgetData {
+            cpu_pct: 37.0, cpu_temp: Some(64.0), cpu_power: Some(88.0), cpu_mhz: Some(4900),
+            cpu_core_usages: Vec::new(),
+            cpu_physical_cores: None,
+            gpu_pct: Some(83.0), gpu_temp: Some(71), gpu_hotspot: None, gpu_power: Some(245), fps: Some(144),
+            used_mb: 18200, total_mb: 32768, net_kb: (2300.0, 120.0), disk_mb: (35.2, 1.4),
+            now_playing: Some("Artist - A very long song title that has to be cut with dots".into()),
+            weather: Some(crate::weather::WeatherSnapshot {
+                temp_c: 21.0, humidity: Some(55), code: 61,
+                icon: weather_icon::WeatherIcon::Rain, city: Some("Milano".into()), forecast: Vec::new(),
+            }),
+            ticker: Vec::new(),
+        }
+    }
+
+    fn painted(fb: &Framebuffer) -> usize {
+        fb.as_bytes().chunks_exact(3).filter(|p| p[0] != 8 || p[1] != 8 || p[2] != 16).count()
+    }
+
+    #[test]
+    fn every_style_draws_on_every_panel_with_and_without_readings() {
+        let eff = effect::Settings::default();
+        let env = Env { fps: 30.0, ffmpeg: None, effect: &eff, secs: Some(0.0) };
+        let ts = tiles::Settings::default();
+        let all = "cpu, gpu, ram, fans, net";
+        let mut s = parse_cfg(&format!("deck = {all}\norbit = cpu, gpu, ram, fans\ncards = clock | cpu, gpu, ram | fans, net, disk | weather, music\nconsole = cpu, gpu, ram, fans, net, disk, music\n")).unwrap();
+        for (font, theme) in [(FontStyle::Smooth, Theme::Dark), (FontStyle::Pixel, Theme::Light), (FontStyle::Smooth, Theme::Light)] {
+            s.font = font;
+            s.theme = theme;
+            for (w, h) in [(1920u32, 462u32), (462, 1920), (1280, 480), (480, 480), (800, 600)] {
+                for style in [Style::Deck, Style::Cards, Style::Orbit, Style::Console] {
+                    for lhm_on in [false, true] {
+                        lhm::set_current(if lhm_on { lhm::Readings::sample() } else { lhm::Readings::default() });
+                        for full in [true, false] {
+                            let mut d = data();
+                            if !full {
+                                d.cpu_temp = None;
+                                d.cpu_power = None;
+                                d.cpu_mhz = None;
+                                d.gpu_pct = None;
+                                d.gpu_temp = None;
+                                d.gpu_power = None;
+                                d.weather = None;
+                                d.now_playing = None;
+                            }
+                            let mut fb = Framebuffer::new(trofeo_lcd::Resolution::new(w, h));
+                            fb.clear(8, 8, 16);
+                            let mut screen = DashScreen::new();
+                            screen.draw(&mut fb, (0, 0, w, h), style, &d, ColorMode::Default, &s, &ts, &env, &[], &[], &[], &[]);
+                            assert!(painted(&fb) > (w * h / 20) as usize, "{style:?} {w}x{h} {font:?} nothing drawn");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_console_stacks_its_tiles_on_a_portrait_panel() {
+        let eff = effect::Settings::default();
+        let env = Env { fps: 30.0, ffmpeg: None, effect: &eff, secs: Some(0.0) };
+        let ts = tiles::Settings::default();
+        let s = parse_cfg("console = cpu, gpu, ram, fans, net, disk, music\n").unwrap();
+        for focus in ["rotate", "none"] {
+            let mut s = s.clone();
+            s.console_focus = Focus::parse(focus).unwrap();
+            let (w, h) = (462u32, 1920u32);
+            let mut fb = Framebuffer::new(trofeo_lcd::Resolution::new(w, h));
+            fb.clear(8, 8, 16);
+            DashScreen::new().draw(&mut fb, (0, 0, w, h), Style::Console, &data(), ColorMode::Default, &s, &ts, &env, &[], &[], &[], &[]);
+            // seven tiles in a column: every seventh of the height has something in it, and the
+            // tiles are as wide as the panel (side by side they would be a few pixels wide)
+            let b = fb.as_bytes();
+            for k in 0..7usize {
+                let rows = (k * h as usize / 7)..((k + 1) * h as usize / 7);
+                let n = rows.map(|y| b[y * w as usize * 3..(y + 1) * w as usize * 3].chunks_exact(3).filter(|p| p[0] != 8 || p[1] != 8 || p[2] != 16).count()).sum::<usize>();
+                assert!(n > (w as usize * h as usize / 7) / 6, "{focus}: nothing in slice {k}");
+            }
+        }
+    }
+
+    #[test]
+    fn deck_cards_and_orbit_stack_their_parts_on_a_portrait_panel() {
+        let eff = effect::Settings::default();
+        let env = Env { fps: 30.0, ffmpeg: None, effect: &eff, secs: Some(0.0) };
+        let ts = tiles::Settings::default();
+        let s = parse_cfg("deck = cpu, gpu, ram, clock\norbit = cpu, gpu, ram\n").unwrap();
+        let (w, h) = (462u32, 1920u32);
+        for style in [Style::Deck, Style::Cards, Style::Orbit] {
+            let mut fb = Framebuffer::new(trofeo_lcd::Resolution::new(w, h));
+            fb.clear(8, 8, 16);
+            DashScreen::new().draw(&mut fb, (0, 0, w, h), style, &data(), ColorMode::Default, &s, &ts, &env, &[], &[], &[], &[]);
+            // side by side the parts would be a few pixels wide and the lower part of the panel
+            // empty: every third of the height must hold real content (text, arcs, graphs)
+            let b = fb.as_bytes();
+            for k in 0..3usize {
+                let rows = (k * h as usize / 3)..((k + 1) * h as usize / 3);
+                let bright = rows.map(|y| b[y * w as usize * 3..(y + 1) * w as usize * 3].chunks_exact(3).filter(|p| p[0] as u32 + p[1] as u32 + p[2] as u32 > 450).count()).sum::<usize>();
+                assert!(bright > 1500, "{style:?}: only {bright} bright pixels in third {k}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_plate_follows_the_theme_the_colour_and_the_opacity() {
+        let eff = effect::Settings::default();
+        let env = Env { fps: 30.0, ffmpeg: None, effect: &eff, secs: Some(0.0) };
+        let ts = tiles::Settings::default();
+        let at = |s: &Settings, style| {
+            let mut fb = Framebuffer::new(trofeo_lcd::Resolution::new(1920, 462));
+            fb.clear(20, 20, 20);
+            DashScreen::new().draw(&mut fb, (0, 0, 1920, 462), style, &data(), ColorMode::Default, s, &ts, &env, &[], &[], &[], &[]);
+            let i = (400 * 1920 + 1500) * 3;
+            let px = [fb.as_bytes()[i], fb.as_bytes()[i + 1], fb.as_bytes()[i + 2]];
+            px
+        };
+        let dark = at(&Settings::default(), Style::Deck);
+        let light = at(&Settings { theme: Theme::Light, ..Settings::default() }, Style::Deck);
+        assert!(dark[0] < 30 && light[0] > 200, "{dark:?} {light:?}");
+        let tint = at(&Settings { plate_color: Some((200, 0, 0)), plate: Some(100), ..Settings::default() }, Style::Orbit);
+        assert!(tint[0] > 150 && tint[1] < 40, "{tint:?}");
+        let none = at(&Settings { plate: Some(0), ..Settings::default() }, Style::Deck);
+        assert_eq!(none, [20, 20, 20]);
+        assert_eq!(text_color(&Settings::default()), (255, 255, 255));
+        assert!(text_color(&Settings { theme: Theme::Light, ..Settings::default() }).0 < 60);
+        // see-through cards let the background show
+        let solid = at(&Settings::default(), Style::Cards);
+        let glass = at(&Settings { cards_opacity: 20, ..Settings::default() }, Style::Cards);
+        assert!(glass[0] < solid[0] || glass[1] < solid[1] || glass[2] < solid[2], "{solid:?} {glass:?}");
+    }
+
+    #[test]
+    fn the_layer_is_redrawn_only_when_something_changes() {
+        let eff = effect::Settings::default();
+        let env = Env { fps: 30.0, ffmpeg: None, effect: &eff, secs: Some(0.0) };
+        let (s, ts) = (Settings::default(), tiles::Settings::default());
+        let mut fb = Framebuffer::new(trofeo_lcd::Resolution::new(1920, 462));
+        let mut screen = DashScreen::new();
+        let mut d = data();
+        for _ in 0..4 {
+            screen.draw(&mut fb, (0, 0, 1920, 462), Style::Deck, &d, ColorMode::Default, &s, &ts, &env, &[], &[], &[], &[]);
+        }
+        assert_eq!(screen.redraws, 1);
+        d.cpu_temp = Some(65.0);
+        screen.draw(&mut fb, (0, 0, 1920, 462), Style::Deck, &d, ColorMode::Default, &s, &ts, &env, &[], &[], &[], &[]);
+        assert_eq!(screen.redraws, 2);
+        screen.draw(&mut fb, (0, 0, 1920, 462), Style::Orbit, &d, ColorMode::Default, &s, &ts, &env, &[], &[], &[], &[]);
+        assert_eq!(screen.redraws, 3, "another style is another picture");
+    }
+
+    #[test]
+    fn the_gpu_panel_uses_hotspot_as_hero_and_keeps_load_power_below() {
+        let (s, ts) = (Settings::default(), tiles::Settings::default());
+        let now = Local::now();
+        let hw = lhm::Readings::default();
+        let mut d = data();
+        d.gpu_hotspot = Some(79);
+        d.gpu_pct = Some(46.0);
+        for power in [Some(142), None] {
+            d.gpu_power = power;
+            let p = panel(PKind::Gpu, &d, &hw, &s, &ts, &now);
+            assert_eq!((p.hero.as_str(), p.unit.as_str()), ("79", "°C"));
+            assert_eq!(p.stats.first().map(|x| (x.label.as_str(), x.value.as_str())), Some(("LOAD", "46")));
+            assert_eq!(p.stats.get(1).map(|x| x.label.as_str()), power.map(|_| "POWER"));
+            assert_eq!(p.rings.iter().any(|r| r.label == "POWER"), power.is_some());
+            assert!(p.stats.iter().all(|x| x.label != "HOTSPOT"));
+        }
+        d.gpu_hotspot = None;
+        d.gpu_temp = Some(58);
+        let p = panel(PKind::Gpu, &d, &hw, &s, &ts, &now);
+        assert_eq!((p.hero.as_str(), p.unit.as_str()), ("58", "°C"));
+    }
+
+    #[test]
+    fn the_fps_panel_shows_the_game_and_is_listed_in_every_dash_layout() {
+        let (s, ts) = (Settings::default(), tiles::Settings::default());
+        let now = Local::now();
+        let hw = lhm::Readings::sample();
+        let mut d = data();
+        d.fps = Some(120);
+        let p = panel(PKind::Fps, &d, &hw, &s, &ts, &now);
+        assert_eq!((p.title.as_str(), p.hero.as_str()), ("FPS", "120"));
+        assert!(p.stats.iter().any(|x| x.label == "FRAME" && x.value == "8.3"));
+        assert_eq!(p.series.map(|x| x.0), Some("fps"));
+        d.fps = None;
+        let p = panel(PKind::Fps, &d, &hw, &s, &ts, &now);
+        assert_eq!((p.hero.as_str(), p.sub.as_str()), ("--", "no game"));
+        let c = parse_cfg("deck = cpu, fps\ncards = cpu | fps, gpu\norbit = gpu, fps\nconsole = fps, cpu\n").unwrap();
+        assert_eq!(c.deck, vec![PKind::Cpu, PKind::Fps]);
+        assert_eq!(c.cards, vec![vec![PKind::Cpu], vec![PKind::Fps, PKind::Gpu]]);
+        assert_eq!(c.orbit, vec![PKind::Gpu, PKind::Fps]);
+        assert_eq!(c.console, vec![PKind::Fps, PKind::Cpu]);
+        assert_eq!(PKind::parse("Framerate"), Some(PKind::Fps));
+    }
+
+    #[test]
+    fn spectrum_l_r_and_mix_are_available_as_independent_cards() {
+        let c = parse_cfg("cards = spectrum, spectrum_l, spectrum_r, spectrum_mix\n").unwrap();
+        assert_eq!(c.cards, vec![vec![PKind::Spectrum, PKind::SpectrumLeft, PKind::SpectrumRight, PKind::SpectrumMix]]);
+        assert_eq!(PKind::parse("spectrum_l"), Some(PKind::SpectrumLeft));
+        assert_eq!(PKind::parse("spectrum_r"), Some(PKind::SpectrumRight));
+        assert_eq!(PKind::parse("spectrum_mix"), Some(PKind::SpectrumMix));
+        assert_eq!(PKind::parse("spectrum_mix_2"), Some(PKind::SpectrumMix2));
+        for name in ["drives", "spectrum_l", "spectrum_r", "spectrum_mix", "spectrum_mix_2"] {
+            assert!(crate::schema::PANEL_KINDS.iter().any(|(kind, _, _)| *kind == name), "{name} missing from Cards editor menu");
+        }
+        assert_eq!(PKind::parse("drives"), Some(PKind::Drives));
+    }
+
+    #[test]
+    fn the_panels_carry_the_fan_readings() {
+        let (s, ts) = (Settings::default(), tiles::Settings::default());
+        let now = Local::now();
+        let hw = lhm::Readings::sample();
+        let p = panel(PKind::Cpu, &data(), &hw, &s, &ts, &now);
+        assert!(p.stats.iter().any(|x| x.label == "FAN" && x.value == "1240"));
+        let none = panel(PKind::Cpu, &data(), &lhm::Readings::default(), &s, &ts, &now);
+        assert!(none.stats.iter().all(|x| x.label != "FAN"));
+        let f = panel(PKind::Fans, &data(), &hw, &s, &ts, &now);
+        assert_eq!((f.hero.as_str(), f.rings.len()), ("1240", 4));
+        assert_eq!(panel(PKind::Fans, &data(), &lhm::Readings::default(), &s, &ts, &now).hero, "--");
+    }
+
+    #[test]
+    fn the_big_number_is_the_temperature_or_the_load() {
+        let ts = tiles::Settings::default();
+        let now = Local::now();
+        let hw = lhm::Readings::sample();
+        let temp = Settings::default();
+        let load = parse_cfg("dash_hero = load\n").unwrap();
+        assert!(load.hero_load && !temp.hero_load);
+        assert!(parse_cfg("dash_hero = sideways\n").is_err());
+        for kind in [PKind::Cpu, PKind::Gpu] {
+            let t = panel(kind, &data(), &hw, &temp, &ts, &now);
+            let l = panel(kind, &data(), &hw, &load, &ts, &now);
+            assert!(t.unit.contains('C') && l.unit == "%", "{kind:?}: {} / {}", t.unit, l.unit);
+            // the other reading becomes a small one
+            assert_eq!(t.stats[0].label, "LOAD", "{kind:?}");
+            assert_eq!(l.stats[0].label, "TEMP", "{kind:?}");
+            // the graph follows the big number
+            assert_ne!(t.series, l.series);
+        }
+        // no temperature: the load is the big number whatever is asked
+        let mut d = data();
+        d.cpu_temp = None;
+        d.gpu_temp = None;
+        for kind in [PKind::Cpu, PKind::Gpu] {
+            assert_eq!(panel(kind, &d, &hw, &temp, &ts, &now).unit, "%");
+        }
+    }
+
+    #[test]
+    fn the_cards_show_the_fan_speed_in_the_header_when_asked() {
+        let eff = effect::Settings::default();
+        let env = Env { fps: 30.0, ffmpeg: None, effect: &eff, secs: Some(0.0) };
+        let ts = tiles::Settings::default();
+        let draw = |s: &Settings, hw: lhm::Readings| {
+            let mut fb = Framebuffer::new(trofeo_lcd::Resolution::new(480, 480));
+            fb.clear(8, 8, 16);
+            lhm::set_current(hw);
+            DashScreen::new().draw(&mut fb, (0, 0, 480, 480), Style::Cards, &data(), ColorMode::Default, s, &ts, &env, &[], &[], &[], &[]);
+            fb.as_bytes().to_vec()
+        };
+        let on = Settings { cards: vec![vec![PKind::Cpu]], cards_fan: true, ..Settings::default() };
+        let off = Settings { cards_fan: false, ..on.clone() };
+        let with = draw(&on, lhm::Readings::sample());
+        assert_ne!(with, draw(&off, lhm::Readings::sample()), "the option changes the card");
+        assert_ne!(with, draw(&on, lhm::Readings::default()), "no reading, no fan text");
+        assert!(parse_cfg("cards_fan = false\n").is_ok_and(|s| !s.cards_fan));
+    }
+
+    #[test]
+    fn the_sparkline_stays_inside_its_box() {
+        let mut l = Layer::new(100, 60);
+        let data: Vec<f32> = (0..80).map(|i| (i as f32 * 0.3).sin() * 5.0 + 50.0).collect();
+        l.spark((10.0, 10.0, 80.0, 40.0), &data, 10.0, (255, 0, 0), 2.0, 100, 255, true);
+        let mut any = false;
+        for y in 0..60usize {
+            for x in 0..100usize {
+                let a = l.px[(y * 100 + x) * 4 + 3];
+                if a > 0 {
+                    any = true;
+                    assert!((6..=94).contains(&x) && (6..=54).contains(&y), "pixel at {x},{y}");
+                }
+            }
+        }
+        assert!(any);
+    }
+}
