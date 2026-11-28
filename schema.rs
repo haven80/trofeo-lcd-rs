@@ -1,0 +1,1359 @@
+//! The table of settings shown by the settings editor (`trofeo_config`): for every key of
+//! `trofeo.conf` its section, a label and a hint in English and Italian, the kind of value
+//! (a switch, a choice, a number in a range, a color, ...) and the default.
+//!
+//! It is plain data. The program's own tests check every value offered here against the
+//! real parsers (see the `schema_*` tests in `main.rs`), so the editor cannot offer a value
+//! the program would refuse.
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Kind {
+    /// `true` / `false`.
+    Bool,
+    /// One of these words.
+    Choice(&'static [&'static str]),
+    /// Several of these words, comma-separated (`all` / `none`, when listed, stand alone).
+    Multi(&'static [&'static str]),
+    Int { min: i64, max: i64 },
+    Float { min: f32, max: f32 },
+    /// A color: a name, `#RRGGBB` or `R,G,B`.
+    Color,
+    /// One or more colors, comma-separated (two or more make a gradient).
+    ColorList,
+    /// `auto`, or one or more colors (the bars of the tiles).
+    BarColor,
+    Text,
+    /// A file.
+    Path,
+    /// A folder.
+    Folder,
+    /// A selectable Windows audio input or output endpoint.
+    AudioSource,
+    /// A single column of tiles (`frame_left` / `frame_right`).
+    TileColumn,
+    /// The `layout` list (name and optionally `:seconds`).
+    Layout,
+    /// The `tiles` arrangement.
+    Tiles,
+    /// A list of panels for `deck`, `orbit` (one line) or `cards` (`|` between columns, `,` stacks).
+    Panels { columns: bool },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Field {
+    pub key: String,
+    /// Id of the section (see [`SECTIONS`]).
+    pub section: &'static str,
+    /// A sub-heading inside the section ("" = none).
+    pub group: &'static str,
+    pub en: String,
+    pub it: String,
+    pub help_en: String,
+    pub help_it: String,
+    pub kind: Kind,
+    /// What applies when the key is not in the file ("" = nothing).
+    pub default: String,
+    /// Defaults that differ by animated background (`background_effect` value -> default).
+    pub style_defaults: &'static [(&'static str, &'static str)],
+    /// Shown only while `key` has one of these values (the effective one: the file's, or the default).
+    pub when: Option<(&'static str, &'static [&'static str])>,
+    /// Changing it needs a restart of `trofeo_lcd`.
+    pub restart: bool,
+}
+
+impl Field {
+    fn new(key: &str, section: &'static str, en: &str, it: &str, kind: Kind) -> Field {
+        Field {
+            key: key.to_string(),
+            section,
+            group: "",
+            en: en.to_string(),
+            it: it.to_string(),
+            help_en: String::new(),
+            help_it: String::new(),
+            kind,
+            default: String::new(),
+            style_defaults: &[],
+            when: None,
+            restart: false,
+        }
+    }
+    fn style_def(mut self, d: &'static [(&'static str, &'static str)]) -> Field {
+        self.style_defaults = d;
+        self
+    }
+    /// What applies when the key is not in the file, given the animated background in use.
+    pub fn default_for(&self, effect: &str) -> String {
+        self.style_defaults.iter().find(|(e, _)| *e == effect).map(|(_, d)| d.to_string()).unwrap_or_else(|| self.default.clone())
+    }
+    fn def(mut self, d: &str) -> Field {
+        self.default = d.to_string();
+        self
+    }
+    fn help(mut self, en: &str, it: &str) -> Field {
+        self.help_en = en.to_string();
+        self.help_it = it.to_string();
+        self
+    }
+    fn when(mut self, key: &'static str, values: &'static [&'static str]) -> Field {
+        self.when = Some((key, values));
+        self
+    }
+    fn restart(mut self) -> Field {
+        self.restart = true;
+        self
+    }
+    fn group(mut self, g: &'static str) -> Field {
+        self.group = g;
+        self
+    }
+}
+
+/// (id, English, Italian), in the order of the editor's list.
+pub const SECTIONS: &[(&str, &str, &str)] = &[
+    ("screen", "Screen", "Schermo"),
+    ("background", "Background", "Sfondo"),
+    ("effect", "Animated background", "Sfondo animato"),
+    ("layouts", "Screens (layouts)", "Schermate (layout)"),
+    ("gaming", "Gaming screen", "Schermata gaming"),
+    ("steam", "Steam cover flow", "Coverflow Steam"),
+    ("tiles", "Tiles", "Tiles"),
+    ("dash", "Deck, Cards, Orbit and Console", "Deck, Cards, Orbit e Console"),
+    ("frame", "Digital frame", "Cornice digitale"),
+    ("lhm", "Fans and sensors (LibreHardwareMonitor)", "Ventole e sensori (LibreHardwareMonitor)"),
+    ("show", "What to show", "Cosa mostrare"),
+    ("look", "Colors and text", "Colori e testo"),
+    ("spectrum", "Spectrum", "Spettro audio"),
+    ("items", "Single items", "Singole voci"),
+    ("music", "Music card", "Scheda musica"),
+    ("game", "Pixel game", "Mini gioco"),
+    ("online", "Weather and news", "Meteo e notizie"),
+    ("profiles", "Profiles", "Profili"),
+    ("builder", "Layout builder", "Costruttore di layout"),
+    ("system", "System", "Sistema"),
+    ("share", "Share your design", "Condividi il tuo design"),
+];
+
+pub const THEME_NAMES: &[&str] = &["none", "midnight", "ocean", "sunset", "forest", "ember", "neon", "matrix", "mono"];
+pub const POSITIONS: &[&str] =
+    &["top-left", "top", "top-right", "center-left", "center", "center-right", "bottom-left", "bottom", "bottom-right"];
+pub const LANGUAGES: &[&str] = &["en", "it", "de", "es", "fr", "pt"];
+pub const EFFECTS: &[&str] = &["none", "plasma", "aurora", "lava", "waves", "matrix", "rain", "aquarium", "sea", "ink", "veil", "network", "globe"];
+pub const EFFECT_PALETTES: &[&str] = &[
+    "pastel", "fluo", "neon", "candy", "sunset", "ocean", "aurora", "fire", "forest", "ice", "mono", "rainbow", "matrix", "amber",
+    "violet", "crimson", "snow", "lagoon", "deep", "tropical", "midnight", "dusk", "ember", "mint", "rose", "slate", "custom", "all",
+];
+pub const SHOW_ITEMS: &[&str] = &[
+    "cpu", "gpu", "uptime", "time", "date", "mem", "net", "disk", "volume", "nowplaying", "weather", "spectrum", "ticker", "clock",
+    "clock_date", "dashboard", "fps",
+];
+pub const HIDE_ITEMS: &[&str] = &[
+    "cpu", "gpu", "uptime", "time", "date", "mem", "net", "disk", "volume", "nowplaying", "weather", "spectrum", "ticker", "clock",
+    "clock_date", "dashboard", "cpu_freq", "cpu_temp", "cpu_power", "gpu_temp", "gpu_hotspot", "gpu_power", "gpu_fan", "gpu_clock", "gpu_fps", "fps",
+    "cpu_fan", "case_fan", "pump",
+];
+pub const SPECTRUM_STYLES: &[&str] = &["bars", "led", "peaks", "area", "mirror", "all"];
+pub const SPECTRUM_PALETTES: &[&str] =
+    &["default", "rainbow", "fire", "ocean", "sunset", "neon", "ice", "matrix", "purple", "custom", "all"];
+pub const MUSIC_BG: &[&str] = &["gradient", "blur", "color", "solid", "none", "effect"];
+pub const MUSIC_STATS: &[&str] = &["cpu", "gpu", "ram", "net", "disk", "time", "uptime", "all", "none"];
+pub const FRAME_STYLES: &[&str] = &["mosaic", "polaroid"];
+pub const FRAME_BG: &[&str] = &["blur", "dark", "global"];
+pub const DASH_PALETTES: &[&str] = &[
+    "default", "pastel", "fluo", "neon", "candy", "sunset", "ocean", "aurora", "fire", "forest", "ice", "mono", "rainbow", "matrix", "amber",
+    "violet", "crimson", "snow", "lagoon", "deep", "tropical", "midnight", "dusk", "ember", "mint", "rose", "slate",
+];
+pub const MUSIC_LAYOUTS: &[&str] = &["classic", "vinyl", "poster", "minimal", "radial", "equalizer", "wave", "cassette", "vu"];
+pub const GAMING_LAYOUTS: &[&str] = &["classic", "arena", "zen", "cockpit", "tactical", "neon", "telemetry", "quest", "arcade"];
+pub const GAMING_BG: &[&str] = &["design", "global", "color", "gradient", "effect", "image"];
+pub const STEAM_BG: &[&str] = &["blur", "global", "color", "gradient", "effect", "image"];
+pub const GAMING_ITEMS: &[&str] = &["cpu", "gpu", "ram", "fans", "net", "disk"];
+pub const GAMING_DETAILS: &[&str] = &["session", "total", "resolution", "memory", "store"];
+pub const TILES_BG: &[&str] = &["global", "color", "gradient", "effect", "image"];
+
+/// The items of the info block with per-item options (`<item>_size`, ...): (key, English, Italian).
+pub const ITEMS: &[(&str, &str, &str)] = &[
+    ("cpu", "CPU", "CPU"),
+    ("gpu", "GPU", "GPU"),
+    ("uptime", "Uptime", "Tempo acceso"),
+    ("time", "Time", "Ora"),
+    ("date", "Date", "Data"),
+    ("mem", "RAM", "RAM"),
+    ("net", "Network", "Rete"),
+    ("disk", "Disk", "Disco"),
+    ("volume", "Volume", "Volume"),
+    ("nowplaying", "Now playing", "Brano in ascolto"),
+    ("weather", "Weather", "Meteo"),
+    ("fps", "FPS (while gaming)", "FPS (mentre giochi)"),
+    ("spectrum", "Spectrum", "Spettro"),
+];
+
+/// The screens of `layout = ...`: (name, English, Italian).
+pub const LAYOUT_NAMES: &[(&str, &str, &str)] = &[
+    ("default", "Standard screen (status, spectrum, big clock)", "Schermata standard (stato, spettro, orologio grande)"),
+    ("default2", "Standard screen with per-item size/position/color", "Standard con dimensione/posizione/colore per voce"),
+    ("cpu-gpu", "CPU and GPU side by side", "CPU e GPU affiancate"),
+    ("temps", "CPU and GPU temperatures, big", "Temperature CPU e GPU, grandi"),
+    ("overview", "CPU, GPU, RAM and clock", "CPU, GPU, RAM e orologio"),
+    ("grid6", "3x2 grid", "Griglia 3x2"),
+    ("clock-center", "Clock in the middle, CPU left, GPU right", "Orologio al centro, CPU a sinistra, GPU a destra"),
+    ("io", "Network, disk and RAM", "Rete, disco e RAM"),
+    ("music", "Current track, big, and clock", "Brano in ascolto, grande, e orologio"),
+    ("gaming", "FPS, GPU and temperatures", "FPS, GPU e temperature"),
+    ("cpu", "CPU only, big", "Solo CPU, grande"),
+    ("gpu", "GPU only, big", "Solo GPU, grande"),
+    ("tiles", "Glass tiles (choose them in the Tiles section)", "Tiles di vetro (si scelgono nella sezione Tiles)"),
+    ("deck", "Instrument columns with graphs (choose them in the Deck, Cards, Orbit and Console section)", "Colonne strumento con grafici (si scelgono nella sezione Deck, Cards, Orbit e Console)"),
+    ("cards", "Colourful cards in a mosaic (see the Deck, Cards, Orbit and Console section)", "Card colorate a mosaico (vedi la sezione Deck, Cards, Orbit e Console)"),
+    ("orbit", "Concentric rings per device (see the Deck, Cards, Orbit and Console section)", "Anelli concentrici per dispositivo (vedi la sezione Deck, Cards, Orbit e Console)"),
+    ("console", "Console: a bar and a row of tiles, one in focus (see the Deck, Cards, Orbit and Console section)", "Console: una barra e una fila di tile, uno in primo piano (vedi la sezione Deck, Cards, Orbit e Console)"),
+    ("steam", "Steam library as a cover flow (see the Steam cover flow section)", "Libreria Steam a coverflow (vedi la sezione Coverflow Steam)"),
+    ("frame", "Digital picture frame (the folder is set in the Digital frame section)", "Cornice digitale (la cartella si sceglie nella sezione Cornice digitale)"),
+    ("weather", "Weather, big", "Meteo, grande"),
+    ("news", "News headlines, scrolling", "Notizie scorrevoli"),
+    ("halo", "Halo: two big rings (CPU, GPU), the clock in the middle, memory below", "Halo: due grandi anelli (CPU, GPU), orologio al centro, memoria sotto"),
+    ("gauges", "Gauges: four dials, load and temperature of CPU and GPU", "Quadranti: quattro indicatori, carico e temperatura di CPU e GPU"),
+    ("terminal", "Terminal: green-on-black readout, one line per device", "Terminale: lettura verde su nero, una riga per dispositivo"),
+    ("horizon", "Horizon: a huge clock and three thin lines of load", "Orizzonte: un orologio enorme e tre sottili linee di carico"),
+    ("ribbon", "Ribbon: clock, song and weather above a ribbon of readings", "Nastro: orologio, brano e meteo sopra un nastro di valori"),
+    ("atelier", "Atelier: ivory and gold, a light clock and three fine rings", "Atelier: avorio e oro, un orologio sottile e tre anelli fini"),
+    ("noir", "Noir: white on black, a huge light clock and four quiet figures", "Noir: bianco su nero, un orologio enorme e sottile e quattro cifre sobrie"),
+    ("pearl", "Pearl: cool and airy, the clock inside a fine ring", "Pearl: fresco e leggero, l'orologio dentro un anello sottile"),
+    ("volt", "Volt: four loud colour blocks with giant figures", "Volt: quattro blocchi di colore con cifre giganti"),
+    ("blaze", "Blaze: CPU in orange and GPU in magenta, giant figures", "Blaze: CPU arancione e GPU magenta, cifre giganti"),
+    ("studio", "Studio: paper and ink, a light spec sheet with one orange accent", "Studio: carta e inchiostro, una scheda tecnica chiara con un accento arancione"),
+    ("board", "Board: an airport departure board, every number on a tile", "Board: un tabellone da aeroporto, ogni numero su una tessera"),
+    ("mineral", "Mineral: dark cards in sage green, a ring and six readings on each", "Mineral: card scure verde salvia, un anello e sei valori su ognuna"),
+    ("cluster", "Cluster: a car instrument cluster, three big dials", "Cluster: un quadro strumenti d'auto, tre grandi quadranti"),
+    ("swiss", "Swiss: a red block with a huge clock, big black figures on a light page", "Swiss: blocco rosso con orologio enorme, grandi cifre nere su pagina chiara"),
+    ("dusk", "Dusk: a sunset gradient, a giant light clock, flowing bars", "Dusk: sfumatura da tramonto, orologio gigante leggero, barre che scorrono"),
+    ("aurora", "Aurora: glass cards on a teal-to-violet gradient, flowing bars", "Aurora: card di vetro su sfumatura teal-viola, barre che scorrono"),
+    ("carbon", "Carbon: matte black with amber lines, four columns, flowing bars", "Carbon: nero opaco con filetti ambra, quattro colonne, barre che scorrono"),
+    ("eclipse", "Eclipse: three concentric rings that shimmer, the clock in the middle", "Eclipse: tre anelli concentrici che brillano, orologio al centro"),
+    ("ledger", "Ledger: a navy ledger with gold lines, one row per device, flowing bars", "Ledger: registro blu con filetti oro, una riga per dispositivo, barre che scorrono"),
+    ("haiku", "Haiku: a huge light clock, lots of space, one line of readings", "Haiku: orologio enorme e leggero, molto spazio, una riga di valori"),
+    ("peach", "Peach: a warm light page with three gradient rings", "Peach: pagina chiara e calda con tre anelli sfumati"),
+];
+
+/// The tiles of `tiles = ...`: (name, English, Italian).
+pub const TILE_KINDS: &[(&str, &str, &str)] = &[
+    ("clock", "Clock", "Orologio"),
+    ("cpu", "CPU load", "Carico CPU"),
+    ("cpu_temp", "CPU temperature", "Temperatura CPU"),
+    ("cpu_watt", "CPU power", "Consumo CPU"),
+    ("gpu", "GPU load", "Carico GPU"),
+    ("gpu_temp", "GPU temperature", "Temperatura GPU"),
+    ("gpu_hotspot", "GPU hot spot", "Hot spot GPU"),
+    ("gpu_watt", "GPU power", "Consumo GPU"),
+    ("ram", "RAM", "RAM"),
+    ("net", "Network", "Rete"),
+    ("disk", "Disk", "Disco"),
+    ("fps", "FPS", "FPS"),
+    ("weather", "Weather", "Meteo"),
+    ("music", "Now playing", "Brano in ascolto"),
+    ("cpu_fan", "CPU fan (LibreHardwareMonitor)", "Ventola CPU (LibreHardwareMonitor)"),
+    ("case_fan", "Case fans (LibreHardwareMonitor)", "Ventole del case (LibreHardwareMonitor)"),
+    ("pump", "Pump / AIO (LibreHardwareMonitor)", "Pompa / AIO (LibreHardwareMonitor)"),
+    ("gpu_fan", "GPU fan", "Ventola GPU"),
+    ("fans", "All the fans in one tile", "Tutte le ventole in un tile"),
+    ("mb_temp", "Motherboard temperature", "Temperatura scheda madre"),
+    ("disk_temp", "Disk temperature", "Temperatura disco"),
+];
+
+/// What a deck column / card / orbit cluster can show: (name, English, Italian).
+pub const PANEL_KINDS: &[(&str, &str, &str)] = &[
+    ("cpu", "CPU", "CPU"),
+    ("gpu", "GPU", "GPU"),
+    ("ram", "RAM", "RAM"),
+    ("fans", "Fans (LibreHardwareMonitor)", "Ventole (LibreHardwareMonitor)"),
+    ("net", "Network", "Rete"),
+    ("disk", "Disk", "Disco"),
+    ("drives", "Drives (storage capacity)", "Unidades (capacidade de armazenamento)"),
+    ("clock", "Clock, weather and music", "Orologio, meteo e musica"),
+    ("weather", "Weather", "Meteo"),
+    ("music", "Now playing", "Brano in ascolto"),
+    ("fps", "FPS (while gaming)", "FPS (mentre giochi)"),
+    ("spectrum", "Spectrum", "Spettro audio"),
+    ("spectrum_l", "Spectrum L", "Spettro L"),
+    ("spectrum_r", "Spectrum R", "Spettro R"),
+    ("spectrum_mix", "Spectrum MIX", "Spettro MIX"),
+    ("spectrum_mix_2", "Spectrum MIX 2", "Spettro MIX 2"),
+    ("discord", "Discord Voice (current room)", "Discord Voice (stanza attuale)"),
+];
+
+/// Named colors offered as swatches (all of them are understood by the program).
+pub const COLOR_NAMES: &[(&str, (u8, u8, u8))] = &[
+    ("black", (0x00, 0x00, 0x00)),
+    ("white", (0xFF, 0xFF, 0xFF)),
+    ("gray", (0x80, 0x80, 0x80)),
+    ("lightgray", (0xD3, 0xD3, 0xD3)),
+    ("darkgray", (0x40, 0x40, 0x40)),
+    ("silver", (0xC0, 0xC0, 0xC0)),
+    ("red", (0xFF, 0x00, 0x00)),
+    ("darkred", (0x80, 0x00, 0x00)),
+    ("orange", (0xFF, 0xA5, 0x00)),
+    ("gold", (0xFF, 0xD7, 0x00)),
+    ("yellow", (0xFF, 0xFF, 0x00)),
+    ("green", (0x00, 0xFF, 0x00)),
+    ("lightgreen", (0x90, 0xEE, 0x90)),
+    ("darkgreen", (0x00, 0x64, 0x00)),
+    ("olive", (0x80, 0x80, 0x00)),
+    ("teal", (0x00, 0x80, 0x80)),
+    ("turquoise", (0x40, 0xE0, 0xD0)),
+    ("cyan", (0x00, 0xFF, 0xFF)),
+    ("skyblue", (0x87, 0xCE, 0xEB)),
+    ("lightblue", (0xAD, 0xD8, 0xE6)),
+    ("blue", (0x00, 0x00, 0xFF)),
+    ("navy", (0x00, 0x00, 0x80)),
+    ("indigo", (0x4B, 0x00, 0x82)),
+    ("purple", (0x80, 0x00, 0x80)),
+    ("violet", (0xEE, 0x82, 0xEE)),
+    ("lavender", (0xE6, 0xE6, 0xFA)),
+    ("magenta", (0xFF, 0x00, 0xFF)),
+    ("hotpink", (0xFF, 0x69, 0xB4)),
+    ("pink", (0xFF, 0xC0, 0xCB)),
+    ("salmon", (0xFA, 0x80, 0x72)),
+    ("coral", (0xFF, 0x7F, 0x50)),
+    ("brown", (0x8B, 0x45, 0x13)),
+    ("beige", (0xF5, 0xF5, 0xDC)),
+];
+
+/// `#RRGGBB` (or `RRGGBB`) to a color.
+pub fn parse_hex(s: &str) -> Option<(u8, u8, u8)> {
+    let h = s.trim().trim_start_matches('#');
+    if h.len() != 6 || !h.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    let b = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).ok();
+    Some((b(0)?, b(2)?, b(4)?))
+}
+
+/// A color as the config file writes it: a name from [`COLOR_NAMES`], `#RRGGBB` or `R,G,B`.
+pub fn parse_color(s: &str) -> Option<(u8, u8, u8)> {
+    let t = s.trim();
+    if let Some((_, c)) = COLOR_NAMES.iter().find(|(n, _)| n.eq_ignore_ascii_case(t)) {
+        return Some(*c);
+    }
+    if let Some(c) = parse_hex(t) {
+        return Some(c);
+    }
+    let parts: Vec<&str> = t.split(',').collect();
+    if parts.len() == 3 {
+        let v: Vec<u8> = parts.iter().filter_map(|p| p.trim().parse().ok()).collect();
+        if v.len() == 3 {
+            return Some((v[0], v[1], v[2]));
+        }
+    }
+    None
+}
+
+pub fn to_hex(c: (u8, u8, u8)) -> String {
+    format!("#{:02X}{:02X}{:02X}", c.0, c.1, c.2)
+}
+
+/// Splits `a, b, c` into trimmed non-empty words.
+pub fn split_list(s: &str) -> Vec<String> {
+    s.split(',').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect()
+}
+
+// ------------------------------------------------------------------------ the fields
+
+fn int(min: i64, max: i64) -> Kind {
+    Kind::Int { min, max }
+}
+
+/// Every setting of the editor, in the order they are shown.
+pub fn fields() -> Vec<Field> {
+    use Kind::*;
+    let on_effect: &[&str] = &["plasma", "aurora", "lava", "waves", "matrix", "rain", "aquarium", "sea", "ink", "veil", "network", "globe"];
+    let themed: &[&str] = &["matrix", "rain", "aquarium", "sea", "ink", "network", "globe"];
+    let music_on: &[&str] = &["true"];
+    let mut v: Vec<Field> = Vec::new();
+    let mut add = |f: Field| v.push(f);
+
+    // ---- screen
+    add(Field::new("orientation", "screen", "Orientation", "Orientamento", Choice(&["landscape", "portrait"]))
+        .def("landscape")
+        .help("landscape = horizontal; portrait = the display is mounted vertically", "landscape = orizzontale; portrait = display montato in verticale"));
+    add(Field::new("flip", "screen", "Rotate 180°", "Ruota di 180°", Bool)
+        .def("false")
+        .help("If the picture comes out upside down", "Se l'immagine esce capovolta"));
+    add(Field::new("panel", "screen", "Display model", "Modello di display", Choice(&["trofeo-9.16", "trofeo-11.3", "trofeo-6.86"]))
+        .help("Unset = recognised automatically when the display is connected", "Non impostato = riconosciuto in automatico quando il display è collegato"));
+    add(Field::new("panel_size", "screen", "Own picture size", "Dimensione immagine personalizzata", Text)
+        .help("Only for unusual panels, e.g. 1920x462", "Solo per pannelli particolari, es. 1920x462"));
+    add(Field::new("hid_mount", "screen", "Mounting of the 6.86 screen", "Montaggio dello schermo 6.86", Choice(&["auto", "0", "90", "180", "270"]))
+        .def("auto")
+        .help(
+            "Trofeo Vision 6.86 (USB 0416:5302): turns the picture by this many degrees for the way the panel is mounted. Use the screen test below (or trofeo_lcd --lcd-test) to find the right value",
+            "Trofeo Vision 6.86 (USB 0416:5302): ruota l'immagine di questi gradi in base al montaggio del pannello. Usa il test dello schermo qui sotto (o trofeo_lcd --lcd-test) per trovare il valore giusto",
+        ));
+    add(Field::new("hid_header", "screen", "Size written for the 6.86", "Dimensione scritta per il 6.86", Choice(&["raster", "panel"]))
+        .def("raster")
+        .help(
+            "JPEG screens of the 0416:5302 family (Trofeo Vision 6.86): the size in the frame header is that of the picture sent (raster) or the panel's own (panel). Changed only if --lcd-test shows a partial picture",
+            "Schermi JPEG della famiglia 0416:5302 (Trofeo Vision 6.86): la dimensione nell'intestazione è quella dell'immagine inviata (raster) o quella del pannello (panel). Da cambiare solo se --lcd-test mostra un'immagine parziale",
+        ));
+    add(Field::new("hid_resend_ms", "screen", "Repeat the picture every (ms, 0 = off)", "Ripeti l'immagine ogni (ms, 0 = spento)", int(0, 1000))
+        .def("0")
+        .help(
+            "Screens of the 0416:5302 family: if the whole screen blinks, dims or goes blank between pictures, keep sending the last picture every this many milliseconds, also while the next one is being drawn (try 1). 0 = off",
+            "Schermi della famiglia 0416:5302: se tutto lo schermo lampeggia, si abbassa di luminosità o si spegne tra un'immagine e l'altra, continua a inviare l'ultima immagine ogni tot millisecondi, anche mentre disegna la prossima (prova 1). 0 = spento",
+        ));
+    add(Field::new("hid_rgb565", "screen", "Pixel order of the small screens", "Ordine dei pixel degli schermi piccoli", Choice(&["auto", "little", "big"]))
+        .def("auto")
+        .help(
+            "Only the small 320x240 screens of the 0416:5302 family (RGB565 pictures; not verified on hardware): the byte order of the pixels. Use the screen test to find it",
+            "Solo gli schermi piccoli 320x240 della famiglia 0416:5302 (immagini RGB565; non verificati su hardware): l'ordine dei byte dei pixel. Usa il test dello schermo per trovarlo",
+        ));
+    add(Field::new("brightness", "screen", "Brightness", "Luminosità", int(0, 100)).def("100"));
+    add(Field::new("night_mode", "screen", "Dim the screen at night", "Abbassa la luminosità di notte", Bool)
+        .def("false")
+        .group("night")
+        .help("Between the two times below the picture is dimmed to the night brightness", "Tra i due orari qui sotto l'immagine viene abbassata alla luminosità notturna"));
+    add(Field::new("night_start", "screen", "Night starts at (HH:MM)", "La notte inizia alle (HH:MM)", Text)
+        .def("23:00")
+        .group("night")
+        .when("night_mode", &["true"]));
+    add(Field::new("night_end", "screen", "Night ends at (HH:MM)", "La notte finisce alle (HH:MM)", Text)
+        .def("07:00")
+        .group("night")
+        .when("night_mode", &["true"])
+        .help("The night may cross midnight (23:00 to 07:00)", "La notte può passare la mezzanotte (dalle 23:00 alle 07:00)"));
+    add(Field::new("night_brightness", "screen", "Night brightness", "Luminosità notturna", int(0, 100))
+        .def("20")
+        .group("night")
+        .when("night_mode", &["true"])
+        .help("Never brighter than the normal brightness", "Mai più alta della luminosità normale"));
+    for (k, en, it, max, hen, hit) in [
+        ("alert_cpu_temp", "Alert: CPU temperature above (°C)", "Avviso: temperatura CPU sopra (°C)", 150, "0 = off", "0 = spento"),
+        ("alert_gpu_temp", "Alert: GPU temperature above (°C)", "Avviso: temperatura GPU sopra (°C)", 150, "0 = off", "0 = spento"),
+        ("alert_cpu_load", "Alert: CPU load above (%)", "Avviso: carico CPU sopra (%)", 100, "0 = off", "0 = spento"),
+        ("alert_gpu_load", "Alert: GPU load above (%)", "Avviso: carico GPU sopra (%)", 100, "0 = off. Games use the GPU fully, so this suits other uses", "0 = spento. I giochi usano la GPU al massimo, quindi serve per altri usi"),
+        ("alert_ram", "Alert: memory used above (%)", "Avviso: memoria usata sopra (%)", 100, "0 = off", "0 = spento"),
+    ] {
+        add(Field::new(k, "screen", en, it, int(0, max)).def("0").group("alert").help(hen, hit));
+    }
+    add(Field::new("alert_delay", "screen", "Alert: seconds above the limit before it shows", "Avviso: secondi sopra il limite prima di mostrarlo", int(0, 600))
+        .def("3")
+        .group("alert")
+        .help("A short spike does not trigger it", "Un picco breve non lo fa scattare"));
+    add(Field::new("alert_color", "screen", "Alert color", "Colore dell'avviso", Color)
+        .group("alert")
+        .help("Default red", "Predefinito rosso"));
+    add(Field::new("profile", "profiles", "Profile in use", "Profilo in uso", Text)
+        .help(
+            "The name of a profile (see below). What the profile says wins over this file. The tray menu, the hotkey and the rules below can change it without touching the file",
+            "Il nome di un profilo (vedi sotto). Quello che dice il profilo prevale su questo file. Il menu della tray, il tasto rapido e le regole qui sotto lo cambiano senza toccare il file",
+        ));
+    add(Field::new("profile_key", "profiles", "Hotkey to go round the profiles", "Tasto rapido per scorrere i profili", Text)
+        .restart()
+        .help(
+            "For example ctrl+alt+p or shift+f9. Empty = none. Needs a restart of trofeo_lcd (Windows)",
+            "Per esempio ctrl+alt+p oppure shift+f9. Vuoto = nessuno. Serve riavviare trofeo_lcd (Windows)",
+        ));
+    add(Field::new("profile_rules", "profiles", "Switch by program", "Cambia in base al programma", Text)
+        .help(
+            "program=profile, comma separated: mygame.exe=gaming, code.exe=work. While that program is in the foreground the profile is used; it goes back 5 seconds after leaving it (Windows)",
+            "programma=profilo, separati da virgola: mygame.exe=gaming, code.exe=work. Finché quel programma è in primo piano si usa il profilo; si torna indietro 5 secondi dopo averlo lasciato (Windows)",
+        ));
+    add(Field::new("language", "screen", "Language of the display", "Lingua del display", Choice(LANGUAGES)).def("en"));
+    for (k, en, it) in [
+        ("margin", "All sides", "Tutti i lati"),
+        ("margin_top", "Top", "Alto"),
+        ("margin_bottom", "Bottom", "Basso"),
+        ("margin_left", "Left", "Sinistra"),
+        ("margin_right", "Right", "Destra"),
+    ] {
+        let max = if k == "margin" { 150 } else { 220 };
+        add(Field::new(k, "screen", en, it, int(0, max)).def("0").group("margins"));
+    }
+
+    // ---- background
+    add(Field::new("background", "background", "Picture, GIF or video", "Immagine, GIF o video", Path)
+        .help("jpg, png, bmp, gif or a video (needs ffmpeg)", "jpg, png, bmp, gif o un video (serve ffmpeg)"));
+    add(Field::new("background_color", "background", "Solid color", "Colore solido", Color)
+        .help("Used when there is no picture and no animated background", "Usato se non ci sono né immagine né sfondo animato"));
+    add(Field::new("background_dim", "background", "Darken the picture", "Scurisci l'immagine", int(0, 100)).def("40"));
+    add(Field::new("background_fit", "background", "Fit", "Adattamento", Choice(&["cover", "stretch", "contain", "original"])).def("cover"));
+    add(Field::new("background_position", "background", "Position", "Posizione", Choice(POSITIONS)).def("center"));
+    add(Field::new("background_offset_x", "background", "Shift right (px)", "Sposta a destra (px)", int(-2000, 2000)).def("0"));
+    add(Field::new("background_offset_y", "background", "Shift down (px)", "Sposta in basso (px)", int(-2000, 2000)).def("0"));
+    add(Field::new("ffmpeg", "background", "Path of ffmpeg", "Percorso di ffmpeg", Path)
+        .help("Only if ffmpeg.exe is not next to the program", "Solo se ffmpeg.exe non è accanto al programma"));
+
+    // ---- animated background
+    add(Field::new("background_effect", "effect", "Effect", "Effetto", Choice(EFFECTS))
+        .def("none")
+        .help("It replaces the picture while on", "Sostituisce l'immagine finché è attivo"));
+    add(Field::new("effect_theme", "effect", "Dark or light", "Scuro o chiaro", Choice(&["dark", "light"]))
+        .def("dark")
+        .when("background_effect", themed)
+        .help("light = a white background (matrix, rain, aquarium, sea, ink, network, globe)", "light = sfondo bianco (matrix, rain, acquario, mare, inchiostro, network, globe)"));
+    add(Field::new("effect_level", "effect", "Water level / number of nodes", "Livello dell'acqua / numero di nodi", int(0, 100))
+        .def("50")
+        .when("background_effect", &["aquarium", "sea", "veil", "network", "globe"])
+        .help("Aquarium and sea: how much of the panel is water. Veil: how many specks of light. Network and globe: how many nodes", "Acquario e mare: quanta parte del pannello è acqua. Veil: quanti puntini di luce. Network e globe: quanti nodi"));
+    add(Field::new("effect_level_source", "effect", "Water level follows", "Il livello segue", Choice(&["none", "cpu", "gpu", "ram"]))
+        .def("none")
+        .when("background_effect", &["aquarium", "sea"])
+        .help("The water rises and falls with the load of the CPU, the graphics card or the RAM (the level above is then not used)", "L'acqua sale e scende con il carico di CPU, scheda video o RAM (il livello sopra non viene usato)"));
+    add(Field::new("effect_reactive", "effect", "Moves with the music", "Si muove con la musica", Bool)
+        .def("false")
+        .when("background_effect", &["aquarium", "sea", "ink", "veil"])
+        .help("Taller waves, more light and more ink with the bass (the frame rate goes up to 15)", "Onde più alte, più luce e più inchiostro con i bassi (i fotogrammi salgono a 15)"));
+    add(Field::new("effect_flip", "effect", "Upside down", "Sottosopra", Bool)
+        .def("false")
+        .when("background_effect", &["aquarium"])
+        .help("The water hangs from the top of the panel; the light and the bubbles go the other way", "L'acqua è appesa in alto; la luce e le bolle vanno nel verso opposto"));
+    add(Field::new("effect_palette", "effect", "Colors", "Colori", Multi(EFFECT_PALETTES))
+        .def("neon")
+        .style_def(&[("matrix", "matrix"), ("rain", "matrix"), ("aquarium", "lagoon"), ("sea", "lagoon"), ("ink", "sunset"), ("veil", "midnight"), ("network", "ice"), ("globe", "ice")])
+        .when("background_effect", on_effect)
+        .help("Several = they rotate. matrix/amber/violet/crimson/snow are for matrix and rain; lagoon/deep/tropical for the aquarium and the sea; network and globe use ice unless you choose", "Più di uno = ruotano. matrix/amber/violet/crimson/snow per matrix e rain; lagoon/deep/tropical per l'acquario; network e globe usano ice se non scegli"));
+    add(Field::new("effect_colors", "effect", "Own colors", "Colori personalizzati", ColorList)
+        .when("background_effect", on_effect)
+        .help("2 or more colors; used when no palette is chosen, or add \"custom\" to the palettes", "2 o più colori; usati se non scegli una palette, oppure aggiungi \"custom\" alle palette"));
+    add(Field::new("effect_speed", "effect", "Speed", "Velocità", int(0, 100)).def("30").when("background_effect", on_effect));
+    add(Field::new("effect_scale", "effect", "Size of the shapes (%)", "Dimensione delle forme (%)", int(25, 400)).def("100").when("background_effect", on_effect));
+    add(Field::new("effect_brightness", "effect", "Brightness", "Luminosità", int(0, 100))
+        .def("40")
+        .style_def(&[("aquarium", "65"), ("sea", "65"), ("ink", "70"), ("veil", "70"), ("network", "70"), ("globe", "70")])
+        .when("background_effect", on_effect)
+        .help("Lower = text easier to read. Unset: 65 for the aquarium and the light variants, 70 for network and globe", "Più basso = testo più leggibile. Non impostato: 65 per l'acquario e le varianti chiare, 70 per network e globe"));
+    add(Field::new("effect_fps", "effect", "Frames per second", "Fotogrammi al secondo", int(1, 30))
+        .def("8")
+        .when("background_effect", on_effect)
+        .help("Lower = lighter on the CPU", "Più basso = più leggero per la CPU"));
+    add(Field::new("effect_palette_interval", "effect", "Seconds per palette", "Secondi per palette", int(5, 3600))
+        .def("60")
+        .when("background_effect", on_effect));
+
+    // ---- layouts
+    add(Field::new("layout", "layouts", "Screens", "Schermate", Layout)
+        .help("One screen, or several that take turns (each can have its own duration)", "Una schermata, oppure più schermate a rotazione (ognuna con la sua durata)"));
+    add(Field::new("layout_interval", "layouts", "Seconds per screen", "Secondi per schermata", int(2, 3600)).def("15"));
+    add(Field::new("layout_spectrum", "layouts", "Spectrum over the panels", "Spettro sopra i pannelli", Bool)
+        .def("false")
+        .help("Show the audio spectrum on top of a panel while music plays", "Mostra lo spettro sopra un pannello mentre suona la musica"));
+    add(Field::new("bar_animation", "layouts", "Moving gradients on the bars and rings of free layouts", "Gradienti in movimento su barre e anelli dei layout liberi", Bool)
+        .def("true")
+        .help("Some screens (free layouts) have bars whose gradient flows; false keeps them still", "Alcune schermate (layout liberi) hanno barre con gradiente che scorre; false le tiene ferme"));
+    add(Field::new("layout_hold_on_music", "layouts", "Stay on the first screen while music plays", "Resta sulla prima schermata mentre suona la musica", Bool).def("false"));
+    add(Field::new("gaming_screen", "gaming", "Switch to the gaming screen by itself", "Passa da solo alla schermata gaming", Bool)
+        .def("true")
+        .group("switch")
+        .help(
+            "When the GPU stays busy the screen changes to the in-game dashboard (FPS, GPU, CPU). Turn it off to keep your own screen (for example a Tiles layout with the FPS) while gaming",
+            "Quando la GPU resta impegnata lo schermo passa al pannello di gioco (FPS, GPU, CPU). Disattivalo per tenere la tua schermata (per esempio un layout Tiles con gli FPS) mentre giochi",
+        ));
+    add(Field::new("gaming_gpu_percent", "gaming", "GPU usage that counts as gaming (%)", "Uso della GPU che conta come gioco (%)", int(1, 100))
+        .def("50")
+        .when("gaming_screen", music_on)
+        .group("switch"));
+    add(Field::new("gaming_delay", "gaming", "Seconds above it before switching", "Secondi sopra la soglia prima di passare", int(0, 60))
+        .def("3")
+        .when("gaming_screen", music_on)
+        .group("switch")
+        .help("A short spike on the desktop (a video, a browser) no longer flashes the gaming screen; 0 = at once", "Un picco breve sul desktop (un video, il browser) non fa più comparire la schermata gaming; 0 = subito"));
+    add(Field::new("gaming_hold", "gaming", "Seconds to stay after the GPU drops", "Secondi di permanenza dopo il calo della GPU", int(0, 120))
+        .def("5")
+        .when("gaming_screen", music_on)
+        .group("switch"));
+    add(Field::new("gaming_layout", "gaming", "Design of the in-game screen", "Grafica della schermata in gioco", Choice(GAMING_LAYOUTS))
+        .def("arena")
+        .group("design")
+        .help(
+            "arena = elegant cards with a big FPS; zen = minimal; cockpit = racing dials; tactical = HUD with brackets; neon = synthwave; telemetry = engineer's charts; quest = RPG panels; arcade = pixel retro; classic = the old big squares",
+            "arena = card eleganti con FPS grandi; zen = minimale; cockpit = quadranti da corsa; tactical = HUD con riquadri; neon = synthwave; telemetry = grafici da ingegnere; quest = pannelli RPG; arcade = retro a pixel; classic = i vecchi quadrati grandi",
+        ));
+    add(Field::new("gaming_items", "gaming", "Readings shown", "Letture mostrate", Multi(GAMING_ITEMS))
+        .def("gpu, cpu, ram")
+        .group("design")
+        .help("Up to four, the first one gets the most room", "Fino a quattro, la prima ha più spazio"));
+    add(Field::new("gaming_hero", "gaming", "Big number of CPU and GPU", "Numero grande di CPU e GPU", Choice(&["load", "temp"]))
+        .def("load")
+        .group("design")
+        .help("load = the usage in big and the temperature small; temp = the opposite", "load = in grande il carico e piccola la temperatura; temp = il contrario"));
+    add(Field::new("gaming_graph", "gaming", "Graph of the FPS", "Grafico degli FPS", Bool).def("true").group("design").help("In the designs that have one", "Nei design che lo prevedono"));
+    add(Field::new("gaming_history", "gaming", "Seconds of history", "Secondi di storico", int(20, 600)).def("60").group("design").when("gaming_graph", &["true"]));
+    add(Field::new("gaming_fps_max", "gaming", "FPS at the end of the gauges", "FPS a fondo scala dei quadranti", int(30, 1000))
+        .def("144")
+        .group("design")
+        .help("Set it to the refresh rate of your monitor", "Imposta la frequenza del tuo monitor"));
+    add(Field::new("gaming_warn_temp", "gaming", "Temperature that turns red (\u{b0}C)", "Temperatura che diventa rossa (\u{b0}C)", int(50, 110)).def("80").group("design"));
+    add(Field::new("gaming_glow", "gaming", "Glow around numbers and lines (%)", "Alone attorno a numeri e linee (%)", int(0, 100)).def("60").group("design"));
+    add(Field::new("gaming_info", "gaming", "Show the game", "Mostra il gioco", Bool)
+        .def("true")
+        .group("game")
+        .help(
+            "The name of the game, found from the program in the foreground and, for Steam games, from your library",
+            "Il nome del gioco, ricavato dal programma in primo piano e, per i giochi Steam, dalla tua libreria",
+        ));
+    add(Field::new("gaming_details", "gaming", "Facts about the game", "Informazioni sul gioco", Multi(GAMING_DETAILS))
+        .def("session, total, resolution")
+        .group("game")
+        .when("gaming_info", &["true"])
+        .help(
+            "session = time since it started; total = hours played (Steam); resolution = size of the game window; memory = RAM used by the game; store = Steam, Epic, GOG, Xbox",
+            "session = tempo dall'avvio; total = ore giocate (Steam); resolution = dimensione della finestra; memory = RAM usata dal gioco; store = Steam, Epic, GOG, Xbox",
+        ));
+    add(Field::new("gaming_cover", "gaming", "Show the cover (Steam)", "Mostra la copertina (Steam)", Bool)
+        .def("true")
+        .group("game")
+        .when("gaming_info", &["true"])
+        .help("Where the design has room for it, for games found in your Steam library", "Dove il design ha spazio, per i giochi trovati nella tua libreria Steam"));
+    add(Field::new("gaming_clock", "gaming", "Clock", "Orologio", Bool).def("true").group("game"));
+    add(Field::new("gaming_palette", "gaming", "Colors from a preset", "Colori da un preset", Choice(DASH_PALETTES))
+        .def("default")
+        .group("look")
+        .help("default = the colors of the design", "default = i colori del design"));
+    add(Field::new("gaming_colors", "gaming", "Own colors", "Colori propri", ColorList).group("look").help("One or more colors, used instead of the design's own", "Uno o più colori, usati al posto di quelli del design"));
+    add(Field::new("gaming_font", "gaming", "Font", "Font", Choice(&["auto", "smooth", "pixel"])).def("auto").group("look").help("auto = the font of the design (pixel for arcade)", "auto = il font del design (pixel per arcade)"));
+    add(Field::new("gaming_text_color", "gaming", "Text color", "Colore del testo", Color).group("look").help("Empty = the design's own", "Vuoto = quello del design"));
+    add(Field::new("gaming_bg", "gaming", "Background", "Sfondo", Choice(GAMING_BG))
+        .def("design")
+        .group("background")
+        .help("design = the gradient of the design; global = the normal background of the program", "design = il gradiente del design; global = lo sfondo normale del programma"));
+    add(Field::new("gaming_bg_color", "gaming", "Color(s)", "Colore/i", ColorList).group("background").when("gaming_bg", &["color", "gradient"]));
+    add(Field::new("gaming_bg_image", "gaming", "Picture", "Immagine", Path).group("background").when("gaming_bg", &["image"]));
+    add(Field::new("gaming_bg_dim", "gaming", "Darken", "Scurisci", int(0, 100)).def("0").group("background").when("gaming_bg", &["image", "global", "effect"]));
+
+    // ---- Steam cover flow
+    add(Field::new("steam_path", "steam", "Steam folder", "Cartella di Steam", Folder)
+        .group("library")
+        .help(
+            "Empty = found by itself (the Windows registry, then the usual folders). Set it if Steam is somewhere else",
+            "Vuoto = trovata da sola (registro di Windows, poi le cartelle solite). Impostala se Steam è altrove",
+        ));
+    add(Field::new("steam_order", "steam", "Order of the games", "Ordine dei giochi", Choice(&["recent", "name", "random"]))
+        .def("recent")
+        .group("library")
+        .help("recent = the last played first", "recent = prima gli ultimi giocati"));
+    add(Field::new("steam_only_covers", "steam", "Only games with a cover", "Solo giochi con copertina", Bool)
+        .def("false")
+        .group("library")
+        .help("Steam keeps the covers of the games it has shown in its library; the others get a generated card", "Steam conserva le copertine dei giochi mostrati nella sua libreria; gli altri ricevono una card generata"));
+    add(Field::new("steam_interval", "steam", "Seconds per game", "Secondi per gioco", int(2, 600)).def("6").group("motion"));
+    add(Field::new("steam_speed", "steam", "Duration of the slide (ms)", "Durata dello scorrimento (ms)", int(100, 5000)).def("800").group("motion"));
+    add(Field::new("steam_side", "steam", "Covers on each side", "Copertine per lato", int(1, 5)).def("3").group("motion"));
+    add(Field::new("steam_tilt", "steam", "Tilt of the side covers (degrees)", "Inclinazione delle copertine laterali (gradi)", int(0, 90)).def("55").group("motion"));
+    add(Field::new("steam_reflection", "steam", "Reflection (%)", "Riflesso (%)", int(0, 100)).def("45").group("motion").help("0 = none", "0 = nessuno"));
+    add(Field::new("steam_title", "steam", "Name of the game", "Nome del gioco", Bool).def("true").group("text"));
+    add(Field::new("steam_details", "steam", "Hours played and last time", "Ore giocate e ultima volta", Bool).def("true").group("text").when("steam_title", &["true"]));
+    add(Field::new("steam_clock", "steam", "Clock", "Orologio", Bool).def("true").group("text"));
+    add(Field::new("steam_bg", "steam", "Background", "Sfondo", Choice(STEAM_BG))
+        .def("blur")
+        .group("background")
+        .help(
+            "blur = the cover in the middle, blurred and darkened; global = the normal background of the program (also an animated one)",
+            "blur = la copertina al centro, sfocata e scurita; global = lo sfondo normale del programma (anche animato)",
+        ));
+    add(Field::new("steam_bg_color", "steam", "Color(s)", "Colore/i", ColorList).group("background").when("steam_bg", &["color", "gradient"]));
+    add(Field::new("steam_bg_image", "steam", "Picture", "Immagine", Path).group("background").when("steam_bg", &["image"]));
+    add(Field::new("steam_bg_dim", "steam", "Darken", "Scurisci", int(0, 100)).def("0").group("background").when("steam_bg", &["image", "global", "effect"]));
+
+    add(Field::new("panel_opacity", "layouts", "Panel opacity", "Opacità dei pannelli", int(0, 100))
+        .def("100")
+        .help("100 = solid, 0 = see-through (only the border)", "100 = pieno, 0 = trasparente (resta il bordo)"));
+
+    // ---- tiles
+    add(Field::new("tiles", "tiles", "Tiles to show", "Tiles da mostrare", Tiles)
+        .help("Used by the \"tiles\" screen", "Usato dalla schermata \"tiles\""));
+    add(Field::new("tiles_font", "tiles", "Font", "Font", Choice(&["smooth", "pixel"])).def("smooth"));
+    add(Field::new("tiles_theme", "tiles", "Theme", "Tema", Choice(&["dark", "light"])).def("dark"));
+    add(Field::new("tiles_color", "tiles", "Tile color", "Colore dei tile", Color));
+    add(Field::new("tiles_text_color", "tiles", "Text color", "Colore del testo", Color));
+    add(Field::new("tiles_opacity", "tiles", "Opacity", "Opacità", int(0, 100)));
+    add(Field::new("tiles_radius", "tiles", "Corner radius", "Raggio degli angoli", int(0, 80)));
+    add(Field::new("tiles_gap", "tiles", "Gap between tiles", "Spazio tra i tile", int(0, 60)).def("14"));
+    add(Field::new("tiles_clock_seconds", "tiles", "Seconds on the clock", "Secondi sull'orologio", Bool).def("false"));
+    add(Field::new("tiles_cpu_watt_max", "tiles", "CPU power at 100% (W)", "Consumo CPU al 100% (W)", int(10, 2000)).def("200"));
+    add(Field::new("tiles_gpu_watt_max", "tiles", "GPU power at 100% (W)", "Consumo GPU al 100% (W)", int(10, 2000)).def("400"));
+    add(Field::new("tiles_fps_max", "tiles", "FPS at 100%", "FPS al 100%", int(30, 1000)).def("240"));
+    add(Field::new("tiles_rpm", "tiles", "Fan speeds on the CPU tiles", "Giri delle ventole sui tile CPU", Bool)
+        .def("true")
+        .help("Adds a line like \"CPU 1240 / CASE 780 RPM\" to the CPU tiles (needs LibreHardwareMonitor)", "Aggiunge ai tile CPU una riga tipo \"CPU 1240 / CASE 780 RPM\" (serve LibreHardwareMonitor)"));
+    add(Field::new("tiles_fan_max", "tiles", "Fan speed at 100% (RPM)", "Giri della ventola al 100% (RPM)", int(500, 10000)).def("2500"));
+    add(Field::new("tiles_bg", "tiles", "Background behind the tiles", "Sfondo dietro i tile", Choice(TILES_BG))
+        .def("global")
+        .group("background")
+        .help("global = the normal background of the program", "global = lo sfondo normale del programma"));
+    add(Field::new("tiles_bg_color", "tiles", "Color(s)", "Colore/i", ColorList).group("background").when("tiles_bg", &["color", "gradient"]));
+    add(Field::new("tiles_bg_image", "tiles", "Picture", "Immagine", Path).group("background").when("tiles_bg", &["image"]));
+    add(Field::new("tiles_bg_dim", "tiles", "Darken", "Scurisci", int(0, 100)).def("0").group("background").when("tiles_bg", &["image"]));
+    add(Field::new("tiles_palette", "tiles", "Tile colors from the color presets", "Colori dei tile dai preset", Multi(EFFECT_PALETTES))
+        .group("palette")
+        .help(
+            "Every tile gets its own color from these presets, and the colors drift and fade from preset to preset (pick several, or \"all\"). Empty = every tile has the same color",
+            "Ogni tile prende un suo colore da questi preset, e i colori scorrono e sfumano da un preset all'altro (scegline più di uno, o \"all\"). Vuoto = tutti i tile dello stesso colore",
+        ));
+    add(Field::new("tiles_colors", "tiles", "Own colors (for \"custom\")", "Colori propri (per \"custom\")", ColorList)
+        .group("palette")
+        .help("Two or more colors, used when \"custom\" is chosen above", "Due o più colori, usati quando sopra si sceglie \"custom\""));
+    add(Field::new("tiles_palette_interval", "tiles", "Seconds per preset", "Secondi per preset", int(5, 3600))
+        .def("20")
+        .group("palette")
+        .help("How long a preset stays before the next one fades in", "Quanto resta un preset prima che sfumi il successivo"));
+    add(Field::new("tiles_palette_stagger", "tiles", "Tiles change at different times (%)", "I tile cambiano in momenti diversi (%)", int(0, 100))
+        .def("50")
+        .group("palette")
+        .help("0 = all tiles change preset together; 100 = spread over the whole interval", "0 = tutti i tile cambiano preset insieme; 100 = distribuiti su tutto l'intervallo"));
+    add(Field::new("tiles_bar_color", "tiles", "All bars", "Tutte le barre", BarColor)
+        .def("auto")
+        .group("bars")
+        .help("auto = by level; one color, or two or more for a gradient", "auto = in base al livello; un colore, o due o più per un gradiente"));
+    for (k, en, it) in TILE_KINDS {
+        add(Field::new(&format!("tile_{k}_color"), "tiles", en, it, BarColor).def("auto").group("bars"));
+    }
+
+    // ---- deck, cards, orbit
+    add(Field::new("deck", "dash", "Columns", "Colonne", Panels { columns: false })
+        .def("cpu, gpu, ram, clock")
+        .group("deck")
+        .help("Layout \"deck\": instrument columns with a live gauge, a big value, a graph and four readings", "Layout \"deck\": colonne strumento con un indicatore, un valore grande, un grafico e quattro letture"));
+    add(Field::new("deck_gauge", "dash", "Gauge line on top of each column", "Linea indicatore sopra ogni colonna", Bool).def("true").group("deck"));
+    add(Field::new("cards", "dash", "Cards", "Card", Panels { columns: true })
+        .def("clock | cpu | gpu | ram, disk | music, net")
+        .group("cards")
+        .help("Layout \"cards\": every group is a column, cards in the same group are stacked", "Layout \"cards\": ogni gruppo è una colonna, le card dello stesso gruppo sono impilate"));
+    add(Field::new("cards_radius", "dash", "Corner radius", "Raggio degli angoli", int(0, 60)).group("cards"));
+    add(Field::new("cards_opacity", "dash", "Card opacity (%)", "Opacità delle card (%)", int(0, 100))
+        .def("100")
+        .group("cards")
+        .help("Lower it to see the background through the cards", "Abbassala per vedere lo sfondo attraverso le card"));
+    add(Field::new("cards_fan", "dash", "Fan speed in the card", "Giri ventola nella card", Bool)
+        .def("true")
+        .group("cards")
+        .help(
+            "The fan RPM at the top right of the CPU and GPU cards (needs LibreHardwareMonitor)",
+            "I giri della ventola in alto a destra nelle card CPU e GPU (serve LibreHardwareMonitor)",
+        ));
+    add(Field::new("cards_gap", "dash", "Gap between cards", "Spazio tra le card", int(0, 40)).def("12").group("cards"));
+    add(Field::new("cards_spectrum_left_source", "dash", "Spectrum L: audio device", "Spectrum L: dispositivo audio", AudioSource)
+        .def("output||mix").group("cards")
+        .help("Independent audio input or playback loopback for Spectrum L. Changes require restarting Trofeo LCD.", "Ingresso audio o loopback indipendente per Spectrum L. Richiede il riavvio di Trofeo LCD.")
+        .restart());
+    add(Field::new("cards_spectrum_right_source", "dash", "Spectrum R: audio device", "Spectrum R: dispositivo audio", AudioSource)
+        .def("output||mix").group("cards")
+        .help("Independent audio input or playback loopback for Spectrum R. Changes require restarting Trofeo LCD.", "Ingresso audio o loopback indipendente per Spectrum R. Richiede il riavvio di Trofeo LCD.")
+        .restart());
+    add(Field::new("cards_spectrum_mix_source", "dash", "Spectrum MIX: audio device", "Spectrum MIX: dispositivo audio", AudioSource)
+        .def("output||mix").group("cards")
+        .help("Independent audio input or playback loopback for Spectrum MIX. Changes require restarting Trofeo LCD.", "Ingresso audio o loopback indipendente per Spectrum MIX. Richiede il riavvio di Trofeo LCD.")
+        .restart());
+    add(Field::new("cards_spectrum_mix2_source", "dash", "Spectrum MIX 2: audio device", "Spectrum MIX 2: dispositivo audio", AudioSource)
+        .def("output||mix").group("cards")
+        .help("Independent audio input or playback loopback for Spectrum MIX 2. Changes require restarting Trofeo LCD.", "Dispositivo de áudio independente para Spectrum MIX 2.")
+        .restart());
+    add(Field::new("cards_spectrum_left_compressor", "dash", "Spectrum L: compressor (%)", "Spectrum L: compressor (%)", int(0, 100))
+        .def("0").group("cards")
+        .help("Compression amount for Spectrum L. 0 = off, 100 = maximum.", "Quantità di compressione per Spectrum L. 0 = disattivato, 100 = massimo."));
+    add(Field::new("cards_spectrum_left_gain", "dash", "Spectrum L: gain (%)", "Spectrum L: ganho (%)", int(0, 100))
+        .def("50").group("cards")
+        .help("Output gain for Spectrum L. 50 = neutral, 0 = minimum, 100 = maximum.", "Ganho de saída do Spectrum L. 50 = neutro, 0 = mínimo, 100 = máximo."));
+    add(Field::new("cards_spectrum_right_compressor", "dash", "Spectrum R: compressor (%)", "Spectrum R: compressor (%)", int(0, 100))
+        .def("0").group("cards")
+        .help("Compression amount for Spectrum R. 0 = off, 100 = maximum.", "Quantità di compressione per Spectrum R. 0 = disattivato, 100 = massimo."));
+    add(Field::new("cards_spectrum_right_gain", "dash", "Spectrum R: gain (%)", "Spectrum R: ganho (%)", int(0, 100))
+        .def("50").group("cards")
+        .help("Output gain for Spectrum R. 50 = neutral, 0 = minimum, 100 = maximum.", "Ganho de saída do Spectrum R. 50 = neutro, 0 = mínimo, 100 = máximo."));
+    add(Field::new("cards_spectrum_mix_compressor", "dash", "Spectrum MIX: compressor (%)", "Spectrum MIX: compressor (%)", int(0, 100))
+        .def("0").group("cards")
+        .help("Compression amount for Spectrum MIX. 0 = off, 100 = maximum.", "Quantità di compressione per Spectrum MIX. 0 = disattivato, 100 = massimo."));
+    add(Field::new("cards_spectrum_mix_gain", "dash", "Spectrum MIX: gain (%)", "Spectrum MIX: ganho (%)", int(0, 100))
+        .def("50").group("cards")
+        .help("Output gain for Spectrum MIX. 50 = neutral, 0 = minimum, 100 = maximum.", "Ganho de saída per Spectrum MIX. 50 = neutro, 0 = minimo, 100 = massimo."));
+    add(Field::new("cards_spectrum_mix2_compressor", "dash", "Spectrum MIX 2: compressor (%)", "Spectrum MIX 2: compressor (%)", int(0, 100))
+        .def("0").group("cards")
+        .help("Compression amount for Spectrum MIX 2. 0 = off, 100 = maximum.", "Compressão do Spectrum MIX 2."));
+    add(Field::new("cards_spectrum_mix2_gain", "dash", "Spectrum MIX 2: gain (%)", "Spectrum MIX 2: ganho (%)", int(0, 100))
+        .def("50").group("cards")
+        .help("Output gain for Spectrum MIX 2. 50 = neutral, 0 = minimum, 100 = maximum.", "Ganho do Spectrum MIX 2."));
+    for (key, label) in [
+        ("cards_spectrum_left_auto_normalize", "Spectrum L: automatic normalization"),
+        ("cards_spectrum_right_auto_normalize", "Spectrum R: automatic normalization"),
+        ("cards_spectrum_mix_auto_normalize", "Spectrum MIX: automatic normalization"),
+        ("cards_spectrum_mix2_auto_normalize", "Spectrum MIX 2: automatic normalization"),
+    ] {
+        add(Field::new(key, "dash", label, label, Bool).def("false").group("cards")
+            .help("Off = fixed scale, no automatic gain pumping. On = adapts to recent peaks.", "Desativado = escala fixa, sem compensação automática dos picos."));
+    }
+    for (key, label) in [
+        ("cards_spectrum_left_fixed_scale", "Spectrum L: fixed scale sensitivity (%)"),
+        ("cards_spectrum_right_fixed_scale", "Spectrum R: fixed scale sensitivity (%)"),
+        ("cards_spectrum_mix_fixed_scale", "Spectrum MIX: fixed scale sensitivity (%)"),
+        ("cards_spectrum_mix2_fixed_scale", "Spectrum MIX 2: fixed scale sensitivity (%)"),
+    ] {
+        add(Field::new(key, "dash", label, label, int(10, 500)).def("100").group("cards")
+            .help("Fixed sensitivity: 100 = standard; higher values make bars taller, lower values make them shorter.", "Sensibilidade fixa: 100 = padrão; valores maiores elevam as barras."));
+    }
+    add(Field::new("cards_spectrum_left_fft", "dash", "Spectrum L: FFT resolution", "Spectrum L: resolução FFT", Choice(&["256", "512", "1024", "2048"])).def("1024").group("cards").restart());
+    add(Field::new("cards_spectrum_right_fft", "dash", "Spectrum R: FFT resolution", "Spectrum R: resolução FFT", Choice(&["256", "512", "1024", "2048"])).def("1024").group("cards").restart());
+    add(Field::new("cards_spectrum_mix_fft", "dash", "Spectrum MIX: FFT resolution", "Spectrum MIX: resolução FFT", Choice(&["256", "512", "1024", "2048"])).def("1024").group("cards").restart());
+    add(Field::new("cards_spectrum_mix2_fft", "dash", "Spectrum MIX 2: FFT resolution", "Spectrum MIX 2: resolução FFT", Choice(&["256", "512", "1024", "2048"])).def("1024").group("cards").restart());
+    add(Field::new("cards_spectrum_left_bars", "dash", "Spectrum L: number of bars", "Spectrum L: número de barras", int(16, 96)).def("48").group("cards").restart());
+    add(Field::new("cards_spectrum_right_bars", "dash", "Spectrum R: number of bars", "Spectrum R: número de barras", int(16, 96)).def("48").group("cards").restart());
+    add(Field::new("cards_spectrum_mix_bars", "dash", "Spectrum MIX: number of bars", "Spectrum MIX: número de barras", int(16, 96)).def("48").group("cards").restart());
+    add(Field::new("cards_spectrum_mix2_bars", "dash", "Spectrum MIX 2: number of bars", "Spectrum MIX 2: número de barras", int(16, 96)).def("48").group("cards").restart());
+    add(Field::new("cards_spectrum_left_smoothing", "dash", "Spectrum L: smoothing (0-100)", "Spectrum L: suavização (0-100)", int(0, 100)).def("50").group("cards"));
+    add(Field::new("cards_spectrum_right_smoothing", "dash", "Spectrum R: smoothing (0-100)", "Spectrum R: suavização (0-100)", int(0, 100)).def("50").group("cards"));
+    add(Field::new("cards_spectrum_mix_smoothing", "dash", "Spectrum MIX: smoothing (0-100)", "Spectrum MIX: suavização (0-100)", int(0, 100)).def("50").group("cards"));
+    add(Field::new("cards_spectrum_mix2_smoothing", "dash", "Spectrum MIX 2: smoothing (0-100)", "Spectrum MIX 2: suavização (0-100)", int(0, 100)).def("50").group("cards"));
+    add(Field::new("cards_spectrum_left_min_hz", "dash", "Spectrum L: minimum frequency (Hz)", "Spectrum L: frequência mínima (Hz)", int(20, 20000)).def("32").group("cards").restart());
+    add(Field::new("cards_spectrum_left_max_hz", "dash", "Spectrum L: maximum frequency (Hz)", "Spectrum L: frequência máxima (Hz)", int(20, 20000)).def("16000").group("cards").restart());
+    add(Field::new("cards_spectrum_right_min_hz", "dash", "Spectrum R: minimum frequency (Hz)", "Spectrum R: frequência mínima (Hz)", int(20, 20000)).def("32").group("cards").restart());
+    add(Field::new("cards_spectrum_right_max_hz", "dash", "Spectrum R: maximum frequency (Hz)", "Spectrum R: frequência máxima (Hz)", int(20, 20000)).def("16000").group("cards").restart());
+    add(Field::new("cards_spectrum_mix_min_hz", "dash", "Spectrum MIX: minimum frequency (Hz)", "Spectrum MIX: frequência mínima (Hz)", int(20, 20000)).def("32").group("cards").restart());
+    add(Field::new("cards_spectrum_mix2_min_hz", "dash", "Spectrum MIX 2: minimum frequency (Hz)", "Spectrum MIX 2: frequência mínima (Hz)", int(20, 20000)).def("32").group("cards").restart());
+    add(Field::new("cards_spectrum_mix_max_hz", "dash", "Spectrum MIX: maximum frequency (Hz)", "Spectrum MIX: frequência máxima (Hz)", int(20, 20000)).def("16000").group("cards").restart());
+    add(Field::new("cards_spectrum_mix2_max_hz", "dash", "Spectrum MIX 2: maximum frequency (Hz)", "Spectrum MIX 2: frequência máxima (Hz)", int(20, 20000)).def("16000").group("cards").restart());
+    add(Field::new("orbit", "dash", "Devices", "Dispositivi", Panels { columns: false })
+        .def("cpu, gpu, ram")
+        .group("orbit")
+        .help("Layout \"orbit\": a cluster of concentric rings for each (up to 4)", "Layout \"orbit\": un gruppo di anelli concentrici per ognuno (fino a 4)"));
+    add(Field::new("orbit_clock", "dash", "Clock block on the right", "Blocco orologio a destra", Bool).def("true").group("orbit"));
+    add(Field::new("orbit_legend", "dash", "Legend under the rings", "Legenda sotto gli anelli", Bool).def("true").group("orbit"));
+    add(Field::new("console", "dash", "Tiles", "Tile", Panels { columns: false })
+        .def("cpu, gpu, ram, net, disk")
+        .group("console")
+        .help(
+            "Layout \"console\": a row of tiles (up to 7); the one in focus grows and shows the details",
+            "Layout \"console\": una fila di tile (fino a 7); quello in primo piano si ingrandisce e mostra i dettagli",
+        ));
+    add(Field::new("console_focus", "dash", "Focus", "Primo piano", Choice(&["rotate", "load", "none"]))
+        .def("rotate")
+        .group("console")
+        .help(
+            "rotate = the tiles take turns; load = the busiest one (CPU, GPU, RAM, network, disk); none = no focus, all tiles show their details",
+            "rotate = i tile si alternano; load = quello più impegnato (CPU, GPU, RAM, rete, disco); none = nessun primo piano, tutti i tile mostrano i dettagli",
+        ));
+    add(Field::new("console_interval", "dash", "Seconds per tile", "Secondi per tile", int(2, 120))
+        .def("6")
+        .when("console_focus", &["rotate"])
+        .group("console")
+        .help("How long each tile stays in focus", "Quanto resta in primo piano ogni tile"));
+    add(Field::new("console_bar", "dash", "Bar with names and clock", "Barra con nomi e orologio", Bool)
+        .def("true")
+        .group("console")
+        .help("The strip on top: the names of the tiles (the one in focus underlined) and the clock", "La striscia in alto: i nomi dei tile (quello in primo piano sottolineato) e l'orologio"));
+    add(Field::new("dash_palette", "dash", "Colors from a preset", "Colori da un preset", Choice(DASH_PALETTES))
+        .def("default")
+        .group("look")
+        .help("The accent colors of the rings, cards, tiles and graphs (the same presets as the animated backgrounds)", "I colori di anelli, card e grafici (gli stessi preset degli sfondi animati)"));
+    add(Field::new("dash_colors", "dash", "Own colors", "Colori propri", ColorList)
+        .group("look")
+        .help("One or more colors, used instead of the preset", "Uno o più colori, usati al posto del preset"));
+    add(Field::new("dash_hero", "dash", "Big number of CPU and GPU", "Numero grande di CPU e GPU", Choice(&["temp", "load"]))
+        .def("temp")
+        .group("look")
+        .help(
+            "temp = the temperature in big, the load becomes a small reading; load = the opposite (deck, cards and orbit)",
+            "temp = in grande la temperatura, il carico diventa una lettura piccola; load = il contrario (deck, cards e orbit)",
+        ));
+    add(Field::new("dash_font", "dash", "Font", "Font", Choice(&["smooth", "pixel"])).def("smooth").group("look"));
+    add(Field::new("dash_theme", "dash", "Theme", "Tema", Choice(&["dark", "light"]))
+        .def("dark")
+        .group("look")
+        .help(
+            "light = a white plate, dark text and pastel cards",
+            "light = fondo bianco, testo scuro e card pastello",
+        ));
+    add(Field::new("dash_text_color", "dash", "Text color", "Colore del testo", Color).group("look").help("Empty = by theme", "Vuoto = in base al tema"));
+    add(Field::new("dash_plate_color", "dash", "Plate color (deck, orbit)", "Colore del fondo (deck, orbit)", Color)
+        .group("look")
+        .help("The panel behind deck and orbit. Empty = by theme (dark, or white)", "Il pannello dietro deck e orbit. Vuoto = in base al tema (scuro, o bianco)"));
+    add(Field::new("dash_plate", "dash", "Plate opacity, deck and orbit (%)", "Opacità del fondo, deck e orbit (%)", int(0, 100))
+        .def("50")
+        .group("look")
+        .help("50 on the dark theme, 85 on the light one. Lower it to see the animated background through the plate; 0 = no plate", "50 col tema scuro, 85 con quello chiaro. Abbassala per vedere lo sfondo animato attraverso il pannello; 0 = nessun pannello"));
+    add(Field::new("dash_graph", "dash", "Graphs of the last minutes", "Grafici degli ultimi minuti", Bool).def("true").group("graphs"));
+    add(Field::new("dash_history", "dash", "Seconds of history", "Secondi di storico", int(20, 600)).def("90").group("graphs").when("dash_graph", &["true"]));
+    add(Field::new("dash_net_max", "dash", "Network speed at 100% (MB/s)", "Velocità di rete al 100% (MB/s)", int(1, 1000)).def("25").group("graphs"));
+    add(Field::new("dash_bg", "dash", "Background", "Sfondo", Choice(TILES_BG))
+        .def("global")
+        .group("background")
+        .help("global = the normal background of the program", "global = lo sfondo normale del programma"));
+    add(Field::new("dash_bg_color", "dash", "Color(s)", "Colore/i", ColorList).group("background").when("dash_bg", &["color", "gradient"]));
+    add(Field::new("dash_bg_image", "dash", "Picture", "Immagine", Path).group("background").when("dash_bg", &["image"]));
+    add(Field::new("dash_bg_dim", "dash", "Darken", "Scurisci", int(0, 100)).def("0").group("background").when("dash_bg", &["image"]));
+
+    // ---- LibreHardwareMonitor
+    add(Field::new("lhm", "lhm", "Read fans and sensors from LibreHardwareMonitor", "Leggi ventole e sensori da LibreHardwareMonitor", Bool)
+        .def("true")
+        .help(
+            "Start LibreHardwareMonitor (as administrator), then Options > Remote Web Server > Run. Nothing happens if it is not running",
+            "Avvia LibreHardwareMonitor (come amministratore), poi Options > Remote Web Server > Run. Se non è in esecuzione non succede nulla",
+        ));
+    add(Field::new("lhm_url", "lhm", "Address", "Indirizzo", Text).def("http://127.0.0.1:8085").when("lhm", &["true"]));
+    add(Field::new("lhm_interval", "lhm", "Seconds between readings", "Secondi tra una lettura e l'altra", int(1, 60)).def("2").when("lhm", &["true"]));
+    add(Field::new("lhm_cpu_fan", "lhm", "CPU fan: part of its name", "Ventola CPU: parte del nome", Text)
+        .group("names")
+        .when("lhm", &["true"])
+        .help("Empty = automatic. Run trofeo_lcd --lhm-list to see the names", "Vuoto = automatico. Esegui trofeo_lcd --lhm-list per vedere i nomi"));
+    add(Field::new("lhm_case_fan", "lhm", "Case fans: part of their name", "Ventole del case: parte del nome", Text).group("names").when("lhm", &["true"]));
+    add(Field::new("lhm_pump", "lhm", "Pump: part of its name", "Pompa: parte del nome", Text).group("names").when("lhm", &["true"]));
+    add(Field::new("lhm_mb_temp", "lhm", "Motherboard temperature: part of its name", "Temperatura scheda madre: parte del nome", Text).group("names").when("lhm", &["true"]));
+
+    // ---- digital frame
+    add(Field::new("frame_folder", "frame", "Folder with the pictures", "Cartella con le immagini", Folder)
+        .help("JPG, PNG, WebP, BMP, GIF. Used by the \"frame\" screen", "JPG, PNG, WebP, BMP, GIF. Usata dalla schermata \"frame\""));
+    add(Field::new("frame_style", "frame", "Style", "Stile", Choice(FRAME_STYLES))
+        .def("mosaic")
+        .help("mosaic = a tidy collage; polaroid = scattered prints with a white border", "mosaic = un collage ordinato; polaroid = stampe sparse con il bordo bianco"));
+    add(Field::new("frame_photos", "frame", "Pictures on screen", "Immagini sullo schermo", int(1, 9)).def("5"));
+    add(Field::new("frame_interval", "frame", "Seconds between changes", "Secondi tra un cambio e l'altro", int(2, 3600))
+        .def("8")
+        .help("Every time ONE picture is replaced", "Ogni volta viene sostituita UNA sola immagine"));
+    add(Field::new("frame_order", "frame", "Order", "Ordine", Choice(&["shuffle", "name"])).def("shuffle"));
+    add(Field::new("frame_transition", "frame", "Transition", "Transizione", Choice(&["fade", "slide"]))
+        .def("fade")
+        .help("slide = a wipe (mosaic) or a print dropping in (polaroid)", "slide = una tendina (mosaico) o una stampa che cade (polaroid)"));
+    add(Field::new("frame_recursive", "frame", "Include subfolders", "Includi le sottocartelle", Bool).def("false"));
+    add(Field::new("frame_refresh", "frame", "Look for new pictures every (s)", "Cerca nuove immagini ogni (s)", int(5, 3600)).def("60"));
+    add(Field::new("frame_bg", "frame", "Background", "Sfondo", Choice(FRAME_BG))
+        .def("blur")
+        .group("look")
+        .help("blur = the current picture, blurred and dark; global = the normal background of the program", "blur = l'immagine corrente, sfocata e scura; global = lo sfondo normale del programma"));
+    add(Field::new("frame_dim", "frame", "Darken the blurred background (%)", "Scurisci lo sfondo sfocato (%)", int(0, 100)).def("60").group("look").when("frame_bg", &["blur"]));
+    add(Field::new("frame_gap", "frame", "Gap between pictures", "Spazio tra le immagini", int(0, 40)).def("10").group("look").when("frame_style", &["mosaic"]));
+    add(Field::new("frame_radius", "frame", "Corner radius", "Raggio degli angoli", int(0, 60)).def("14").group("look").when("frame_style", &["mosaic"]));
+    add(Field::new("frame_left", "frame", "Left side", "Lato sinistro", TileColumn)
+        .group("sides")
+        .def("clock, ram:ring")
+        .help("The tiles in the left column (top strip on a portrait screen)", "I tile nella colonna di sinistra (striscia in alto con lo schermo verticale)"));
+    add(Field::new("frame_right", "frame", "Right side", "Lato destro", TileColumn)
+        .group("sides")
+        .def("cpu:ring, gpu:ring")
+        .help("The tiles in the right column (bottom strip on a portrait screen)", "I tile nella colonna di destra (striscia in basso con lo schermo verticale)"));
+    add(Field::new("frame_side_width", "frame", "Width of the sides (%)", "Larghezza dei lati (%)", int(8, 35))
+        .def("17")
+        .group("sides")
+        .help("Their look comes from the Tiles section (theme, colors, font)", "L'aspetto viene dalla sezione Tiles (tema, colori, font)"));
+
+    // ---- what to show
+    add(Field::new("show", "show", "Show only these", "Mostra solo queste", Multi(SHOW_ITEMS))
+        .help("Empty = everything is shown", "Vuoto = si mostra tutto"));
+    add(Field::new("hide", "show", "Hide these", "Nascondi queste", Multi(HIDE_ITEMS)));
+    add(Field::new("status_style", "show", "Style of the info block", "Stile del blocco info", Choice(&["auto", "lines", "list", "items"]))
+        .def("auto")
+        .help("lines = three long lines; list = a vertical list", "lines = tre righe lunghe; list = elenco verticale"));
+    add(Field::new("status_position", "show", "Info block position", "Posizione del blocco info", Choice(POSITIONS)).def("top-left"));
+    add(Field::new("clock_position", "show", "Clock position", "Posizione dell'orologio", Choice(POSITIONS)).def("center"));
+    add(Field::new("spectrum_position", "show", "Spectrum position", "Posizione dello spettro", Choice(POSITIONS)).def("center"));
+    add(Field::new("spectrum_width", "show", "Spectrum width (%)", "Larghezza dello spettro (%)", int(1, 100)).def("100"));
+    add(Field::new("spectrum_height", "show", "Spectrum height (%)", "Altezza dello spettro (%)", int(1, 100)).def("100"));
+
+    // ---- colors and text
+    add(Field::new("color", "look", "Spectrum bars", "Barre dello spettro", Color)
+        .def("default")
+        .help("default = green to red by level", "default = dal verde al rosso in base al livello"));
+    add(Field::new("font", "look", "Font of all the text", "Font di tutti i testi", Choice(&["pixel", "smooth"]))
+        .def("pixel")
+        .help("pixel = the blocky 5x7 font; smooth = anti-aliased Poppins, in every screen", "pixel = il font a blocchi 5x7; smooth = Poppins morbido, in ogni schermata"));
+    add(Field::new("font_weight", "look", "Weight of the smooth font", "Spessore del font morbido", Choice(&["auto", "light", "regular", "medium"]))
+        .def("auto")
+        .when("font", &["smooth"])
+        .help("auto = bolder for small text, lighter for big text", "auto = più marcato per il testo piccolo, più leggero per quello grande"));
+    add(Field::new("theme", "look", "Theme", "Tema", Choice(THEME_NAMES))
+        .def("none")
+        .help(
+            "A whole look in one line (background, colors, panel opacity). It only gives defaults: whatever you set yourself wins over the theme",
+            "Un aspetto completo in una riga (sfondo, colori, opacità dei pannelli). Dà solo valori predefiniti: quello che imposti tu ha la precedenza sul tema",
+        ));
+    add(Field::new("text_color", "look", "Info text", "Testo informativo", Color));
+    add(Field::new("clock_color", "look", "Big clock", "Orologio grande", Color));
+    add(Field::new("text_backdrop", "look", "Panel behind the text", "Pannello dietro il testo", Bool).def("false"));
+    add(Field::new("clock_backdrop", "look", "Panel behind the clock", "Pannello dietro l'orologio", Bool));
+    add(Field::new("clock_format", "look", "Time format", "Formato dell'ora", Choice(&["24h", "12h"]))
+        .def("24h")
+        .help("12h = 2:05 PM instead of 14:05, on every clock of the program", "12h = 2:05 PM invece di 14:05, su tutti gli orologi del programma"));
+    add(Field::new("clock_ampm", "look", "Show AM / PM", "Mostra AM / PM", Bool)
+        .def("true")
+        .when("clock_format", &["12h"]));
+    add(Field::new("screen_fade_ms", "look", "Fade between screens (ms, 0 = off)", "Dissolvenza tra le schermate (ms, 0 = spenta)", int(0, 5000))
+        .def("0")
+        .help("when the screen changes (layout rotation, music, gaming) the old picture melts into the new one; 0 = a plain cut, which costs nothing", "quando la schermata cambia (rotazione dei layout, musica, gaming) la vecchia immagine sfuma nella nuova; 0 = stacco netto, che non costa nulla"));
+    add(Field::new("screen_fade_style", "look", "Fade style", "Stile della dissolvenza", Choice(&["cross", "black"]))
+        .def("cross")
+        .help("cross = the pictures dissolve into each other; black = fade out to black, then fade in", "cross = le immagini si dissolvono l'una nell'altra; black = sfuma al nero e poi riappare"));
+    add(Field::new("clock_time_size", "look", "Clock size", "Dimensione dell'orologio", int(1, 60)).def("20"));
+    add(Field::new("clock_date_size", "look", "Date size", "Dimensione della data", int(1, 30)).def("6"));
+    add(Field::new("net_unit", "look", "Network unit", "Unità della rete", Choice(&["kb", "mb", "auto"])).def("kb"));
+    add(Field::new("mem_unit", "look", "RAM unit", "Unità della RAM", Choice(&["mb", "gb"])).def("mb"));
+    add(Field::new("percent_decimals", "look", "Decimals in percentages", "Decimali nelle percentuali", Choice(&["0", "1"])).def("0"));
+
+    // ---- spectrum
+    add(Field::new("spectrum_style", "spectrum", "Style", "Stile", Multi(SPECTRUM_STYLES)).def("bars").help("Several = they rotate", "Più di uno = ruotano"));
+    add(Field::new("spectrum_style_interval", "spectrum", "Seconds per style", "Secondi per stile", int(2, 3600)).def("30"));
+    add(Field::new("spectrum_auto_normalize", "spectrum", "Automatic normalization", "Normalização automática", Bool).def("false")
+        .help("Off = fixed scale; prevents the spectrum from pumping after loud peaks. On = adapts to recent peaks.", "Desativado = escala fixa; evita que picos altos alterem a sensibilidade do gráfico."));
+    add(Field::new("spectrum_fixed_scale", "spectrum", "Fixed scale sensitivity (%)", "Sensibilidade da escala fixa (%)", int(10, 500)).def("100")
+        .help("100 = standard sensitivity. Higher values make bars taller; lower values make them shorter.", "100 = sensibilidade padrão. Valores maiores deixam as barras mais altas."));
+    add(Field::new("spectrum_palette", "spectrum", "Colors", "Colori", Multi(SPECTRUM_PALETTES))
+        .help("Unset = the color of \"Spectrum bars\"", "Non impostato = il colore di \"Barre dello spettro\""));
+    add(Field::new("spectrum_palette_interval", "spectrum", "Seconds per palette", "Secondi per palette", int(2, 3600)).def("20"));
+    add(Field::new("spectrum_gradient", "spectrum", "Own gradient", "Gradiente personalizzato", ColorList)
+        .help("2 or more colors, quiet to loud", "2 o più colori, dal piano al forte"));
+    add(Field::new("spectrum_rainbow_speed", "spectrum", "Rainbow speed (°/s)", "Velocità arcobaleno (°/s)", int(0, 360)).def("30"));
+
+    // ---- single items
+    for (k, en, it) in ITEMS {
+        let g: &'static str = en;
+        v.push(Field::new(&format!("{k}_size"), "items", &format!("{en}: size"), &format!("{it}: dimensione"), int(1, 30)).def("3").group(g));
+        v.push(Field::new(&format!("{k}_position"), "items", &format!("{en}: position"), &format!("{it}: posizione"), Choice(POSITIONS)).group(g));
+        v.push(Field::new(&format!("{k}_color"), "items", &format!("{en}: color"), &format!("{it}: colore"), Color).group(g));
+        v.push(Field::new(&format!("{k}_backdrop"), "items", &format!("{en}: panel behind"), &format!("{it}: pannello dietro"), Bool).group(g));
+    }
+    let mut add = |f: Field| v.push(f);
+    add(Field::new("fps_item", "items", "Show the FPS", "Mostra gli FPS", Bool)
+        .def("false")
+        .group("FPS (while gaming)")
+        .help(
+            "Adds \"FPS 144\" to the info block of the standard screens (default, default2) while a game gives FPS; nothing shows when no game runs. With the automatic gaming screen on, the screen changes while you play (gaming_screen = false keeps yours)",
+            "Aggiunge \"FPS 144\" al blocco informazioni delle schermate standard (default, default2) mentre un gioco fornisce gli FPS; senza giochi non compare nulla. Con la schermata gaming automatica attiva, lo schermo cambia mentre giochi (gaming_screen = false mantiene la tua)",
+        ));
+    add(Field::new("nowplaying_label", "items", "Show the \"NOW PLAYING\" label", "Mostra la scritta \"NOW PLAYING\"", Bool).def("true").group("Now playing"));
+    add(Field::new("nowplaying_width", "items", "Width of the track (%)", "Larghezza del brano (%)", int(1, 100)).def("100").group("Now playing"));
+
+    // ---- music card
+    add(Field::new("music_screen", "music", "Music card", "Scheda musica", Bool)
+        .def("false")
+        .help("While a track plays: cover, title, progress bar and spectrum", "Mentre suona un brano: copertina, titolo, barra di avanzamento e spettro"));
+    add(Field::new("music_layout", "music", "Design of the music screen", "Grafica della schermata musica", Choice(MUSIC_LAYOUTS))
+        .def("classic")
+        .when("music_screen", music_on)
+        .help(
+            "classic = the card with cover, text and spectrum; vinyl = a spinning record and tonearm; poster = huge title; minimal = only the title; radial = rays around the cover; equalizer = LED bars; wave = soft waves; cassette = a tape with turning reels; vu = analogue meters",
+            "classic = la scheda con copertina, testo e spettro; vinyl = disco che gira con braccio; poster = titolo enorme; minimal = solo il titolo; radial = raggi attorno alla copertina; equalizer = barre a LED; wave = onde morbide; cassette = una cassetta con bobine che girano; vu = strumenti analogici",
+        ));
+    add(Field::new("music_bg", "music", "Background", "Sfondo", Choice(MUSIC_BG)).def("gradient").when("music_screen", music_on));
+    add(Field::new("music_bg_brightness", "music", "Background brightness", "Luminosità dello sfondo", int(0, 100)).def("40").when("music_screen", music_on));
+    add(Field::new("music_bg_blur", "music", "Blur", "Sfocatura", int(0, 100)).def("70").when("music_screen", music_on));
+    add(Field::new("music_bg_fit", "music", "Blurred cover fit", "Adattamento copertina sfocata", Choice(&["center", "stretch"])).def("center").when("music_screen", music_on));
+    add(Field::new("music_bg_color", "music", "Solid color", "Colore solido", Color).def("#121218").when("music_screen", music_on));
+    add(Field::new("music_progress", "music", "Progress bar and times", "Barra di avanzamento e tempi", Bool).def("true").when("music_screen", music_on));
+    add(Field::new("music_spectrum_color", "music", "Spectrum color", "Colore dello spettro", Text)
+        .def("cover")
+        .when("music_screen", music_on)
+        .help("Classic card only. cover, main, a color, several colors, or palette names", "Solo scheda classic. cover, main, un colore, più colori o nomi di palette"));
+    add(Field::new("music_stats", "music", "Small info at the bottom", "Info in basso", Multi(MUSIC_STATS)).def("cpu, gpu, ram").when("music_screen", music_on));
+    add(Field::new("music_clock", "music", "Clock", "Orologio", Bool)
+        .def("true")
+        .when("music_screen", music_on)
+        .help("In the new designs (not classic)", "Nei nuovi design (non classic)"));
+    add(Field::new("music_album", "music", "Album name", "Nome dell'album", Bool)
+        .def("true")
+        .when("music_screen", music_on)
+        .help("Under the artist, in the new designs", "Sotto l'artista, nei nuovi design"));
+    add(Field::new("music_glow", "music", "Glow around the cover and the title (%)", "Alone attorno a copertina e titolo (%)", int(0, 100))
+        .def("50")
+        .when("music_screen", music_on));
+    add(Field::new("music_colors", "music", "Own colors", "Colori propri", ColorList)
+        .when("music_screen", music_on)
+        .help(
+            "Used by the new designs instead of the colors taken from the cover (equalizer, vu and cassette have colors of their own)",
+            "Usati dai nuovi design al posto dei colori ricavati dalla copertina (equalizer, vu e cassette hanno colori propri)",
+        ));
+    add(Field::new("music_font", "music", "Font", "Font", Choice(&["auto", "smooth", "pixel"])).def("auto").when("music_screen", music_on));
+    add(Field::new("music_text_color", "music", "Text color", "Colore del testo", Color).when("music_screen", music_on).help("Empty = white", "Vuoto = bianco"));
+
+    // ---- pixel game
+    add(Field::new("pixel_game", "game", "Pixel game under the clock", "Mini gioco sotto l'orologio", Bool).def("true"));
+    add(Field::new("pixel_game_hero", "game", "Hero", "Eroe", Choice(&["knight", "cat", "both"])).def("both"));
+    add(Field::new("pixel_game_height", "game", "Height (%)", "Altezza (%)", int(20, 70)).def("46"));
+    add(Field::new("pixel_game_hud", "game", "Coin counter", "Contatore di monete", Bool).def("true"));
+
+    // ---- weather and news
+    add(Field::new("weather_city", "online", "City", "Città", Text)
+        .restart()
+        .group("weather")
+        .help("Empty = found from the internet address", "Vuoto = trovata dall'indirizzo internet"));
+    add(Field::new("weather_unit", "online", "Unit", "Unità", Choice(&["c", "f"])).def("c").group("weather"));
+    add(Field::new("ticker_source", "online", "Sources", "Fonti", Text)
+        .restart()
+        .group("news")
+        .help("RSS/Atom addresses, text addresses or files, comma-separated", "Indirizzi RSS/Atom, indirizzi di testo o file, separati da virgola"));
+    add(Field::new("ticker_refresh_min", "online", "Refresh every (minutes)", "Aggiorna ogni (minuti)", int(1, 1440)).def("10").restart().group("news"));
+    add(Field::new("ticker_position", "online", "Position", "Posizione", Choice(POSITIONS)).def("bottom").group("news"));
+    add(Field::new("ticker_size", "online", "Size", "Dimensione", int(1, 30)).def("3").group("news"));
+    add(Field::new("ticker_color", "online", "Color", "Colore", Color).group("news"));
+    add(Field::new("ticker_backdrop", "online", "Panel behind", "Pannello dietro", Bool).group("news"));
+    add(Field::new("ticker_width", "online", "Width (%)", "Larghezza (%)", int(1, 100)).def("100").group("news"));
+
+    // ---- system
+    add(Field::new("silence_threshold", "system", "Silence threshold", "Soglia di silenzio", Float { min: 0.0, max: 1.0 })
+        .def("0.005")
+        .help("Lower = the spectrum reacts to quieter sound", "Più basso = lo spettro reagisce a suoni più bassi"));
+    add(Field::new("silence_timeout_ms", "system", "Quiet time before idle (ms)", "Silenzio prima dello stato di riposo (ms)", int(0, 60000)).def("800"));
+    add(Field::new("performance_max_fps", "system", "Global FPS limit (0 = automatic, 1-30)", "Limite globale de FPS (0 = automatico, 1-30)", int(0, 30))
+        .def("0")
+        .restart()
+        .help("Caps every screen and animation. 0 keeps the existing adaptive FPS behavior.", "Limita tutte le schermate e animazioni. 0 mantém o comportamento adaptativo atual."));
+    add(Field::new("performance_sensor_interval_ms", "system", "Sensor refresh interval (ms)", "Intervalo de atualização dos sensores (ms)", int(250, 5000))
+        .def("500")
+        .restart()
+        .help("Higher values reduce CPU work from CPU, memory, GPU, network and disk polling. 500 ms is the current default.", "Valores maiores reduzem o trabalho de consulta de CPU, memória, GPU, rede e disco. 500 ms é o padrão atual."));
+    add(Field::new("performance_spectrum_fps", "system", "Spectrum analysis rate (5-60 per second)", "Frequência de análise do Spectrum (5-60 por segundo)", int(5, 60))
+        .def("30")
+        .restart()
+        .help("Controls how often FFT analysis is recalculated, independently of screen rendering. Audio capture remains continuous.", "Controla a frequência de recálculo FFT, independentemente da renderização. A captura de áudio permanece contínua."));
+    add(Field::new("gpu_usage_source", "system", "GPU usage from", "Carico GPU da", Choice(&["auto", "windows"]))
+        .def("auto")
+        .help("auto = the Radeon driver's own figure (what the Radeon software shows), else the Windows counter; windows = always the Windows counter (3D engines only)", "auto = il valore del driver Radeon (quello del software Radeon), altrimenti il contatore di Windows; windows = sempre il contatore di Windows (solo motori 3D)"));
+    add(Field::new("fps_driver_divisor", "system", "Divide the driver's FPS by", "Dividi gli FPS del driver per", Float { min: 1.0, max: 10.0 })
+        .def("1")
+        .when("fps_monitor", &["true"])
+        .help(
+            "Only for the FPS the Radeon driver reports (games where Windows gives no frame events, such as exclusive-fullscreen DX9 games). Some of them read double: set 2 to halve it. 1 = as the driver says",
+            "Solo per gli FPS riportati dal driver Radeon (giochi per cui Windows non da eventi di frame, come i giochi DX9 a schermo intero esclusivo). Alcuni leggono il doppio: imposta 2 per dimezzare. 1 = come dice il driver",
+        ));
+    add(Field::new("start_in_tray", "system", "Start minimised in the tray", "Avvia ridotto nella tray", Bool)
+        .def("false")
+        .restart()
+        .help(
+            "Windows. When the program starts, the console window goes away and an icon appears in the tray: a click shows or hides the window, the right button opens a menu (show / hide, exit)",
+            "Windows. All'avvio la finestra della console scompare e compare un'icona nella tray: un clic mostra o nasconde la finestra, il tasto destro apre un menu (mostra / nascondi, esci)",
+        ));
+    add(Field::new("update_check", "system", "Tell me when a new version is out", "Avvisami quando esce una nuova versione", Bool)
+        .def("false")
+        .restart()
+        .group("update")
+        .help("Looks on GitHub at start-up (one small request) and shows a banner at the bottom of the screen if a newer version exists. Nothing is downloaded.", "Controlla su GitHub all'avvio (una piccola richiesta) e mostra un banner in basso se esiste una versione piu recente. Non scarica nulla."));
+    add(Field::new("update_notice_secs", "system", "Show the banner for (seconds)", "Mostra il banner per (secondi)", int(2, 120)).def("8").restart().group("update").when("update_check", &["true"]));
+    add(Field::new("update_check_hours", "system", "Check again every (hours, 0 = only at start-up)", "Ricontrolla ogni (ore, 0 = solo all'avvio)", int(0, 720)).def("0").restart().group("update").when("update_check", &["true"]));
+    add(Field::new("deepcool", "system", "Drive the DeepCool display", "Pilota il display DeepCool", Bool).def("true").restart());
+    add(Field::new("deepcool_source", "system", "DeepCool section", "Sezione del display DeepCool", Choice(&["cpu", "gpu", "alternate"]))
+        .def("cpu")
+        .when("deepcool", &["true"])
+        .help(
+            "The display has a CPU and a GPU section: show one of them, or both in turn (CH170 / CH270 / CH690 DIGITAL)",
+            "Il display ha una sezione CPU e una GPU: mostra una delle due, oppure entrambe a turno (CH170 / CH270 / CH690 DIGITAL)",
+        ));
+    add(Field::new("deepcool_mode", "system", "DeepCool case display shows", "Il display DeepCool del case mostra", Choice(&["freq", "fan", "alternate"]))
+        .def("freq")
+        .when("deepcool", &["true"])
+        .help(
+            "CH170 / CH270 / CH690 DIGITAL: the CPU frequency, the fan speed in RPM (needs LibreHardwareMonitor), or both in turn",
+            "CH170 / CH270 / CH690 DIGITAL: la frequenza della CPU, i giri della ventola in RPM (serve LibreHardwareMonitor), o le due cose a turno",
+        ));
+    add(Field::new("deepcool_fan", "system", "Fan for the RPM", "Ventola per gli RPM", Choice(&["cpu", "case", "pump", "gpu", "both"]))
+        .def("cpu")
+        .when("deepcool", &["true"])
+        .help("both = the CPU fan and the case fans in turn", "both = ventola CPU e ventole del case a turno"));
+    add(Field::new("deepcool_alternate", "system", "Seconds before switching", "Secondi prima di cambiare", int(2, 120))
+        .def("6")
+        .when("deepcool", &["true"])
+        .help("Also used to switch between the CPU and GPU sections", "Usato anche per passare tra sezione CPU e GPU"));
+    add(Field::new("fps_monitor", "system", "Measure the FPS of games", "Misura gli FPS dei giochi", Bool)
+        .def("true")
+        .restart()
+        .help("Native ETW may need administrator rights; PresentMon fallback runs separately when ETW has no reading.", "ETW nativo pode exigir administrador; o PresentMon e iniciado como alternativa quando ETW nao fornece leitura."));
+    add(Field::new("fps_source", "system", "FPS from", "FPS da", Choice(&["auto", "etw", "driver"]))
+        .def("auto")
+        .when("fps_monitor", &["true"])
+        .help(
+            "auto = native ETW, then official PresentMon fallback, then Radeon driver; etw = ETW with PresentMon fallback; driver = Radeon driver only. If FPS is missing, run trofeo_lcd.exe --fps-diag with the game in front and send the output",
+            "auto = ETW nativo, depois PresentMon oficial como alternativa e, por fim, driver Radeon; etw = ETW com PresentMon como alternativa; driver = somente driver Radeon. Se FPS estiver ausente, execute trofeo_lcd.exe --fps-diag com o jogo em primeiro plano e envie o resultado",
+        ));
+    v
+}
+
+/// The sub-heading of a group in both languages.
+/// The sections gathered by theme, as the side list of the editor shows them:
+/// (English, Italian, ids of the sections).
+pub const CATEGORIES: &[(&str, &str, &[&str])] = &[
+    ("Screen and sensors", "Schermo e sensori", &["screen", "lhm"]),
+    ("Look", "Aspetto", &["background", "effect", "look", "show", "items", "spectrum"]),
+    ("Screens", "Schermate", &["layouts", "tiles", "dash", "frame", "steam", "profiles", "builder"]),
+    ("Music and games", "Musica e giochi", &["music", "gaming", "game"]),
+    ("Online", "Online", &["online"]),
+    ("System", "Sistema", &["system"]),
+    ("Share", "Condividi", &["share"]),
+];
+
+/// The index in [`CATEGORIES`] of the one that holds a section.
+pub fn category_of(section: &str) -> Option<usize> {
+    CATEGORIES.iter().position(|(_, _, ids)| ids.contains(&section))
+}
+
+/// The settings that match a search: every word of `query` must be in the label (English or
+/// Italian), the key or the hint. Matches in the label or the key come first.
+pub fn search<'a>(fields: &'a [Field], query: &str) -> Vec<&'a Field> {
+    let words: Vec<String> = query.split_whitespace().map(|w| w.to_lowercase()).collect();
+    if words.is_empty() {
+        return Vec::new();
+    }
+    let mut hits: Vec<(u8, &Field)> = Vec::new();
+    for f in fields {
+        let head = format!("{} {} {}", f.en, f.it, f.key).to_lowercase();
+        let all = format!("{head} {} {}", f.help_en, f.help_it).to_lowercase();
+        if !words.iter().all(|w| all.contains(w.as_str())) {
+            continue;
+        }
+        let rank = if words.iter().all(|w| f.key.to_lowercase().contains(w.as_str())) {
+            0
+        } else if words.iter().all(|w| head.contains(w.as_str())) {
+            1
+        } else {
+            2
+        };
+        hits.push((rank, f));
+    }
+    hits.sort_by_key(|(r, _)| *r);
+    hits.into_iter().map(|(_, f)| f).collect()
+}
+
+/// Is `v` a value the setting accepts? Only the kinds with a clear rule are checked (a switch,
+/// a choice, a number in its range, colors); the others are taken as they are.
+pub fn check_value(f: &Field, v: &str) -> bool {
+    let v = v.trim();
+    if f.key == "theme" {
+        // a built-in theme, `none`, or the name of a theme of your own (the file is checked later)
+        return v == "none" || crate::themes::find(v).is_some() || crate::themes::valid_name(&v.to_ascii_lowercase()).is_ok();
+    }
+    match &f.kind {
+        Kind::Bool => v.eq_ignore_ascii_case("true") || v.eq_ignore_ascii_case("false"),
+        Kind::Choice(opts) => opts.iter().any(|o| o.eq_ignore_ascii_case(v)),
+        Kind::Int { min, max } => v.parse::<i64>().is_ok_and(|n| (*min..=*max).contains(&n)),
+        Kind::Float { min, max } => v.parse::<f32>().is_ok_and(|n| n >= *min && n <= *max),
+        Kind::Color => parse_color(v).is_some(),
+        Kind::ColorList => {
+            let items = split_list(v);
+            !items.is_empty() && items.iter().all(|c| parse_color(c).is_some())
+        }
+        _ => !v.is_empty(),
+    }
+}
+
+pub fn group_title(group: &str) -> (&str, &str) {
+    match group {
+        "margins" => ("Margins (pixels)", "Margini (pixel)"),
+        "background" => ("Background", "Sfondo"),
+        "bars" => ("Bar colors", "Colori delle barre"),
+        "weather" => ("Weather", "Meteo"),
+        "news" => ("News ticker", "Notizie scorrevoli"),
+        "palette" => ("Colors from the presets", "Colori dai preset"),
+        "look" => ("Look", "Aspetto"),
+        "update" => ("New version notice", "Avviso di nuova versione"),
+        "night" => ("Night mode", "Modalità notte"),
+        "alert" => ("Alerts", "Avvisi"),
+        "gaming" => ("Gaming screen", "Schermata gaming"),
+        "switch" => ("When to switch", "Quando passare"),
+        "design" => ("Design and readings", "Grafica e letture"),
+        "game" => ("The game", "Il gioco"),
+        "library" => ("Library", "Libreria"),
+        "motion" => ("Motion and shape", "Movimento e forma"),
+        "text" => ("Texts", "Testi"),
+        "sides" => ("Side columns", "Colonne laterali"),
+        other => (other, other),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_tray_option_is_off_by_default_and_needs_a_restart() {
+        let f = fields();
+        let t = f.iter().find(|x| x.key == "start_in_tray").expect("start_in_tray is in the schema");
+        assert!(t.default == "false" && t.restart);
+    }
+
+    #[test]
+    fn keys_are_unique_and_sections_exist() {
+        let f = fields();
+        let mut keys: Vec<&str> = f.iter().map(|x| x.key.as_str()).collect();
+        keys.sort();
+        let n = keys.len();
+        keys.dedup();
+        assert_eq!(keys.len(), n, "a key is listed twice");
+        for x in &f {
+            assert!(SECTIONS.iter().any(|(id, _, _)| *id == x.section), "{}: unknown section {}", x.key, x.section);
+            assert!(!x.en.is_empty() && !x.it.is_empty(), "{}: a label is missing", x.key);
+        }
+        for (id, _, _) in SECTIONS {
+            // "share" and "builder" are pages of buttons of the editor, not a list of settings
+            assert!(*id == "share" || *id == "builder" || f.iter().any(|x| x.section == *id), "section {id} is empty");
+        }
+    }
+
+    #[test]
+    fn defaults_fit_their_kind() {
+        for x in fields() {
+            match &x.kind {
+                Kind::Choice(o) if !x.default.is_empty() => assert!(o.contains(&x.default.as_str()), "{}: default {}", x.key, x.default),
+                Kind::Int { min, max } if !x.default.is_empty() => {
+                    let d: i64 = x.default.parse().unwrap_or_else(|_| panic!("{}: default {}", x.key, x.default));
+                    assert!((*min..=*max).contains(&d), "{}: default {} out of range", x.key, d);
+                }
+                Kind::Multi(o) if !x.style_defaults.is_empty() => {
+                    for (_, d) in x.style_defaults {
+                        assert!(o.contains(d), "{}: style default {d}", x.key);
+                    }
+                }
+                Kind::Bool if !x.default.is_empty() => assert!(x.default == "true" || x.default == "false", "{}", x.key),
+                _ => {}
+            }
+            if let Some((k, vals)) = x.when {
+                let dep = fields().into_iter().find(|f| f.key == k).unwrap_or_else(|| panic!("{}: depends on unknown {k}", x.key));
+                if let Kind::Choice(o) = dep.kind {
+                    assert!(vals.iter().all(|v| o.contains(v)), "{}: condition values", x.key);
+                } else {
+                    assert!(matches!(dep.kind, Kind::Bool), "{}: condition on {k}", x.key);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn colors_round_trip() {
+        assert_eq!(parse_color("pink"), Some((0xFF, 0xC0, 0xCB)));
+        assert_eq!(parse_color("#1b2A4a"), Some((0x1B, 0x2A, 0x4A)));
+        assert_eq!(parse_color("10, 20,30"), Some((10, 20, 30)));
+        assert_eq!(parse_color("nonsense"), None);
+        assert_eq!(parse_color("#12345"), None);
+        assert_eq!(to_hex((0, 255, 16)), "#00FF10");
+        assert_eq!(split_list("a, b ,,c"), ["a", "b", "c"]);
+        for (n, c) in COLOR_NAMES {
+            assert_eq!(parse_color(n), Some(*c));
+        }
+    }
+
+    #[test]
+    fn every_section_is_in_exactly_one_category() {
+        for (id, _, _) in SECTIONS {
+            let n = CATEGORIES.iter().filter(|(_, _, ids)| ids.contains(id)).count();
+            assert_eq!(n, 1, "section {id} is in {n} categories");
+        }
+        for (_, _, ids) in CATEGORIES {
+            for id in *ids {
+                assert!(SECTIONS.iter().any(|(s, _, _)| s == id), "unknown section {id}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_search_finds_settings_by_label_key_and_hint_in_both_languages() {
+        let f = fields();
+        let keys = |q: &str| search(&f, q).iter().map(|x| x.key.clone()).collect::<Vec<_>>();
+        assert!(keys("12h").contains(&"clock_format".to_string()));
+        assert!(keys("formato dell'ora").contains(&"clock_format".to_string()));
+        assert!(keys("Time format").contains(&"clock_format".to_string()));
+        assert!(keys("fade").contains(&"screen_fade_ms".to_string()));
+        assert_eq!(keys("clock_format").first().map(String::as_str), Some("clock_format"), "an exact key comes first");
+        assert!(keys("   ").is_empty());
+        assert!(keys("zzzzqqq").is_empty());
+    }
+
+    #[test]
+    fn values_are_checked_by_their_kind() {
+        let f = fields();
+        let get = |k: &str| f.iter().find(|x| x.key == k).unwrap().clone();
+        assert!(check_value(&get("clock_ampm"), "false") && !check_value(&get("clock_ampm"), "maybe"));
+        assert!(check_value(&get("clock_format"), "12h") && !check_value(&get("clock_format"), "13h"));
+        assert!(check_value(&get("screen_fade_ms"), "600") && !check_value(&get("screen_fade_ms"), "9000"));
+        assert!(check_value(&get("clock_color"), "#FF8800") && !check_value(&get("clock_color"), "nope"));
+    }
+}
